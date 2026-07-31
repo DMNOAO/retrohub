@@ -1,0 +1,478 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/assets/badge_asset_resolver.dart';
+import '../../core/assets/character_asset_resolver.dart';
+import '../../core/assets/game_asset_profile.dart';
+import '../../core/assets/sprite_image.dart';
+import '../../core/assets/sprite_resolver.dart';
+import '../../data/database/app_database.dart';
+import '../../data/database/database_provider.dart';
+
+class JournalHistoryPage extends ConsumerStatefulWidget {
+  final Game game;
+
+  const JournalHistoryPage({super.key, required this.game});
+
+  @override
+  ConsumerState<JournalHistoryPage> createState() => _JournalHistoryPageState();
+}
+
+class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
+  bool _loading = true;
+  List<_TimelineItem> _items = const [];
+  String _filter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final database = ref.read(databaseProvider);
+    final results = await Future.wait([
+      database.getProgressEventsByGame(widget.game.id),
+      database.getJournalEntriesByGame(widget.game.id),
+    ]);
+
+    final events = results[0] as List<GameProgressEvent>;
+    final entries = results[1] as List<JournalEntry>;
+    final items = <_TimelineItem>[
+      ...events.map(_TimelineItem.fromEvent),
+      ...entries.map(_TimelineItem.fromEntry),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = GameAssetProfile.fromGame(widget.game);
+    final filtered = _filter == 'all'
+        ? _items
+        : _items.where((item) => item.category == _filter).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Historia completa'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: () {
+              setState(() => _loading = true);
+              _load();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _HistoryHeader(game: widget.game, profile: profile, itemCount: _items.length),
+                _HistoryFilters(
+                  selected: _filter,
+                  onSelected: (value) => setState(() => _filter = value),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const _EmptyHistory()
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final item = filtered[index];
+                            return _TimelineCard(
+                              item: item,
+                              profile: profile,
+                              isLast: index == filtered.length - 1,
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _HistoryHeader extends StatelessWidget {
+  final Game game;
+  final GameAssetProfile profile;
+  final int itemCount;
+
+  const _HistoryHeader({required this.game, required this.profile, required this.itemCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: SpriteImage(path: profile.protagonistAsset, size: 54, fallbackIcon: Icons.person_outline),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(game.title, style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 4),
+                Text('$itemCount momentos registrados'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryFilters extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  const _HistoryFilters({required this.selected, required this.onSelected});
+
+  static const values = <(String, String)>[
+    ('all', 'Todo'),
+    ('adventure', 'Aventura'),
+    ('battle', 'Combates'),
+    ('pokemon', 'Pokémon'),
+    ('system', 'Sesiones'),
+    ('manual', 'Notas'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Row(
+        children: values.map((item) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(item.$2),
+              selected: selected == item.$1,
+              onSelected: (_) => onSelected(item.$1),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _TimelineCard extends StatelessWidget {
+  final _TimelineItem item;
+  final GameAssetProfile profile;
+  final bool isLast;
+
+  const _TimelineCard({required this.item, required this.profile, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = _resolveVisual(item, profile);
+    final scheme = Theme.of(context).colorScheme;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 34,
+            child: Column(
+              children: [
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+                ),
+                if (!isLast)
+                  Expanded(child: Container(width: 2, color: scheme.outlineVariant)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: SpriteImage(
+                        path: visual.path,
+                        size: 58,
+                        fallbackIcon: visual.icon,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: Text(item.title, style: Theme.of(context).textTheme.titleMedium)),
+                              Text(_formatDate(item.createdAt), style: Theme.of(context).textTheme.labelMedium),
+                            ],
+                          ),
+                          if (item.description?.trim().isNotEmpty == true) ...[
+                            const SizedBox(height: 6),
+                            Text(item.description!),
+                          ],
+                          const SizedBox(height: 9),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              _MetaChip(icon: Icons.schedule, label: _formatPlayTime(item.playTimeMinutes)),
+                              if (item.metadata['mapName'] != null)
+                                _MetaChip(icon: Icons.place_outlined, label: item.metadata['mapName'].toString()),
+                              if (item.metadata['level'] != null)
+                                _MetaChip(icon: Icons.trending_up, label: 'Nv. ${item.metadata['level']}'),
+                              if (item.metadata['isShiny'] == true)
+                                const _MetaChip(icon: Icons.auto_awesome, label: 'Shiny'),
+                            ],
+                          ),
+                          if (item.screenshotPath != null) ...[
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SpriteImage(path: item.screenshotPath, size: 220, fit: BoxFit.cover),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _Visual _resolveVisual(_TimelineItem item, GameAssetProfile profile) {
+    switch (item.type) {
+      case 'badge_obtained':
+        final index = _toInt(item.metadata['badgeIndex']) ?? _firstBadgeIndex(_toInt(item.metadata['newBadgesMask']) ?? 0);
+        return _Visual(BadgeAssetResolver.resolve(profile, index).path, Icons.workspace_premium_outlined);
+      case 'pokemon_captured':
+        final id = _toInt(item.metadata['pokemonId']);
+        if (id != null) {
+          return _Visual(
+            SpriteResolver.pokemonForGame(
+              profile: profile,
+              pokemonId: id,
+              isShiny: item.metadata['isShiny'] == true,
+            ),
+            Icons.catching_pokemon,
+          );
+        }
+        return const _Visual(null, Icons.catching_pokemon);
+      case 'party_changed':
+        final party = item.metadata['party'];
+        if (party is List && party.isNotEmpty && party.first is Map) {
+          final pokemon = Map<String, dynamic>.from(party.first as Map);
+          final id = _toInt(pokemon['id']);
+          if (id != null) {
+            return _Visual(SpriteResolver.pokemonForGame(profile: profile, pokemonId: id), Icons.catching_pokemon);
+          }
+        }
+        return const _Visual(null, Icons.groups_outlined);
+      case 'location_changed':
+      case 'pokemon_progress_detected':
+        return _Visual(profile.protagonistAsset, Icons.place_outlined);
+      case 'rival_defeated':
+        return _Visual(CharacterAssetResolver.rival(profile), Icons.sports_martial_arts);
+      case 'champion_defeated':
+        return _Visual(CharacterAssetResolver.champion(profile), Icons.emoji_events_outlined);
+      case 'trainer_defeated':
+        final trainerClass = item.metadata['trainerClass']?.toString();
+        return _Visual(
+          trainerClass == null ? null : CharacterAssetResolver.trainer(profile: profile, trainerClass: trainerClass),
+          Icons.sports_martial_arts,
+        );
+      case 'screenshot':
+        return _Visual(item.screenshotPath, Icons.photo_camera_outlined);
+      case 'save_state':
+        return const _Visual(null, Icons.save_outlined);
+      case 'load_state':
+        return const _Visual(null, Icons.history);
+      case 'game_started':
+        return _Visual(profile.protagonistAsset, Icons.play_arrow);
+      case 'game_closed':
+        return const _Visual(null, Icons.stop_circle_outlined);
+      case 'manual_entry':
+        return const _Visual(null, Icons.edit_note_outlined);
+      default:
+        return const _Visual(null, Icons.auto_stories_outlined);
+    }
+  }
+
+  int _firstBadgeIndex(int mask) {
+    for (var i = 0; i < 8; i++) {
+      if ((mask & (1 << i)) != 0) return i;
+    }
+    return 0;
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  String _formatDate(DateTime value) {
+    final d = value.day.toString().padLeft(2, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final h = value.hour.toString().padLeft(2, '0');
+    final min = value.minute.toString().padLeft(2, '0');
+    return '$d/$m · $h:$min';
+  }
+
+  String _formatPlayTime(int minutes) {
+    if (minutes < 1) return '< 1 min';
+    final hours = minutes ~/ 60;
+    final remaining = minutes % 60;
+    return hours == 0 ? '$remaining min' : '$hours h ${remaining.toString().padLeft(2, '0')} min';
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _MetaChip({required this.icon, required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+    );
+  }
+}
+
+class _EmptyHistory extends StatelessWidget {
+  const _EmptyHistory();
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_stories_outlined, size: 64),
+            SizedBox(height: 14),
+            Text('Todavía no hay momentos en esta categoría.'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Visual {
+  final String? path;
+  final IconData icon;
+  const _Visual(this.path, this.icon);
+}
+
+class _TimelineItem {
+  final DateTime createdAt;
+  final String type;
+  final String category;
+  final String title;
+  final String? description;
+  final Map<String, dynamic> metadata;
+  final int playTimeMinutes;
+  final String? screenshotPath;
+
+  const _TimelineItem({
+    required this.createdAt,
+    required this.type,
+    required this.category,
+    required this.title,
+    required this.description,
+    required this.metadata,
+    required this.playTimeMinutes,
+    required this.screenshotPath,
+  });
+
+  factory _TimelineItem.fromEvent(GameProgressEvent event) {
+    final metadata = _decodeMetadata(event.metadataJson);
+    return _TimelineItem(
+      createdAt: event.createdAt,
+      type: event.eventType,
+      category: _categoryFor(event.eventType),
+      title: event.title,
+      description: event.description,
+      metadata: metadata,
+      playTimeMinutes: _readInt(metadata['playTimeMinutes']),
+      screenshotPath: metadata['screenshotPath']?.toString(),
+    );
+  }
+
+  factory _TimelineItem.fromEntry(JournalEntry entry) {
+    return _TimelineItem(
+      createdAt: entry.createdAt,
+      type: 'manual_entry',
+      category: 'manual',
+      title: entry.title?.trim().isNotEmpty == true ? entry.title! : 'Nota de la aventura',
+      description: entry.content,
+      metadata: const {},
+      playTimeMinutes: entry.playTimeMinutes,
+      screenshotPath: entry.screenshotPath,
+    );
+  }
+
+  static Map<String, dynamic> _decodeMetadata(String? value) {
+    if (value == null || value.trim().isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
+
+  static int _readInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static String _categoryFor(String type) {
+    if (type == 'badge_obtained' || type.contains('defeated') || type == 'trainer_defeated') return 'battle';
+    if (type == 'pokemon_captured' || type == 'party_changed') return 'pokemon';
+    if (type == 'game_started' || type == 'game_closed' || type == 'save_state' || type == 'load_state' || type == 'screenshot') return 'system';
+    return 'adventure';
+  }
+}

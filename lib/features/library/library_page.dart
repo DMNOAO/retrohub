@@ -1,0 +1,440 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../core/utils/cover_helper.dart';
+import '../../core/utils/play_time_formatter.dart';
+import '../widgets/dynamic_game_banner.dart';
+import '../../data/repositories/games_repository_provider.dart';
+import '../game_detail/game_detail_page.dart';
+import 'services/rom_service.dart';
+import 'widgets/game_cover_card.dart';
+
+final gamesProvider = FutureProvider((ref) {
+  final repository = ref.watch(gamesRepositoryProvider);
+  return repository.getGames();
+});
+
+enum LibrarySortOption {
+  nameAsc,
+  nameDesc,
+  console,
+  playTime,
+}
+
+class LibraryPage extends ConsumerStatefulWidget {
+  final String? initialConsoleFilter;
+
+  const LibraryPage({super.key, this.initialConsoleFilter});
+
+  @override
+  ConsumerState<LibraryPage> createState() => _LibraryPageState();
+}
+
+class _LibraryPageState extends ConsumerState<LibraryPage> {
+  String _searchText = '';
+  String? _consoleFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _consoleFilter = widget.initialConsoleFilter;
+  }
+  LibrarySortOption _sortOption = LibrarySortOption.nameAsc;
+  bool _refreshingLibrary = false;
+
+  Future<void> _importRom(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['gb', 'gbc', 'gba', 'smc', 'sfc'],
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    final file = result.files.single;
+    final romInfo = RomService.parseRom(file.path!, file.name);
+
+    if (romInfo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Formato no compatible')),
+      );
+      return;
+    }
+
+    final repository = ref.read(gamesRepositoryProvider);
+
+    await repository.addGame(
+      id: const Uuid().v4(),
+      title: romInfo.title,
+      console: romInfo.console,
+      romPath: romInfo.path,
+    );
+
+    ref.invalidate(gamesProvider);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${romInfo.title} importado correctamente')),
+    );
+  }
+
+  Future<void> _deleteGameFromLibrary(dynamic game) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Quitar de la biblioteca'),
+          content: Text(
+            '¿Quieres quitar "${game.title}" de RetroHub?\n\n'
+            'Esto no eliminará el archivo ROM de tu equipo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Quitar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final repository = ref.read(gamesRepositoryProvider);
+    await repository.deleteGame(game.id);
+
+    ref.invalidate(gamesProvider);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${game.title} quitado de la biblioteca')),
+    );
+  }
+
+  Future<void> _refreshLibrary() async {
+    setState(() {
+      _refreshingLibrary = true;
+    });
+
+    try {
+      final repository = ref.read(gamesRepositoryProvider);
+      final games = await repository.getGames();
+
+      int removed = 0;
+
+      for (final game in games) {
+        final exists = await File(game.romPath).exists();
+
+        if (!exists) {
+          await repository.deleteGame(game.id);
+          removed++;
+        }
+      }
+
+      ref.invalidate(gamesProvider);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removed == 0
+                ? 'Biblioteca actualizada. No se encontraron ROMs faltantes.'
+                : 'Biblioteca actualizada. Se quitaron $removed ROMs faltantes.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _refreshingLibrary = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gamesAsync = ref.watch(gamesProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Mis juegos',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: gamesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stackTrace) => Center(
+                child: Text('Error: $error'),
+              ),
+              data: (games) {
+                if (games.isEmpty) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: 54,
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => _importRom(context, ref),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Importar ROM'),
+                        ),
+                      ),
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'Aún no has importado juegos',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                final filteredGames = games.where((game) {
+                  final query = _searchText.toLowerCase();
+                  final matchesText = game.title.toLowerCase().contains(query) ||
+                      game.console.toLowerCase().contains(query);
+                  final matchesConsole = _consoleFilter == null ||
+                      game.console.toLowerCase() == _consoleFilter!.toLowerCase();
+                  return matchesText && matchesConsole;
+                }).toList();
+
+                switch (_sortOption) {
+                  case LibrarySortOption.nameAsc:
+                    filteredGames.sort((a, b) => a.title.compareTo(b.title));
+                    break;
+                  case LibrarySortOption.nameDesc:
+                    filteredGames.sort((a, b) => b.title.compareTo(a.title));
+                    break;
+                  case LibrarySortOption.console:
+                    filteredGames.sort(
+                      (a, b) => a.console.compareTo(b.console),
+                    );
+                    break;
+                  case LibrarySortOption.playTime:
+                    filteredGames.sort(
+                      (a, b) => b.playTimeSeconds.compareTo(a.playTimeSeconds),
+                    );
+                    break;
+                }
+
+                final playedGames = games.where((game) => game.lastPlayedAt != null).toList();
+                playedGames.sort((a, b) =>
+                    (b.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+                      a.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                    ));
+                final recentGame = playedGames.isEmpty ? null : playedGames.first;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (recentGame != null) DynamicGameBanner(
+                      game: recentGame,
+                      coverPath: CoverHelper.getCover(recentGame.title, recentGame.console),
+                      onPlay: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => GameDetailPage(game: recentGame),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    if (_consoleFilter != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: InputChip(
+                          label: Text('Consola: ${_consoleFilter!}'),
+                          onDeleted: () => setState(() => _consoleFilter = null),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            onChanged: (value) {
+                              setState(() {
+                                _searchText = value;
+                              });
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Buscar juego...',
+                              prefixIcon: const Icon(Icons.search),
+                              filled: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          height: 54,
+                          child: FilledButton.icon(
+                            onPressed: () => _importRom(context, ref),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Importar ROM'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          height: 54,
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _refreshingLibrary ? null : _refreshLibrary,
+                            icon: _refreshingLibrary
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.sync),
+                            label: const Text('Actualizar'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        DropdownButton<LibrarySortOption>(
+                          value: _sortOption,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _sortOption = value;
+                            });
+                          },
+                          items: const [
+                            DropdownMenuItem(
+                              value: LibrarySortOption.nameAsc,
+                              child: Text('Nombre A-Z'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibrarySortOption.nameDesc,
+                              child: Text('Nombre Z-A'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibrarySortOption.console,
+                              child: Text('Consola'),
+                            ),
+                            DropdownMenuItem(
+                              value: LibrarySortOption.playTime,
+                              child: Text('Horas jugadas'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: filteredGames.isEmpty
+                          ? const Center(
+                              child: Text('No se encontraron juegos'),
+                            )
+                          : GridView.builder(
+                              itemCount: filteredGames.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 250,
+                                mainAxisSpacing: 24,
+                                crossAxisSpacing: 24,
+                                childAspectRatio: 0.72,
+                              ),
+                              itemBuilder: (context, index) {
+                                final game = filteredGames[index];
+                                final cover = CoverHelper.getCover(
+                                  game.title,
+                                  game.console,
+                                );
+
+                                return Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: GameCoverCard(
+                                        title: game.title,
+                                        console:
+                                            '${game.console} • ${PlayTimeFormatter.fromSeconds(game.playTimeSeconds)}',
+                                        coverPath: cover,
+                                        onTap: () async {
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  GameDetailPage(game: game),
+                                            ),
+                                          );
+                                          ref.invalidate(gamesProvider);
+                                        },
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: PopupMenuButton<String>(
+                                        tooltip: 'Opciones',
+                                        icon: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                Colors.black.withOpacity(0.55),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: const Icon(
+                                            Icons.more_vert,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        onSelected: (value) {
+                                          if (value == 'delete') {
+                                            _deleteGameFromLibrary(game);
+                                          }
+                                        },
+                                        itemBuilder: (context) => const [
+                                          PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.delete_outline),
+                                                SizedBox(width: 10),
+                                                Text('Quitar de biblioteca'),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
