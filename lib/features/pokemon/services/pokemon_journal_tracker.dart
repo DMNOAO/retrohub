@@ -143,10 +143,22 @@ class PokemonJournalTracker {
       await _ensureKantoUnlockEvent(current);
     }
     if (previous.currentMapId != current.currentMapId) {
+      final PokemonLocation? location =
+          PokemonDecoder.locationFor(current.profile, current.currentMapId);
+      final String name = location?.name ??
+          PokemonDecoder.mapName(current.profile, current.currentMapId);
+
+      final (String type, String title) = switch (location?.kind) {
+        PokemonLocationKind.city => ('city_arrived', 'Llegó a $name'),
+        PokemonLocationKind.route => ('route_arrived', 'Entró a $name'),
+        PokemonLocationKind.league => ('league_arrived', 'Llegó a la Liga Pokémon'),
+        _ => ('location_changed', 'Nueva ubicación'),
+      };
+
       await _insertEvent(
-        type: 'location_changed',
-        title: 'Nueva ubicación',
-        description: PokemonDecoder.mapName(current.profile, current.currentMapId),
+        type: type,
+        title: title,
+        description: name,
         metadata: _metadata(current),
       );
     }

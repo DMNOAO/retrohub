@@ -137,8 +137,23 @@ class AppDatabase extends _$AppDatabase {
     return select(games).get();
   }
 
+  /// Usa insertOrIgnore porque el id ahora es el hash SHA-1 del archivo
+  /// ROM: si el usuario reimporta el mismo juego, el id coincide con el
+  /// que ya existe y no queremos pisar sus partidas, save states ni
+  /// bitácora con una fila "nueva".
   Future<void> insertGame(GamesCompanion game) {
-    return into(games).insert(game);
+    return into(games).insertOnConflictUpdate(game.copyWith(
+      // No pisar campos de progreso si el juego ya existía.
+      playTimeHours: const Value.absent(),
+      playTimeSeconds: const Value.absent(),
+      lastPlayedAt: const Value.absent(),
+      createdAt: const Value.absent(),
+    ));
+  }
+
+  Future<bool> gameExists(String id) async {
+    final Game? existing = await getGameById(id);
+    return existing != null;
   }
 
   Future<void> deleteGame(String id) {

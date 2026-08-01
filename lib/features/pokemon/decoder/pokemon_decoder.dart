@@ -1,5 +1,16 @@
 import '../models/pokemon_game_profile.dart';
 
+/// Tipo de ubicación, usado para diferenciar los eventos de la bitácora
+/// (llegar a una ciudad no es lo mismo que entrar a una ruta o a un
+/// gimnasio).
+enum PokemonLocationKind { city, route, gym, league, other }
+
+class PokemonLocation {
+  final String name;
+  final PokemonLocationKind kind;
+  const PokemonLocation(this.name, [this.kind = PokemonLocationKind.other]);
+}
+
 class PokemonDecoder {
   static String decodeText(List<int> bytes) {
     final out = StringBuffer();
@@ -57,12 +68,33 @@ class PokemonDecoder {
   }
 
   static String mapName(PokemonGameProfile profile, int mapId) {
+    final PokemonLocation? location = locationFor(profile, mapId);
+    if (location != null) return location.name;
     if (profile.isGen2) {
-      return _gen2Maps[mapId] ??
-          'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
+      return 'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
     }
-    return _gen1Maps[mapId] ??
-        'Mapa 0x${mapId.toRadixString(16).padLeft(2, '0').toUpperCase()}';
+    return 'Mapa 0x${mapId.toRadixString(16).padLeft(2, '0').toUpperCase()}';
+  }
+
+  /// Devuelve la ubicación (nombre + tipo) para el mapa actual, usando la
+  /// tabla propia de la versión del juego. Cada versión tiene su tabla
+  /// separada: nunca se comparte una tabla entre versiones distintas,
+  /// aunque hoy algunas contengan las mismas entradas conocidas.
+  static PokemonLocation? locationFor(PokemonGameProfile profile, int mapId) {
+    switch (profile.version) {
+      case PokemonGameVersion.redBlue:
+        return _redBlueLocations[mapId];
+      case PokemonGameVersion.yellow:
+        return _yellowLocations[mapId];
+      case PokemonGameVersion.gold:
+        return _goldLocations[mapId];
+      case PokemonGameVersion.silver:
+        return _silverLocations[mapId];
+      case PokemonGameVersion.crystal:
+        return _crystalLocations[mapId];
+      case PokemonGameVersion.unsupported:
+        return null;
+    }
   }
 
   static String badgeName(PokemonGameProfile profile, int index) {
@@ -96,20 +128,129 @@ class PokemonDecoder {
     'Chikorita','Bayleef','Meganium','Cyndaquil','Quilava','Typhlosion','Totodile','Croconaw','Feraligatr','Sentret','Furret','Hoothoot','Noctowl','Ledyba','Ledian','Spinarak','Ariados','Crobat','Chinchou','Lanturn','Pichu','Cleffa','Igglybuff','Togepi','Togetic','Natu','Xatu','Mareep','Flaaffy','Ampharos','Bellossom','Marill','Azumarill','Sudowoodo','Politoed','Hoppip','Skiploom','Jumpluff','Aipom','Sunkern','Sunflora','Yanma','Wooper','Quagsire','Espeon','Umbreon','Murkrow','Slowking','Misdreavus','Unown','Wobbuffet','Girafarig','Pineco','Forretress','Dunsparce','Gligar','Steelix','Snubbull','Granbull','Qwilfish','Scizor','Shuckle','Heracross','Sneasel','Teddiursa','Ursaring','Slugma','Magcargo','Swinub','Piloswine','Corsola','Remoraid','Octillery','Delibird','Mantine','Skarmory','Houndour','Houndoom','Kingdra','Phanpy','Donphan','Porygon2','Stantler','Smeargle','Tyrogue','Hitmontop','Smoochum','Elekid','Magby','Miltank','Blissey','Raikou','Entei','Suicune','Larvitar','Pupitar','Tyranitar','Lugia','Ho-Oh','Celebi'
   ];
 
-  static const Map<int,String> _gen1Maps = <int,String>{
-    0x00:'Pueblo Paleta',0x01:'Ciudad Verde',0x02:'Ciudad Plateada',0x03:'Ciudad Celeste',0x04:'Pueblo Lavanda',0x05:'Ciudad Carmín',0x06:'Ciudad Azulona',0x07:'Ciudad Fucsia',0x08:'Isla Canela',0x09:'Meseta Añil',0x0A:'Ciudad Azafrán',0x28:'Laboratorio del Profesor Oak',0x0C:'Ruta 1',0x0D:'Ruta 2',0x0E:'Ruta 3',0x0F:'Ruta 4',
+  // --- Fase 4.1A: tabla de ubicaciones propia por versión de juego. ---
+  // Cada versión tiene su propia tabla, aunque el contenido inicial de
+  // algunas coincida (p. ej. Yellow reutiliza el mismo banco de mapas base
+  // que Red/Blue, y Silver el mismo que Gold). Están separadas a propósito:
+  // si se detecta una diferencia real jugando, se corrige la tabla de esa
+  // versión sin arriesgar romper las demás.
+
+  static const Map<int, PokemonLocation> _redBlueLocations = <int, PokemonLocation>{
+    0x00: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
+    0x01: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
+    0x02: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
+    0x03: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
+    0x04: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
+    0x05: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
+    0x06: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
+    0x07: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
+    0x08: PokemonLocation('Isla Canela', PokemonLocationKind.city),
+    0x09: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
+    0x0A: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
+    0x28: PokemonLocation('Laboratorio del Profesor Oak', PokemonLocationKind.other),
+    0x0C: PokemonLocation('Ruta 1', PokemonLocationKind.route),
+    0x0D: PokemonLocation('Ruta 2', PokemonLocationKind.route),
+    0x0E: PokemonLocation('Ruta 3', PokemonLocationKind.route),
+    0x0F: PokemonLocation('Ruta 4', PokemonLocationKind.route),
   };
 
-  // Claves grupo<<8 | mapa. Se incluyen los núcleos de la aventura; los mapas
-  // no listados siguen mostrando sus IDs para poder ampliarlos sin perder datos.
-  static const Map<int,String> _gen2Maps = <int,String>{
-    0x1807:'Pueblo Primavera', 0x1801:'Ciudad Cerezo', 0x0A05:'Ciudad Malva',
-    0x0305:'Pueblo Azalea', 0x1205:'Ciudad Trigal', 0x0905:'Ciudad Iris',
-    0x0D05:'Ciudad Olivo', 0x0B05:'Ciudad Orquídea', 0x0F05:'Pueblo Caoba',
-    0x0E05:'Ciudad Endrino', 0x0105:'Meseta Añil', 0x1A05:'Ciudad Verde',
-    0x1705:'Pueblo Paleta', 0x1605:'Ciudad Plateada', 0x1905:'Ciudad Celeste',
-    0x1505:'Ciudad Carmín', 0x1405:'Ciudad Azulona', 0x1305:'Ciudad Fucsia',
-    0x1105:'Pueblo Lavanda', 0x1005:'Ciudad Azafrán',
+  // Yellow: sin verificación propia todavía. Se deja como tabla
+  // independiente (no un alias de Red/Blue) para poder corregirla si se
+  // confirman diferencias sin tocar la tabla de Red/Blue.
+  static const Map<int, PokemonLocation> _yellowLocations = <int, PokemonLocation>{
+    0x00: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
+    0x01: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
+    0x02: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
+    0x03: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
+    0x04: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
+    0x05: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
+    0x06: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
+    0x07: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
+    0x08: PokemonLocation('Isla Canela', PokemonLocationKind.city),
+    0x09: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
+    0x0A: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
+    0x28: PokemonLocation('Laboratorio del Profesor Oak', PokemonLocationKind.other),
+    0x0C: PokemonLocation('Ruta 1', PokemonLocationKind.route),
+    0x0D: PokemonLocation('Ruta 2', PokemonLocationKind.route),
+    0x0E: PokemonLocation('Ruta 3', PokemonLocationKind.route),
+    0x0F: PokemonLocation('Ruta 4', PokemonLocationKind.route),
+  };
+
+  // Claves grupo<<8 | mapa.
+  static const Map<int, PokemonLocation> _goldLocations = <int, PokemonLocation>{
+    0x1807: PokemonLocation('Pueblo Primavera', PokemonLocationKind.city),
+    0x1801: PokemonLocation('Ciudad Cerezo', PokemonLocationKind.city),
+    0x0A05: PokemonLocation('Ciudad Malva', PokemonLocationKind.city),
+    0x0305: PokemonLocation('Pueblo Azalea', PokemonLocationKind.city),
+    0x1205: PokemonLocation('Ciudad Trigal', PokemonLocationKind.city),
+    0x0905: PokemonLocation('Ciudad Iris', PokemonLocationKind.city),
+    0x0D05: PokemonLocation('Ciudad Olivo', PokemonLocationKind.city),
+    0x0B05: PokemonLocation('Ciudad Orquídea', PokemonLocationKind.city),
+    0x0F05: PokemonLocation('Pueblo Caoba', PokemonLocationKind.city),
+    0x0E05: PokemonLocation('Ciudad Endrino', PokemonLocationKind.city),
+    0x0105: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
+    0x1A05: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
+    0x1705: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
+    0x1605: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
+    0x1905: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
+    0x1505: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
+    0x1405: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
+    0x1305: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
+    0x1105: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
+    0x1005: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
+  };
+
+  // Silver: mismo motor y banco de mapas base que Gold. Tabla separada por
+  // si se confirma alguna diferencia real de IDs entre versiones.
+  static const Map<int, PokemonLocation> _silverLocations = <int, PokemonLocation>{
+    0x1807: PokemonLocation('Pueblo Primavera', PokemonLocationKind.city),
+    0x1801: PokemonLocation('Ciudad Cerezo', PokemonLocationKind.city),
+    0x0A05: PokemonLocation('Ciudad Malva', PokemonLocationKind.city),
+    0x0305: PokemonLocation('Pueblo Azalea', PokemonLocationKind.city),
+    0x1205: PokemonLocation('Ciudad Trigal', PokemonLocationKind.city),
+    0x0905: PokemonLocation('Ciudad Iris', PokemonLocationKind.city),
+    0x0D05: PokemonLocation('Ciudad Olivo', PokemonLocationKind.city),
+    0x0B05: PokemonLocation('Ciudad Orquídea', PokemonLocationKind.city),
+    0x0F05: PokemonLocation('Pueblo Caoba', PokemonLocationKind.city),
+    0x0E05: PokemonLocation('Ciudad Endrino', PokemonLocationKind.city),
+    0x0105: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
+    0x1A05: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
+    0x1705: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
+    0x1605: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
+    0x1905: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
+    0x1505: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
+    0x1405: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
+    0x1305: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
+    0x1105: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
+    0x1005: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
+  };
+
+  // Crystal: tabla propia. Hoy comparte los valores conocidos con
+  // Gold/Silver porque Crystal reutiliza en gran parte el mismo banco de
+  // mapas, pero al estar separada se puede corregir sin tocar Gold/Silver
+  // en cuanto se confirme un ID distinto jugando (p. ej. Torre Quemada,
+  // que Crystal remodela).
+  static const Map<int, PokemonLocation> _crystalLocations = <int, PokemonLocation>{
+    0x1807: PokemonLocation('Pueblo Primavera', PokemonLocationKind.city),
+    0x1801: PokemonLocation('Ciudad Cerezo', PokemonLocationKind.city),
+    0x0A05: PokemonLocation('Ciudad Malva', PokemonLocationKind.city),
+    0x0305: PokemonLocation('Pueblo Azalea', PokemonLocationKind.city),
+    0x1205: PokemonLocation('Ciudad Trigal', PokemonLocationKind.city),
+    0x0905: PokemonLocation('Ciudad Iris', PokemonLocationKind.city),
+    0x0D05: PokemonLocation('Ciudad Olivo', PokemonLocationKind.city),
+    0x0B05: PokemonLocation('Ciudad Orquídea', PokemonLocationKind.city),
+    0x0F05: PokemonLocation('Pueblo Caoba', PokemonLocationKind.city),
+    0x0E05: PokemonLocation('Ciudad Endrino', PokemonLocationKind.city),
+    0x0105: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
+    0x1A05: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
+    0x1705: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
+    0x1605: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
+    0x1905: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
+    0x1505: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
+    0x1405: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
+    0x1305: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
+    0x1105: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
+    0x1005: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
   };
 }
 
@@ -122,7 +263,7 @@ class PokemonGen1Decoder {
   static int countBits(List<int> bytes) => PokemonDecoder.countBits(bytes);
   static int pokedexIdFromInternal(int id) => PokemonDecoder._gen1InternalToDex[id] ?? 0;
   static String pokemonName(int dexId) => PokemonDecoder.pokemonName(dexId);
-  static String mapName(int mapId) => PokemonDecoder._gen1Maps[mapId] ??
+  static String mapName(int mapId) => PokemonDecoder._redBlueLocations[mapId]?.name ??
       'Mapa 0x${mapId.toRadixString(16).padLeft(2, '0').toUpperCase()}';
   static String badgeName(int index) => index >= 0 && index < PokemonDecoder._gen1Badges.length
       ? PokemonDecoder._gen1Badges[index]

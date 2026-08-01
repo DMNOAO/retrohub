@@ -183,6 +183,11 @@ class CoreLoader {
     return paths;
   }
 
+  /// Carpeta raíz persistente de RetroHub (misma que usan los saves).
+  /// Público para que otros servicios (p. ej. importación de ROMs) guarden
+  /// sus archivos en la misma ubicación estable entre ejecuciones.
+  static Directory get documentsDirectory => _documentsDirectory;
+
   static Directory get _documentsDirectory {
     if (Platform.isAndroid) {
       // Directory.systemTemp suele ser <sandbox>/cache. Su carpeta hermana

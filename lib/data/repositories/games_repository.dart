@@ -10,6 +10,7 @@ class GamesRepository {
   Future<List<Game>> getGames() => database.getAllGames();
   Future<Game?> getGameById(String id) => database.getGameById(id);
   Future<Game?> getLastPlayedGame() => database.getLastPlayedGame();
+  Future<bool> gameExists(String id) => database.gameExists(id);
 
   Future<void> addGame({
     required String id,

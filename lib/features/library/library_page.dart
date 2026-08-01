@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/utils/cover_helper.dart';
 import '../../core/utils/play_time_formatter.dart';
@@ -11,6 +10,7 @@ import '../widgets/dynamic_game_banner.dart';
 import '../../data/repositories/games_repository_provider.dart';
 import '../game_detail/game_detail_page.dart';
 import 'services/rom_service.dart';
+import 'services/rom_storage_service.dart';
 import 'widgets/game_cover_card.dart';
 
 final gamesProvider = FutureProvider((ref) {
@@ -58,6 +58,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final romInfo = RomService.parseRom(file.path!, file.name);
 
     if (romInfo == null) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Formato no compatible')),
       );
@@ -66,17 +67,37 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
     final repository = ref.read(gamesRepositoryProvider);
 
+    // Nunca se juega desde la ruta que entrega file_picker: es una copia
+    // en caché que Android puede borrar en cualquier momento. Se copia
+    // primero a una carpeta permanente de RetroHub.
+    final String extension = file.name.split('.').last.toLowerCase();
+    final ImportedRom imported = await RomStorageService.importRom(
+      sourcePath: file.path!,
+      console: romInfo.console,
+      extension: extension,
+    );
+
+    final bool existedBefore = await repository.gameExists(imported.hash);
+
     await repository.addGame(
-      id: const Uuid().v4(),
+      id: imported.hash,
       title: romInfo.title,
       console: romInfo.console,
-      romPath: romInfo.path,
+      romPath: imported.path,
     );
 
     ref.invalidate(gamesProvider);
 
+    if (!context.mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${romInfo.title} importado correctamente')),
+      SnackBar(
+        content: Text(
+          existedBefore
+              ? '${romInfo.title} ya estaba en tu biblioteca — se conservó tu partida'
+              : '${romInfo.title} importado correctamente',
+        ),
+      ),
     );
   }
 
