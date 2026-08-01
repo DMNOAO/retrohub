@@ -8,6 +8,7 @@ import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
 import '../memory/pokemon_controller_memory_reader.dart';
 import '../models/pokemon_game_profile.dart';
+import '../models/pokemon_gym_leader.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
 class PokemonJournalTracker {
@@ -168,6 +169,26 @@ class PokemonJournalTracker {
       for (var index = 0; index < (current.profile.isGen2 ? 16 : 8); index++) {
         if ((newBadges & (1 << index)) == 0) continue;
         final badgeName = PokemonDecoder.badgeName(current.profile, index);
+
+        // Se registra primero la derrota del líder (si está confirmado el
+        // nombre para esa medalla) y luego la medalla, para mantener el
+        // orden cronológico real: primero el combate, después el premio.
+        final GymLeaderInfo? leader =
+            GymLeaderAssetResolver.forBadge(current.profile, index);
+        if (leader != null) {
+          await _insertEvent(
+            type: 'gym_leader_defeated',
+            title: 'Derrotó a ${leader.name}',
+            description: 'Venció al líder de gimnasio ${leader.name}.',
+            metadata: <String, dynamic>{
+              ..._metadata(current),
+              'leaderName': leader.name,
+              'spritePath': leader.spritePath,
+              'badgeIndex': index,
+            },
+          );
+        }
+
         await _insertEvent(
           type: 'badge_obtained',
           title: badgeName,

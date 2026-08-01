@@ -137,18 +137,40 @@ class AppDatabase extends _$AppDatabase {
     return select(games).get();
   }
 
-  /// Usa insertOrIgnore porque el id ahora es el hash SHA-1 del archivo
-  /// ROM: si el usuario reimporta el mismo juego, el id coincide con el
-  /// que ya existe y no queremos pisar sus partidas, save states ni
-  /// bitácora con una fila "nueva".
+  /// El id es el hash SHA-1 del archivo ROM: si el usuario reimporta el
+  /// mismo juego, el id coincide con el que ya existe.
+  ///
+  /// IMPORTANTE: a diferencia de insertOnConflictUpdate (que usa el mismo
+  /// companion para el INSERT y el UPDATE), aquí se usa DoUpdate para que:
+  ///   - el INSERT (juego nuevo, sin conflicto) use TODOS los valores
+  ///     nuevos, incluyendo createdAt (que es obligatorio y no tiene
+  ///     valor por defecto — omitirlo rompe el INSERT).
+  ///   - el UPDATE (juego que ya existía) preserve createdAt, tiempo
+  ///     jugado y última vez jugado, y solo actualice título/consola/
+  ///     romPath/portada.
   Future<void> insertGame(GamesCompanion game) {
-    return into(games).insertOnConflictUpdate(game.copyWith(
-      // No pisar campos de progreso si el juego ya existía.
-      playTimeHours: const Value.absent(),
-      playTimeSeconds: const Value.absent(),
-      lastPlayedAt: const Value.absent(),
-      createdAt: const Value.absent(),
-    ));
+    return into(games).insert(
+      game,
+      onConflict: DoUpdate(
+        (old) => GamesCompanion.custom(
+          title: Constant(game.title.value),
+          console: Constant(game.console.value),
+          romPath: Constant(game.romPath.value),
+          coverPath: game.coverPath.present
+              ? Constant(game.coverPath.value)
+              : old.coverPath,
+          spriteSet: game.spriteSet.present
+              ? Constant(game.spriteSet.value)
+              : old.spriteSet,
+          // Progreso del usuario: nunca se pisa al reimportar.
+          playTimeHours: old.playTimeHours,
+          playTimeSeconds: old.playTimeSeconds,
+          createdAt: old.createdAt,
+          lastPlayedAt: old.lastPlayedAt,
+        ),
+        target: [games.id],
+      ),
+    );
   }
 
   Future<bool> gameExists(String id) async {

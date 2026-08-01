@@ -312,6 +312,9 @@ class _TimelineCard extends StatelessWidget {
       case 'location_changed':
       case 'pokemon_progress_detected':
         return _Visual(profile.protagonistAsset, Icons.place_outlined);
+      case 'gym_leader_defeated':
+        final spritePath = item.metadata['spritePath']?.toString();
+        return _Visual(spritePath, Icons.shield_outlined);
       case 'rival_defeated':
         return _Visual(CharacterAssetResolver.rival(profile), Icons.sports_martial_arts);
       case 'champion_defeated':
