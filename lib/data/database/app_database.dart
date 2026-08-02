@@ -68,7 +68,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -98,16 +98,6 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(games, games.spriteSet);
         }
 
-        if (from < 6) {
-          await delete(gameProgressSnapshots).go();
-
-          await (delete(gameProgressEvents)
-                ..where(
-                  (tbl) => tbl.eventType.equals('snapshot_created'),
-                ))
-              .go();
-        }
-
         if (from < 7) {
           await m.addColumn(games, games.playTimeSeconds);
           await customStatement(
@@ -115,20 +105,8 @@ class AppDatabase extends _$AppDatabase {
           );
         }
 
-        if (from < 8) {
-          // Elimina lecturas heurísticas incorrectas guardadas para Yellow
-          // antes de que existiera su perfil explícito y validado.
-          await customStatement(
-            "DELETE FROM game_progress_snapshots WHERE game_id IN "
-            "(SELECT id FROM games WHERE lower(title) LIKE '%yellow%' "
-            "OR lower(title) LIKE '%amarillo%')",
-          );
-          await customStatement(
-            "DELETE FROM game_progress_events WHERE game_id IN "
-            "(SELECT id FROM games WHERE lower(title) LIKE '%yellow%' "
-            "OR lower(title) LIKE '%amarillo%')",
-          );
-        }
+        // Las versiones 6, 8 y 9 no requieren cambios destructivos.
+        // Los snapshots y eventos existentes se conservan íntegramente.
       },
     );
   }
