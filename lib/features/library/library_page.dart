@@ -210,10 +210,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 child: Text('Error: $error'),
               ),
               data: (games) {
-                if (games.isEmpty) {
-                  final bool isCompact = MediaQuery.sizeOf(context).width < 700;
+                final bool isCompact = MediaQuery.sizeOf(context).width < 700;
 
-                return Column(
+                if (games.isEmpty) {
+                  return Column(
                     children: [
                       SizedBox(
                         height: 54,
