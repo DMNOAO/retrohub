@@ -63,6 +63,11 @@ typedef _RhReadMemoryBlockDart = int Function(
   int,
 );
 
+typedef _RhGetAudioSampleRateNative = Int32 Function();
+typedef _RhGetAudioSampleRateDart = int Function();
+typedef _RhReadAudioSamplesNative = Size Function(Pointer<Int16>, Size);
+typedef _RhReadAudioSamplesDart = int Function(Pointer<Int16>, int);
+
 
 abstract final class LibretroMemoryRegion {
   static const int saveRam = 0;
@@ -161,6 +166,9 @@ class LibretroBridge {
   late final _RhGetMemoryRegionSizeDart _getMemoryRegionSize;
   late final _RhReadMemoryByteDart _readMemoryByte;
   late final _RhReadMemoryBlockDart _readMemoryBlock;
+  late final _RhGetAudioSampleRateDart _getAudioSampleRate;
+  late final _RhReadAudioSamplesDart _readAudioSamples;
+  late final _RhVoidDart _clearAudio;
 
   bool _coreLoaded = false;
   bool _gameLoaded = false;
@@ -318,6 +326,18 @@ class LibretroBridge {
     _readMemoryBlock = _lib.lookupFunction<
         _RhReadMemoryBlockNative,
         _RhReadMemoryBlockDart>('rh_read_memory_block');
+
+    _getAudioSampleRate = _lib.lookupFunction<
+        _RhGetAudioSampleRateNative,
+        _RhGetAudioSampleRateDart>('rh_get_audio_sample_rate');
+
+    _readAudioSamples = _lib.lookupFunction<
+        _RhReadAudioSamplesNative,
+        _RhReadAudioSamplesDart>('rh_read_audio_samples');
+
+    _clearAudio = _lib.lookupFunction<
+        _RhVoidNative,
+        _RhVoidDart>('rh_clear_audio');
   }
 
   // ============================================================
@@ -442,6 +462,32 @@ class LibretroBridge {
     }
 
     return _runOnce() == 1;
+  }
+
+  int get audioSampleRate {
+    _ensureNotDisposed();
+    return _getAudioSampleRate();
+  }
+
+  Uint8List readAudioBytes({int maxSamples = 8192}) {
+    _ensureNotDisposed();
+    if (!_gameLoaded || maxSamples <= 0) return Uint8List(0);
+
+    final Pointer<Int16> buffer = malloc<Int16>(maxSamples);
+    try {
+      final int samplesRead = _readAudioSamples(buffer, maxSamples);
+      if (samplesRead <= 0) return Uint8List(0);
+      return Uint8List.fromList(
+        buffer.cast<Uint8>().asTypedList(samplesRead * 2),
+      );
+    } finally {
+      malloc.free(buffer);
+    }
+  }
+
+  void clearAudio() {
+    _ensureNotDisposed();
+    _clearAudio();
   }
 
   // ============================================================
