@@ -1,0 +1,108 @@
+# Catálogo de nombres simbólicos de mapas — Pokémon Crystal (Johto + Kanto)
+#
+# Origen: nombres de constantes MAP_* confirmados a través de búsqueda web
+# sobre el repositorio público de pret (pokecrystal), cruzados con el orden
+# geográfico real del juego (ampliamente documentado y estable).
+#
+# IMPORTANTE — qué SÍ y qué NO está verificado aquí:
+#   SÍ: que estos nombres de mapa existen en el juego y el orden geográfico
+#       en el que aparecen (esto es contenido de juego público y muy estable).
+#   NO: el número de grupo/mapa (group, id) que la memoria RAM usa para cada
+#       uno. Eso vive en constants/map_constants.asm, que todavía no se pudo
+#       obtener. Por eso este archivo es solo texto plano con nombres, no
+#       una transcripción del .asm real (no se inventan bytes de atributos,
+#       tilesets ni conexiones que no se verificaron mapa por mapa).
+#
+# El generador (generate_locations.py) usa este archivo para el catálogo de
+# NOMBRES + tipo de ubicación (ciudad/ruta/cueva/etc., inferido del nombre).
+# La resolución a Map<int, PokemonLocation> solo ocurre para los símbolos que
+# tengan un ID numérico confirmado en sources/map_constants.asm (ver ese
+# archivo — hoy está vacío, pendiente de conseguir).
+
+NEW_BARK_TOWN
+ROUTE_29
+CHERRYGROVE_CITY
+ROUTE_30
+ROUTE_31
+VIOLET_CITY
+SPROUT_TOWER_1F
+SPROUT_TOWER_2F
+SPROUT_TOWER_3F
+ROUTE_32
+RUINS_OF_ALPH_OUTSIDE
+UNION_CAVE_1F
+ROUTE_33
+AZALEA_TOWN
+SLOWPOKE_WELL
+ILEX_FOREST
+ROUTE_34
+GOLDENROD_CITY
+RADIO_TOWER_1F
+ROUTE_35
+NATIONAL_PARK
+ROUTE_36
+ROUTE_37
+ECRUTEAK_CITY
+BURNED_TOWER_1F
+TIN_TOWER_1F
+ROUTE_38
+ROUTE_39
+OLIVINE_CITY
+OLIVINE_PORT
+WHIRL_ISLAND_NW
+ROUTE_40
+CIANWOOD_CITY
+ROUTE_41
+ROUTE_42
+MAHOGANY_TOWN
+ROUTE_43
+LAKE_OF_RAGE
+ROUTE_44
+ICE_PATH_1F
+BLACKTHORN_CITY
+DRAGONS_DEN_1F
+ROUTE_45
+ROUTE_46
+DARK_CAVE_VIOLET_ENTRANCE
+DARK_CAVE_BLACKTHORN_ENTRANCE
+VICTORY_ROAD_GATE
+MT_SILVER_OUTSIDE
+SILVER_CAVE_OUTSIDE
+
+# --- Kanto (postgame) ---
+PEWTER_CITY
+ROUTE_2
+VIRIDIAN_CITY
+ROUTE_22
+ROUTE_1
+PALLET_TOWN
+ROUTE_21
+CINNABAR_ISLAND
+ROUTE_20
+ROUTE_19
+FUCHSIA_CITY
+ROUTE_18
+ROUTE_17
+ROUTE_16
+CELADON_CITY
+ROUTE_7
+ROUTE_15
+ROUTE_14
+ROUTE_13
+ROUTE_12
+ROUTE_11
+LAVENDER_TOWN
+VERMILION_CITY
+ROUTE_6
+SAFFRON_CITY
+ROUTE_5
+CERULEAN_CITY
+ROUTE_9
+ROUTE_24
+ROUTE_25
+ROUTE_3
+ROUTE_4
+ROUTE_8
+ROUTE_10_NORTH
+ROUTE_10_SOUTH
+ROUTE_23

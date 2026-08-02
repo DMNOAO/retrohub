@@ -1,0 +1,17 @@
+# Aquí van los IDs numéricos reales (group, id) por símbolo de mapa.
+#
+# PENDIENTE: todavía no se pudo obtener constants/map_constants.asm de
+# pokecrystal. Este archivo está vacío a propósito — el generador NO
+# inventa ningún número. Mientras esté vacío, ninguna ubicación de Johto
+# recibirá un ID (seguirán mostrando "Mapa XX:YY" en el juego hasta que
+# se complete este archivo).
+#
+# Formato esperado, una línea por mapa confirmado:
+#   NOMBRE_SIMBOLICO = group:id
+#
+# Ejemplo real ya verificado (por una fuente independiente, pokemontools):
+RUINS_OF_ALPH_OUTSIDE = 3:0x16
+
+# Agrega aquí cada línea nueva a medida que consigas el archivo real de
+# pret, o confirmes IDs jugando con un visor de memoria. El generador
+# vuelve a leer este archivo cada vez que se ejecuta.

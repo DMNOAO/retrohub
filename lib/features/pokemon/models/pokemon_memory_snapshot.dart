@@ -25,7 +25,15 @@ class PokemonMemorySnapshot {
   final int pokedexSeen;
   final int pokedexCaught;
   final List<PokemonPartyMember> party;
-  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,required this.party});
+  // Combate (Fase 4.2/4.3). null = no soportado en esta versión/perfil.
+  // battleState: 0 = fuera de combate, 1 = combate salvaje, 2 = combate
+  // de entrenador (mismo significado en Gen1 y Gen2, direcciones
+  // distintas ya resueltas en PokemonMemoryAddresses).
+  final int? battleState;
+  final int? otherTrainerClassId;
+  final int? otherTrainerId;
+  final int? battleResultRaw;
+  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,required this.party,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
   List<int> get partySpeciesIds=>party.map((e)=>e.pokedexId).toList(growable:false);
   int get badgeCount=>PokemonDecoder.countBits(<int>[badgesMask&0xff,(badgesMask>>8)&0xff]);
   String get currentLocation=>PokemonDecoder.mapName(profile,currentMapId);

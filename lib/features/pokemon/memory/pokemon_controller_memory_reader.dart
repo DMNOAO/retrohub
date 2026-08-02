@@ -102,6 +102,16 @@ class PokemonControllerMemoryReader {
         ? PokemonDecoder.decodeUnsignedBigEndian(moneyBytes)
         : _safeBcd(moneyBytes);
 
+    final int? battleState = a.battleMode != null
+        ? byte(a.battleMode!)
+        : (a.isInBattle != null ? byte(a.isInBattle!) : null);
+    final int? otherTrainerClassId =
+        a.otherTrainerClass != null ? byte(a.otherTrainerClass!) : null;
+    final int? otherTrainerIdValue =
+        a.otherTrainerId != null ? byte(a.otherTrainerId!) : null;
+    final int? battleResultRaw =
+        a.battleResult != null ? byte(a.battleResult!) : null;
+
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
       profile: profile,
@@ -122,6 +132,10 @@ class PokemonControllerMemoryReader {
         read(a.pokedexOwned, a.pokedexBytes),
       ),
       party: party,
+      battleState: battleState,
+      otherTrainerClassId: otherTrainerClassId,
+      otherTrainerId: otherTrainerIdValue,
+      battleResultRaw: battleResultRaw,
     );
   }
 

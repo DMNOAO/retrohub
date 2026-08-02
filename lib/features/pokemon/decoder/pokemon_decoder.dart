@@ -1,15 +1,8 @@
 import '../models/pokemon_game_profile.dart';
+import '../models/pokemon_location.dart';
+import 'locations/gen2/crystal_locations.g.dart';
 
-/// Tipo de ubicación, usado para diferenciar los eventos de la bitácora
-/// (llegar a una ciudad no es lo mismo que entrar a una ruta o a un
-/// gimnasio).
-enum PokemonLocationKind { city, route, gym, league, other }
-
-class PokemonLocation {
-  final String name;
-  final PokemonLocationKind kind;
-  const PokemonLocation(this.name, [this.kind = PokemonLocationKind.other]);
-}
+export '../models/pokemon_location.dart';
 
 class PokemonDecoder {
   static String decodeText(List<int> bytes) {
@@ -91,7 +84,7 @@ class PokemonDecoder {
       case PokemonGameVersion.silver:
         return _silverLocations[mapId];
       case PokemonGameVersion.crystal:
-        return _crystalLocations[mapId];
+        return generatedCrystalLocations[mapId];
       case PokemonGameVersion.unsupported:
         return null;
     }
@@ -245,34 +238,6 @@ class PokemonDecoder {
   // Silver: mismo motor y banco de mapas base que Gold. Tabla separada por
   // si se confirma alguna diferencia real de IDs entre versiones.
   static const Map<int, PokemonLocation> _silverLocations = <int, PokemonLocation>{
-    0x1807: PokemonLocation('Pueblo Primavera', PokemonLocationKind.city),
-    0x1801: PokemonLocation('Ciudad Cerezo', PokemonLocationKind.city),
-    0x0A05: PokemonLocation('Ciudad Malva', PokemonLocationKind.city),
-    0x0305: PokemonLocation('Pueblo Azalea', PokemonLocationKind.city),
-    0x1205: PokemonLocation('Ciudad Trigal', PokemonLocationKind.city),
-    0x0905: PokemonLocation('Ciudad Iris', PokemonLocationKind.city),
-    0x0D05: PokemonLocation('Ciudad Olivo', PokemonLocationKind.city),
-    0x0B05: PokemonLocation('Ciudad Orquídea', PokemonLocationKind.city),
-    0x0F05: PokemonLocation('Pueblo Caoba', PokemonLocationKind.city),
-    0x0E05: PokemonLocation('Ciudad Endrino', PokemonLocationKind.city),
-    0x0105: PokemonLocation('Meseta Añil', PokemonLocationKind.league),
-    0x1A05: PokemonLocation('Ciudad Verde', PokemonLocationKind.city),
-    0x1705: PokemonLocation('Pueblo Paleta', PokemonLocationKind.city),
-    0x1605: PokemonLocation('Ciudad Plateada', PokemonLocationKind.city),
-    0x1905: PokemonLocation('Ciudad Celeste', PokemonLocationKind.city),
-    0x1505: PokemonLocation('Ciudad Carmín', PokemonLocationKind.city),
-    0x1405: PokemonLocation('Ciudad Azulona', PokemonLocationKind.city),
-    0x1305: PokemonLocation('Ciudad Fucsia', PokemonLocationKind.city),
-    0x1105: PokemonLocation('Pueblo Lavanda', PokemonLocationKind.city),
-    0x1005: PokemonLocation('Ciudad Azafrán', PokemonLocationKind.city),
-  };
-
-  // Crystal: tabla propia. Hoy comparte los valores conocidos con
-  // Gold/Silver porque Crystal reutiliza en gran parte el mismo banco de
-  // mapas, pero al estar separada se puede corregir sin tocar Gold/Silver
-  // en cuanto se confirme un ID distinto jugando (p. ej. Torre Quemada,
-  // que Crystal remodela).
-  static const Map<int, PokemonLocation> _crystalLocations = <int, PokemonLocation>{
     0x1807: PokemonLocation('Pueblo Primavera', PokemonLocationKind.city),
     0x1801: PokemonLocation('Ciudad Cerezo', PokemonLocationKind.city),
     0x0A05: PokemonLocation('Ciudad Malva', PokemonLocationKind.city),
