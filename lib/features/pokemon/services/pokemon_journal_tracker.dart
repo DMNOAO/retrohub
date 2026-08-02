@@ -27,6 +27,8 @@ class PokemonJournalTracker {
   int _candidateRepeats = 0;
   DateTime? _lastSnapshotSavedAt;
   PokemonPartyMember? _lastCapturedPokemon;
+  String? _lastDefeatedTrainer;
+  bool _persistentStateRestored = false;
   bool _busy = false;
 
   // Estado transitorio de combate (Fase 4.2/4.3): se recuerda contra qué
@@ -89,6 +91,7 @@ class PokemonJournalTracker {
         gameTitle: gameTitle,
         romPath: romPath,
       );
+      await _restorePersistentState();
       final current = PokemonControllerMemoryReader(
         controller: controller,
         profile: profile,
@@ -223,6 +226,7 @@ class PokemonJournalTracker {
         final GymLeaderInfo? leader =
             GymLeaderAssetResolver.forBadge(current.profile, index);
         if (leader != null) {
+          _lastDefeatedTrainer = leader.name;
           await _insertEvent(
             type: 'gym_leader_defeated',
             title: 'Derrotó a ${leader.name}',
@@ -332,6 +336,7 @@ class PokemonJournalTracker {
         description: 'Venció a un entrenador durante su aventura.',
         metadata: _metadata(current),
       );
+      await _rememberLastDefeatedTrainer('Entrenador', current);
       return;
     }
 
@@ -351,6 +356,7 @@ class PokemonJournalTracker {
           'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
       );
+      await _rememberLastDefeatedTrainer('Rival', current);
       return;
     }
 
@@ -364,6 +370,10 @@ class PokemonJournalTracker {
           'trainerClassId': classId,
           'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
+      );
+      await _rememberLastDefeatedTrainer(
+        TrainerClassResolver.forClassId(classId)?.name ?? 'Campeón',
+        current,
       );
       return;
     }
@@ -381,6 +391,7 @@ class PokemonJournalTracker {
           'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
       );
+      await _rememberLastDefeatedTrainer(name, current);
       return;
     }
 
@@ -398,6 +409,73 @@ class PokemonJournalTracker {
         'spritePath': info?.spritePath,
       },
     );
+    await _rememberLastDefeatedTrainer(info?.name ?? 'Entrenador', current);
+  }
+
+  Future<void> _restorePersistentState() async {
+    if (_persistentStateRestored) return;
+    _persistentStateRestored = true;
+
+    final latest = await database.getLatestProgressSnapshot(gameId);
+    final storedName = latest?.lastDefeatedTrainer?.trim();
+    if (storedName != null && storedName.isNotEmpty) {
+      _lastDefeatedTrainer = storedName;
+      return;
+    }
+
+    // Compatibilidad con eventos creados antes de que el resumen guardara
+    // este campo: recupera el combate más reciente de Historia completa.
+    final events = await database.getProgressEventsByGame(gameId);
+    for (final event in events) {
+      final name = _trainerNameFromEvent(event);
+      if (name != null) {
+        _lastDefeatedTrainer = name;
+        return;
+      }
+    }
+  }
+
+  String? _trainerNameFromEvent(GameProgressEvent event) {
+    const supportedTypes = <String>{
+      'trainer_defeated',
+      'rival_defeated',
+      'gym_leader_defeated',
+      'elite_four_defeated',
+      'champion_defeated',
+    };
+    if (!supportedTypes.contains(event.eventType)) return null;
+
+    Map<String, dynamic> metadata = const <String, dynamic>{};
+    final rawMetadata = event.metadataJson;
+    if (rawMetadata != null && rawMetadata.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawMetadata);
+        if (decoded is Map) metadata = Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+
+    final explicit = metadata['leaderName'] ?? metadata['trainerClass'];
+    final explicitName = explicit?.toString().trim();
+    if (explicitName != null && explicitName.isNotEmpty) return explicitName;
+    if (event.eventType == 'rival_defeated') return 'Rival';
+    if (event.eventType == 'champion_defeated') return 'Campeón Pokémon';
+
+    const prefixes = <String>['Derrotó a ', 'Ganó contra '];
+    for (final prefix in prefixes) {
+      if (event.title.startsWith(prefix)) {
+        final value = event.title.substring(prefix.length).trim();
+        if (value.isNotEmpty) return value;
+      }
+    }
+    return 'Entrenador';
+  }
+
+  Future<void> _rememberLastDefeatedTrainer(
+    String name,
+    PokemonMemorySnapshot snapshot,
+  ) async {
+    _lastDefeatedTrainer = name;
+    await _saveSnapshot(snapshot);
   }
 
   bool _isKantoUnlocked(PokemonMemorySnapshot value) {
@@ -455,6 +533,7 @@ class PokemonJournalTracker {
         lastCapturedPokemonJson: Value(
           _lastCapturedPokemon == null ? null : jsonEncode(_lastCapturedPokemon!.toJson()),
         ),
+        lastDefeatedTrainer: Value(_lastDefeatedTrainer),
         leagueWins: const Value(0),
       ),
     );
