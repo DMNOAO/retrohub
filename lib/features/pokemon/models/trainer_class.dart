@@ -70,7 +70,7 @@ class TrainerClassResolver {
     0x31: TrainerClassInfo('Malabarista', 'assets/sprites/characters/trainers/gbc/juggler.png'),
     0x32: TrainerClassInfo('Cinturón Negro', 'assets/sprites/characters/trainers/gbc/black_belt.png'),
     0x33: TrainerClassInfo('Ejecutivo (M)'),
-    0x34: TrainerClassInfo('Médium (psíquico)', 'assets/sprites/characters/trainers/gbc/psychic.png'),
+    0x34: TrainerClassInfo('Médium (psíquico)'),
     0x35: TrainerClassInfo('Excursionista (campo)', 'assets/sprites/characters/trainers/gbc/picnicker.png'),
     0x36: TrainerClassInfo('Campista', 'assets/sprites/characters/trainers/gbc/camper.png'),
     0x37: TrainerClassInfo('Ejecutiva (F)'),
