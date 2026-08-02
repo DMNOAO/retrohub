@@ -266,9 +266,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   @override
   Widget build(BuildContext context) {
     final String? sameBoyPath = CoreLoader.findSameBoyPath();
+    final _EmulatorVisualTheme visualTheme =
+        _EmulatorVisualTheme.forGame(game);
 
     return Scaffold(
+      backgroundColor: visualTheme.background,
       appBar: AppBar(
+        backgroundColor: visualTheme.appBar,
+        foregroundColor: Colors.white,
         title: Text(game.title),
         actions: [
           PopupMenuButton<String>(
@@ -318,9 +323,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: visualTheme.gradient,
+        ),
+        child: SafeArea(
+          top: false,
+          child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final bool landscape =
                 constraints.maxWidth > constraints.maxHeight;
@@ -332,7 +341,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: sameBoyPath != null
-                      ? Colors.greenAccent
+                      ? visualTheme.accent
                       : Theme.of(context).colorScheme.error,
                   width: 3,
                 ),
@@ -427,7 +436,83 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
               ),
             );
           },
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _EmulatorVisualTheme {
+  final Color background;
+  final Color appBar;
+  final Color accent;
+  final LinearGradient gradient;
+
+  const _EmulatorVisualTheme({
+    required this.background,
+    required this.appBar,
+    required this.accent,
+    required this.gradient,
+  });
+
+  factory _EmulatorVisualTheme.forGame(Game game) {
+    final String identity =
+        '${game.title} ${game.console}'.toLowerCase();
+
+    Color primary;
+    Color secondary;
+    Color accent;
+
+    if (identity.contains('crystal') || identity.contains('cristal')) {
+      primary = const Color(0xFF102A43);
+      secondary = const Color(0xFF39265F);
+      accent = const Color(0xFF7DE3FF);
+    } else if (identity.contains('gold') || identity.contains('oro')) {
+      primary = const Color(0xFF3B2A10);
+      secondary = const Color(0xFF6A4A16);
+      accent = const Color(0xFFFFD56A);
+    } else if (identity.contains('silver') || identity.contains('plata')) {
+      primary = const Color(0xFF202938);
+      secondary = const Color(0xFF465264);
+      accent = const Color(0xFFD7E4F2);
+    } else if (identity.contains('yellow') ||
+        identity.contains('amarillo')) {
+      primary = const Color(0xFF3D3210);
+      secondary = const Color(0xFF6A4A18);
+      accent = const Color(0xFFFFE66D);
+    } else if (identity.contains('red') || identity.contains('rojo')) {
+      primary = const Color(0xFF3D151B);
+      secondary = const Color(0xFF651E2A);
+      accent = const Color(0xFFFF7188);
+    } else if (identity.contains('blue') || identity.contains('azul')) {
+      primary = const Color(0xFF102A4A);
+      secondary = const Color(0xFF174B70);
+      accent = const Color(0xFF72D5FF);
+    } else if (identity.contains('gbc')) {
+      primary = const Color(0xFF241B3D);
+      secondary = const Color(0xFF3F2B5B);
+      accent = const Color(0xFFC9A7FF);
+    } else {
+      primary = const Color(0xFF252D20);
+      secondary = const Color(0xFF3E4934);
+      accent = const Color(0xFFB8D47A);
+    }
+
+    return _EmulatorVisualTheme(
+      background: primary,
+      appBar: Color.lerp(primary, Colors.black, 0.28)!,
+      accent: accent,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[
+          Color.lerp(primary, Colors.black, 0.18)!,
+          primary,
+          secondary,
+          Color.lerp(secondary, Colors.black, 0.34)!,
+        ],
+        stops: const <double>[0, 0.35, 0.72, 1],
       ),
     );
   }
