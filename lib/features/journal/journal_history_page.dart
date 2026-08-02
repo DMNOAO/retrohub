@@ -320,13 +320,21 @@ class _TimelineCard extends StatelessWidget {
       case 'champion_defeated':
         return _Visual(CharacterAssetResolver.champion(profile), Icons.emoji_events_outlined);
       case 'elite_four_defeated':
-        // Sin sprites propios de Will/Bruno/Karen/Koga todavía en assets/;
-        // se muestra solo con ícono en vez de inventar una ruta.
-        return const _Visual(null, Icons.military_tech_outlined);
+        return _Visual(
+          item.metadata['spritePath']?.toString(),
+          Icons.military_tech_outlined,
+        );
       case 'trainer_defeated':
         final trainerClass = item.metadata['trainerClass']?.toString();
+        final explicitPath = item.metadata['spritePath']?.toString();
         return _Visual(
-          trainerClass == null ? null : CharacterAssetResolver.trainer(profile: profile, trainerClass: trainerClass),
+          explicitPath ??
+              (trainerClass == null
+                  ? null
+                  : CharacterAssetResolver.trainer(
+                      profile: profile,
+                      trainerClass: trainerClass,
+                    )),
           Icons.sports_martial_arts,
         );
       case 'screenshot':
