@@ -251,7 +251,7 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
                   widget.game.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: compact ? 20 : 26,
                     fontWeight: FontWeight.bold,
                   ),
