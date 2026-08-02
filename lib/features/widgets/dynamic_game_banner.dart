@@ -205,10 +205,12 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final bool compact = widget.height <= 150;
+
     return Container(
       height: widget.height,
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 12 : 18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -222,8 +224,8 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
       child: Row(
         children: <Widget>[
           Container(
-            width: 100,
-            height: 140,
+            width: compact ? 82 : 100,
+            height: compact ? 116 : 140,
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.30),
@@ -231,37 +233,48 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
             ),
             child: _buildCover(),
           ),
-          const SizedBox(width: 24),
+          SizedBox(width: compact ? 14 : 24),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
+                Text(
                   'Continúa tu aventura',
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: compact ? 12 : 14,
+                  ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 2 : 6),
                 Text(
                   widget.game.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 26,
+                    fontSize: compact ? 20 : 26,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 2 : 6),
                 Text(
                   '${widget.game.console} • '
                   '${PlayTimeFormatter.fromSeconds(widget.game.playTimeSeconds)} jugadas',
-                  style: const TextStyle(color: Colors.white70),
+                  maxLines: compact ? 1 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: compact ? 12 : 14,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: widget.onPlay,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Continuar'),
+                SizedBox(height: compact ? 4 : 10),
+                SizedBox(
+                  height: compact ? 36 : 40,
+                  child: FilledButton.icon(
+                    onPressed: widget.onPlay,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Continuar'),
+                  ),
                 ),
               ],
             ),
