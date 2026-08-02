@@ -579,6 +579,8 @@ class PokemonJournalTracker {
       'party': value.party.map((pokemon) => pokemon.toJson()).toList(),
       'pokedexSeen': value.pokedexSeen,
       'pokedexCaught': value.pokedexCaught,
+      'seenPokemonIds': value.seenPokemonIds,
+      'caughtPokemonIds': value.caughtPokemonIds,
       'memoryShift': value.memoryShift,
     };
   }
