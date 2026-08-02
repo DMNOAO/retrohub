@@ -12,8 +12,12 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
 
   PokemonEngine({
     required this.bridge,
+    required String gameTitle,
     required String romPath,
-  }) : profile = PokemonGameProfile.fromRomPath(romPath);
+  }) : profile = PokemonGameProfile.fromGameIdentity(
+          gameTitle: gameTitle,
+          romPath: romPath,
+        );
 
   @override
   String get engineName => 'Pokémon Engine';

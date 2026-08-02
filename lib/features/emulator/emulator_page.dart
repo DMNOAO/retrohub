@@ -66,6 +66,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     _pokemonJournalTracker = PokemonJournalTracker(
       database: _database,
       gameId: game.id,
+      gameTitle: game.title,
       romPath: game.romPath,
       controller: _gameController,
       playTimeMinutes: () => _currentPlayTimeMinutes,
@@ -341,6 +342,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 child: sameBoyPath != null
                     ? LibretroGameView(
                         gameId: game.id,
+                        gameTitle: game.title,
                         corePath: sameBoyPath,
                         romPath: game.romPath,
                         initialPlayTimeMinutes:
