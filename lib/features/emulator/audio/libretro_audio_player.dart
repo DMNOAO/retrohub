@@ -10,6 +10,7 @@ class LibretroAudioPlayer {
   SoundHandle? _handle;
   bool _ready = false;
   bool _disposed = false;
+  bool _isPumping = false;
 
   Future<void> start(LibretroBridge bridge) async {
     if (_disposed) return;
@@ -39,20 +40,40 @@ class LibretroAudioPlayer {
     }
   }
 
-  void pump(LibretroBridge bridge) {
-    final AudioSource? source = _source;
-    if (!_ready || _disposed || source == null) return;
+  Future<void> pump(LibretroBridge bridge) async {
+    if (!_ready || _disposed || _source == null) return;
 
+    // Always drain the native ring buffer. When the previous asynchronous
+    // write is still running, this block is intentionally dropped so audio
+    // can never build up and delay or stop emulation.
     final Uint8List bytes = bridge.readAudioBytes();
-    if (bytes.isNotEmpty) {
-      SoLoud.instance.addAudioDataStream(source, bytes);
+    if (bytes.isEmpty || _isPumping) return;
+
+    final AudioSource source = _source!;
+    _isPumping = true;
+    try {
+      await SoLoud.instance.addAudioDataStream(source, bytes);
+    } on SoLoudPcmBufferFullCppException {
+      // A full streaming buffer is recoverable. Dropping this block keeps
+      // latency bounded and, most importantly, isolates audio from gameplay.
+    } catch (error) {
+      if (!_disposed) {
+        debugPrint('Se descartó un bloque de audio del emulador: $error');
+      }
+    } finally {
+      _isPumping = false;
     }
   }
 
   void setPaused(bool paused) {
     final SoundHandle? handle = _handle;
     if (!_ready || handle == null) return;
-    SoLoud.instance.setPause(handle, paused);
+
+    try {
+      SoLoud.instance.setPause(handle, paused);
+    } catch (error) {
+      debugPrint('No se pudo cambiar la pausa del audio: $error');
+    }
   }
 
   Future<void> dispose() async {
@@ -65,7 +86,11 @@ class LibretroAudioPlayer {
     _handle = null;
     _source = null;
 
-    if (handle != null) await SoLoud.instance.stop(handle);
-    if (source != null) await SoLoud.instance.disposeSource(source);
+    try {
+      if (handle != null) await SoLoud.instance.stop(handle);
+      if (source != null) await SoLoud.instance.disposeSource(source);
+    } catch (error) {
+      debugPrint('No se pudo cerrar limpiamente el audio: $error');
+    }
   }
 }
