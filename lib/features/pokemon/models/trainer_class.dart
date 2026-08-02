@@ -10,10 +10,7 @@ class TrainerClassInfo {
 /// partir de su ID numérico real, tal como se define en
 /// constants/trainer_constants.asm (pokecrystal) — pegado por el usuario.
 ///
-/// IMPORTANTE: esta tabla por sí sola NO detecta combates. Falta la
-/// dirección de memoria RAM real de `wOtherTrainerClass` (confirmada por
-/// nombre en ram/wram.asm, pero sin dirección hexadecimal verificada
-/// todavía). Hasta tenerla, nada de esto se conecta al motor de eventos.
+/// La clase se lee desde memoria y se utiliza al cerrar un combate ganado.
 class TrainerClassResolver {
   const TrainerClassResolver._();
 
@@ -32,12 +29,12 @@ class TrainerClassResolver {
     0x08: TrainerClassInfo('Clair'),
     0x09: TrainerClassInfo('Rival (encuentro 1)'),
     0x0A: TrainerClassInfo('Profesor Pokémon'),
-    0x0B: TrainerClassInfo('Will'),
+    0x0B: TrainerClassInfo('Will', 'assets/sprites/characters/elite_four/gbc/will_johto.png'),
     0x0C: TrainerClassInfo('Cal'),
-    0x0D: TrainerClassInfo('Bruno'),
-    0x0E: TrainerClassInfo('Karen'),
-    0x0F: TrainerClassInfo('Koga'),
-    0x10: TrainerClassInfo('Lance (Campeón)'),
+    0x0D: TrainerClassInfo('Bruno', 'assets/sprites/characters/elite_four/gbc/bruno_kanto.png'),
+    0x0E: TrainerClassInfo('Karen', 'assets/sprites/characters/elite_four/gbc/karen_johto.png'),
+    0x0F: TrainerClassInfo('Koga', 'assets/sprites/characters/elite_four/gbc/koga_kanto.png'),
+    0x10: TrainerClassInfo('Lance (Campeón)', 'assets/sprites/characters/champions/lance_johto.png'),
     0x11: TrainerClassInfo('Brock'),
     0x12: TrainerClassInfo('Misty'),
     0x13: TrainerClassInfo('Lt. Surge'),
@@ -84,8 +81,8 @@ class TrainerClassResolver {
     0x3C: TrainerClassInfo('Chica Kimono'),
     0x3D: TrainerClassInfo('Gemelas'),
     0x3E: TrainerClassInfo('Aficionada Pokémon (F)'),
-    0x3F: TrainerClassInfo('Red'),
-    0x40: TrainerClassInfo('Blue'),
+    0x3F: TrainerClassInfo('Red', 'assets/sprites/characters/special_trainers/red_johto.png'),
+    0x40: TrainerClassInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/Blue_OPC.png'),
     0x41: TrainerClassInfo('Oficial'),
     0x42: TrainerClassInfo('Rocket (F)'),
     0x43: TrainerClassInfo('Eusine'),
