@@ -94,6 +94,7 @@ class LibretroGameController {
 
 class LibretroGameView extends StatefulWidget {
   final String gameId;
+  final String gameTitle;
   final String corePath;
   final String romPath;
   final int initialPlayTimeMinutes;
@@ -102,6 +103,7 @@ class LibretroGameView extends StatefulWidget {
   const LibretroGameView({
     super.key,
     required this.gameId,
+    required this.gameTitle,
     required this.corePath,
     required this.romPath,
     this.initialPlayTimeMinutes = 0,
@@ -272,6 +274,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       _pokemonEngine = PokemonEngine(
         bridge: bridge,
+        gameTitle: widget.gameTitle,
         romPath: widget.romPath,
       );
 
