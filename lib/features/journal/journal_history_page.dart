@@ -10,6 +10,7 @@ import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
+import 'pokedex_grid.dart';
 
 class JournalHistoryPage extends ConsumerStatefulWidget {
   final Game game;
@@ -24,6 +25,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   bool _loading = true;
   List<_TimelineItem> _items = const [];
   String _filter = 'all';
+  Set<int> _seenPokemonIds = const <int>{};
+  Set<int> _caughtPokemonIds = const <int>{};
 
   @override
   void initState() {
@@ -45,11 +48,45 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
       ...entries.map(_TimelineItem.fromEntry),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    final seenIds = <int>{};
+    final caughtIds = <int>{};
+    var detailedStateFound = false;
+    for (final event in events) {
+      final metadata = _TimelineItem._decodeMetadata(event.metadataJson);
+      if (!detailedStateFound &&
+          metadata['seenPokemonIds'] is List &&
+          metadata['caughtPokemonIds'] is List) {
+        seenIds.addAll(_intSet(metadata['seenPokemonIds']));
+        caughtIds.addAll(_intSet(metadata['caughtPokemonIds']));
+        detailedStateFound = true;
+      }
+      final capturedId = _nullableInt(metadata['pokemonId']);
+      if (capturedId != null) {
+        seenIds.add(capturedId);
+        caughtIds.add(capturedId);
+      }
+      final party = metadata['partySpeciesIds'];
+      if (party is List) seenIds.addAll(_intSet(party));
+    }
+    seenIds.addAll(caughtIds);
+
     if (!mounted) return;
     setState(() {
       _items = items;
+      _seenPokemonIds = seenIds;
+      _caughtPokemonIds = caughtIds;
       _loading = false;
     });
+  }
+
+  static Set<int> _intSet(dynamic values) {
+    if (values is! List) return <int>{};
+    return values.map(_nullableInt).whereType<int>().where((id) => id > 0).toSet();
+  }
+
+  static int? _nullableInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
   }
 
   @override
@@ -83,20 +120,26 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                   onSelected: (value) => setState(() => _filter = value),
                 ),
                 Expanded(
-                  child: filtered.isEmpty
-                      ? const _EmptyHistory()
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final item = filtered[index];
-                            return _TimelineCard(
-                              item: item,
-                              profile: profile,
-                              isLast: index == filtered.length - 1,
-                            );
-                          },
-                        ),
+                  child: _filter == 'pokemon'
+                      ? PokedexGrid(
+                          profile: profile,
+                          seenIds: _seenPokemonIds,
+                          caughtIds: _caughtPokemonIds,
+                        )
+                      : filtered.isEmpty
+                          ? const _EmptyHistory()
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final item = filtered[index];
+                                return _TimelineCard(
+                                  item: item,
+                                  profile: profile,
+                                  isLast: index == filtered.length - 1,
+                                );
+                              },
+                            ),
                 ),
               ],
             ),
