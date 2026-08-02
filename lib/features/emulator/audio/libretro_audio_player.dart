@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -6,63 +7,127 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import '../data/libretro_bridge.dart';
 
 class LibretroAudioPlayer {
+  static const Duration _prebufferDuration = Duration(milliseconds: 80);
+
   AudioSource? _source;
   SoundHandle? _handle;
+  int _sampleRate = 48000;
+  int _bufferedBytes = 0;
   bool _ready = false;
   bool _disposed = false;
   bool _isPumping = false;
+  bool _recoveryNoticePrinted = false;
+
+  int get _prebufferBytes =>
+      (_sampleRate * 2 * 2 * _prebufferDuration.inMilliseconds) ~/ 1000;
 
   Future<void> start(LibretroBridge bridge) async {
     if (_disposed) return;
 
     try {
+      _sampleRate = bridge.audioSampleRate;
       if (!SoLoud.instance.isInitialized) {
         await SoLoud.instance.init(
-          sampleRate: bridge.audioSampleRate,
+          sampleRate: _sampleRate,
           channels: Channels.stereo,
           lowLatency: true,
         );
       }
 
-      final source = SoLoud.instance.setBufferStream(
-        sampleRate: bridge.audioSampleRate,
-        channels: Channels.stereo,
-        format: BufferType.s16le,
-        bufferingType: BufferingType.released,
-        bufferingTimeNeeds: 0.06,
-        maxBufferSizeDuration: const Duration(milliseconds: 250),
-      );
-      _source = source;
-      _handle = SoLoud.instance.play(source);
+      _source = _createSource();
+      _handle = null;
+      _bufferedBytes = 0;
       _ready = true;
     } catch (error) {
       debugPrint('No se pudo iniciar el audio del emulador: $error');
     }
   }
 
+  AudioSource _createSource() {
+    return SoLoud.instance.setBufferStream(
+      sampleRate: _sampleRate,
+      channels: Channels.stereo,
+      format: BufferType.s16le,
+      bufferingType: BufferingType.released,
+      bufferingTimeNeeds: 0.06,
+      maxBufferSizeDuration: const Duration(milliseconds: 500),
+    );
+  }
+
   void pump(LibretroBridge bridge) {
     if (!_ready || _disposed || _source == null) return;
 
-    // Always drain the native ring buffer. When another pump is active, this
-    // block is intentionally dropped so audio can never build up and delay or
-    // stop emulation.
+    // Always drain the native ring buffer. Dropping a block is preferable to
+    // allowing audio backpressure to interrupt or delay emulation.
     final Uint8List bytes = bridge.readAudioBytes();
     if (bytes.isEmpty || _isPumping) return;
 
-    final AudioSource source = _source!;
     _isPumping = true;
     try {
-      // flutter_soloud 4.1.4 exposes this as a synchronous void method.
-      SoLoud.instance.addAudioDataStream(source, bytes);
-    } on SoLoudPcmBufferFullCppException {
-      // A full streaming buffer is recoverable. Dropping this block keeps
-      // latency bounded and, most importantly, isolates audio from gameplay.
-    } catch (error) {
-      if (!_disposed) {
-        debugPrint('Se descartó un bloque de audio del emulador: $error');
+      final SoundHandle? handle = _handle;
+      if (handle != null &&
+          !SoLoud.instance.getIsValidVoiceHandle(handle)) {
+        _replaceStream(bytes);
+        return;
       }
+
+      SoLoud.instance.addAudioDataStream(_source!, bytes);
+      _bufferedBytes += bytes.length;
+      _startPlaybackIfPrebuffered();
+    } on SoLoudPcmBufferFullCppException {
+      _replaceStream(bytes);
+    } on SoLoudStreamEndedAlreadyCppException {
+      _replaceStream(bytes);
+    } catch (error) {
+      if (!_disposed && !_recoveryNoticePrinted) {
+        _recoveryNoticePrinted = true;
+        debugPrint('El audio del emulador se recuperó tras un error: $error');
+      }
+      _replaceStream(bytes);
     } finally {
       _isPumping = false;
+    }
+  }
+
+  void _startPlaybackIfPrebuffered() {
+    if (_handle != null || _source == null) return;
+    if (_bufferedBytes < _prebufferBytes) return;
+
+    _handle = SoLoud.instance.play(_source!);
+  }
+
+  void _replaceStream(Uint8List firstBlock) {
+    if (_disposed || !SoLoud.instance.isInitialized) return;
+
+    final SoundHandle? oldHandle = _handle;
+    final AudioSource? oldSource = _source;
+
+    try {
+      final AudioSource replacement = _createSource();
+      _source = replacement;
+      _handle = null;
+      _bufferedBytes = 0;
+
+      SoLoud.instance.addAudioDataStream(replacement, firstBlock);
+      _bufferedBytes = firstBlock.length;
+      _startPlaybackIfPrebuffered();
+
+      if (!_recoveryNoticePrinted) {
+        _recoveryNoticePrinted = true;
+        debugPrint('Se reinició automáticamente el stream de audio.');
+      }
+
+      if (oldHandle != null) {
+        unawaited(SoLoud.instance.stop(oldHandle));
+      }
+      if (oldSource != null) {
+        unawaited(SoLoud.instance.disposeSource(oldSource));
+      }
+    } catch (error) {
+      if (!_disposed && !_recoveryNoticePrinted) {
+        _recoveryNoticePrinted = true;
+        debugPrint('No se pudo recuperar el stream de audio: $error');
+      }
     }
   }
 
@@ -71,7 +136,9 @@ class LibretroAudioPlayer {
     if (!_ready || handle == null) return;
 
     try {
-      SoLoud.instance.setPause(handle, paused);
+      if (SoLoud.instance.getIsValidVoiceHandle(handle)) {
+        SoLoud.instance.setPause(handle, paused);
+      }
     } catch (error) {
       debugPrint('No se pudo cambiar la pausa del audio: $error');
     }
@@ -86,6 +153,7 @@ class LibretroAudioPlayer {
     final AudioSource? source = _source;
     _handle = null;
     _source = null;
+    _bufferedBytes = 0;
 
     try {
       if (handle != null) await SoLoud.instance.stop(handle);
