@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
+import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
@@ -114,7 +115,8 @@ class LibretroGameView extends StatefulWidget {
   State<LibretroGameView> createState() => _LibretroGameViewState();
 }
 
-class _LibretroGameViewState extends State<LibretroGameView> {
+class _LibretroGameViewState extends State<LibretroGameView>
+    with WidgetsBindingObserver {
   static const int _buttonB = 0;
   static const int _buttonSelect = 2;
   static const int _buttonStart = 3;
@@ -133,6 +135,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   final Set<int> _pressedButtons = <int>{};
 
   LibretroBridge? _bridge;
+  LibretroAudioPlayer? _audioPlayer;
   Timer? _emulationTimer;
   Timer? _sramTimer;
   Timer? _memoryDebugTimer;
@@ -161,6 +164,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _sessionStartedAt = DateTime.now();
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
@@ -272,6 +276,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       bridge.resetInput();
 
+      final audioPlayer = LibretroAudioPlayer();
+      _audioPlayer = audioPlayer;
+      await audioPlayer.start(bridge);
+
       _pokemonEngine = PokemonEngine(
         bridge: bridge,
         gameTitle: widget.gameTitle,
@@ -338,6 +346,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       }
     }
 
+    _audioPlayer?.pump(bridge);
+
     final LibretroFrame? frame = bridge.readFrame();
 
     if (frame == null) {
@@ -367,6 +377,11 @@ class _LibretroGameViewState extends State<LibretroGameView> {
           _speedMultiplier = 1;
       }
     });
+
+    // El audio acelerado acumularía latencia. Se silencia durante turbo y se
+    // reanuda limpio al volver a velocidad normal.
+    _audioPlayer?.setPaused(_speedMultiplier != 1);
+    if (_speedMultiplier != 1) _bridge?.clearAudio();
 
     _focusNode.requestFocus();
   }
@@ -673,6 +688,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
     _bridge = null;
 
+    final audioPlayer = _audioPlayer;
+    _audioPlayer = null;
+    audioPlayer?.dispose();
+
     try {
       bridge?.dispose();
     } catch (error) {
@@ -700,12 +719,20 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller?._detach();
     _stopEmulator();
     _currentImage?.dispose();
     _currentImage = null;
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bool paused = state != AppLifecycleState.resumed;
+    _audioPlayer?.setPaused(paused || _speedMultiplier != 1);
+    if (paused) _bridge?.clearAudio();
   }
 
   @override
