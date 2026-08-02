@@ -77,6 +77,20 @@ class CharacterAssetResolver {
     'policia': 'officer',
   };
 
+  static String? trainerForKnownClass({
+    required GameAssetProfile profile,
+    required String trainerClass,
+  }) {
+    final normalized = _normalize(trainerClass);
+    if (normalized == 'rival') return rival(profile);
+    if (normalized.contains('campeon') || normalized.contains('lance')) {
+      return champion(profile);
+    }
+    final fileName = _trainerFileNames[normalized];
+    if (fileName == null) return null;
+    return 'assets/sprites/characters/trainers/${profile.trainerSpriteSet}/$fileName.png';
+  }
+
   static String specialTrainer(String key) {
     final normalized = _normalize(key);
     if (normalized == 'red_mt_silver' || normalized == 'eusine') {
