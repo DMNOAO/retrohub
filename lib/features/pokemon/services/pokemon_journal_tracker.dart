@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -140,6 +141,13 @@ class PokemonJournalTracker {
 
       await _recordChanges(previous, stable);
       await _saveSnapshot(stable);
+    } catch (error, stackTrace) {
+      developer.log(
+        'Error al actualizar la bitácora Pokémon',
+        name: 'PokemonJournalTracker',
+        error: error,
+        stackTrace: stackTrace,
+      );
     } finally {
       _busy = false;
     }
@@ -340,6 +348,7 @@ class PokemonJournalTracker {
           ..._metadata(current),
           'trainerClassId': classId,
           'trainerId': trainerId,
+          'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
       );
       return;
@@ -353,6 +362,7 @@ class PokemonJournalTracker {
         metadata: <String, dynamic>{
           ..._metadata(current),
           'trainerClassId': classId,
+          'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
       );
       return;
@@ -368,6 +378,7 @@ class PokemonJournalTracker {
         metadata: <String, dynamic>{
           ..._metadata(current),
           'trainerClassId': classId,
+          'spritePath': TrainerClassResolver.forClassId(classId)?.spritePath,
         },
       );
       return;
@@ -384,6 +395,7 @@ class PokemonJournalTracker {
         ..._metadata(current),
         'trainerClassId': classId,
         'trainerClass': info?.name,
+        'spritePath': info?.spritePath,
       },
     );
   }
