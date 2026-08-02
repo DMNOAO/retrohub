@@ -40,19 +40,20 @@ class LibretroAudioPlayer {
     }
   }
 
-  Future<void> pump(LibretroBridge bridge) async {
+  void pump(LibretroBridge bridge) {
     if (!_ready || _disposed || _source == null) return;
 
-    // Always drain the native ring buffer. When the previous asynchronous
-    // write is still running, this block is intentionally dropped so audio
-    // can never build up and delay or stop emulation.
+    // Always drain the native ring buffer. When another pump is active, this
+    // block is intentionally dropped so audio can never build up and delay or
+    // stop emulation.
     final Uint8List bytes = bridge.readAudioBytes();
     if (bytes.isEmpty || _isPumping) return;
 
     final AudioSource source = _source!;
     _isPumping = true;
     try {
-      await SoLoud.instance.addAudioDataStream(source, bytes);
+      // flutter_soloud 4.1.4 exposes this as a synchronous void method.
+      SoLoud.instance.addAudioDataStream(source, bytes);
     } on SoLoudPcmBufferFullCppException {
       // A full streaming buffer is recoverable. Dropping this block keeps
       // latency bounded and, most importantly, isolates audio from gameplay.
