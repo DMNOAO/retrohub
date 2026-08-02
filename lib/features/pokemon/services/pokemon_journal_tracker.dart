@@ -36,6 +36,7 @@ class PokemonJournalTracker {
   // identificarlo recién cuando el combate termina.
   int? _pendingTrainerClass;
   int? _pendingTrainerId;
+  bool _trainerBattlePending = false;
   // Snapshot crudo del sondeo anterior, solo para detectar transiciones de
   // combate. Se actualiza en TODOS los sondeos (a diferencia de _accepted,
   // que se congela mientras el resto del estado no cambie) porque durante
@@ -102,7 +103,7 @@ class PokemonJournalTracker {
       final PokemonMemorySnapshot? previousRaw = _lastRawSnapshot;
       _lastRawSnapshot = current;
       if (previousRaw != null) {
-        await _recordBattleChanges(previousRaw, current);
+        await _recordBattleChanges(current);
       }
 
       if (_candidate != null && _sameCoreState(_candidate!, current)) {
@@ -293,22 +294,26 @@ class PokemonJournalTracker {
   /// del estado (dinero, ubicación, etc.), porque un combate puede
   /// empezar y terminar sin que nada más cambie mientras tanto.
   Future<void> _recordBattleChanges(
-    PokemonMemorySnapshot previous,
     PokemonMemorySnapshot current,
   ) async {
     if (current.battleState == null) return; // versión sin soporte de combate
 
     if (current.battleState == 2) {
+      _trainerBattlePending = true;
       _pendingTrainerClass = current.otherTrainerClassId;
       _pendingTrainerId = current.otherTrainerId;
     }
 
-    final bool wasInTrainerBattle = previous.battleState == 2;
     final bool nowOutOfBattle = current.battleState == 0;
-    if (!(wasInTrainerBattle && nowOutOfBattle)) return;
+    // En Android (sobre todo con x2/x4) el sondeo puede observar estados
+    // transitorios entre el combate de entrenador y el regreso a 0. No se
+    // exige que la lectura inmediatamente anterior siga siendo 2: la sesión
+    // queda pendiente hasta que el juego esté realmente fuera de combate.
+    if (!_trainerBattlePending || !nowOutOfBattle) return;
 
     final int? classId = _pendingTrainerClass;
     final int? trainerId = _pendingTrainerId;
+    _trainerBattlePending = false;
     _pendingTrainerClass = null;
     _pendingTrainerId = null;
 
