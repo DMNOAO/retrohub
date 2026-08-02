@@ -112,6 +112,23 @@ class PokemonControllerMemoryReader {
     final int? battleResultRaw =
         a.battleResult != null ? byte(a.battleResult!) : null;
 
+    final List<int> seenBytes = read(a.pokedexSeen, a.pokedexBytes);
+    final List<int> caughtBytes = read(a.pokedexOwned, a.pokedexBytes);
+
+    List<int> decodedDexIds(List<int> bytes) {
+      final result = <int>[];
+      final maximum = profile.isGen2 ? 251 : 151;
+      for (var byteIndex = 0; byteIndex < bytes.length; byteIndex++) {
+        for (var bit = 0; bit < 8; bit++) {
+          final dexId = byteIndex * 8 + bit + 1;
+          if (dexId <= maximum && (bytes[byteIndex] & (1 << bit)) != 0) {
+            result.add(dexId);
+          }
+        }
+      }
+      return result;
+    }
+
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
       profile: profile,
@@ -125,12 +142,10 @@ class PokemonControllerMemoryReader {
       playerY: byte(a.playerY),
       money: money,
       badgesMask: badges,
-      pokedexSeen: PokemonDecoder.countBits(
-        read(a.pokedexSeen, a.pokedexBytes),
-      ),
-      pokedexCaught: PokemonDecoder.countBits(
-        read(a.pokedexOwned, a.pokedexBytes),
-      ),
+      pokedexSeen: PokemonDecoder.countBits(seenBytes),
+      pokedexCaught: PokemonDecoder.countBits(caughtBytes),
+      seenPokemonIds: decodedDexIds(seenBytes),
+      caughtPokemonIds: decodedDexIds(caughtBytes),
       party: party,
       battleState: battleState,
       otherTrainerClassId: otherTrainerClassId,
