@@ -42,23 +42,23 @@ class GymLeaderAssetResolver {
 
   static const List<GymLeaderInfo> _johtoGbc = <GymLeaderInfo>[
     GymLeaderInfo('Pegaso', 'assets/sprites/characters/gym_leaders/gbc/Pegaso_OPC.png'),
-    GymLeaderInfo('Antón', 'assets/sprites/characters/gym_leaders/gbc/Anton_OPC.png'),
+    GymLeaderInfo('Antón', 'assets/sprites/characters/gym_leaders/gbc/Antón_OPC.png'),
     GymLeaderInfo('Blanca', 'assets/sprites/characters/gym_leaders/gbc/Blanca_OPC.png'),
     GymLeaderInfo('Morti', 'assets/sprites/characters/gym_leaders/gbc/Morti_OPC.png'),
-    GymLeaderInfo('Aníbal', 'assets/sprites/characters/gym_leaders/gbc/Anibal_OPC.png'),
+    GymLeaderInfo('Aníbal', 'assets/sprites/characters/gym_leaders/gbc/Aníbal_OPC.png'),
     GymLeaderInfo('Yasmina', 'assets/sprites/characters/gym_leaders/gbc/Yasmina_OPC.png'),
     GymLeaderInfo('Fredo', 'assets/sprites/characters/gym_leaders/gbc/Fredo_OPC.png'),
-    GymLeaderInfo('Débora', 'assets/sprites/characters/gym_leaders/gbc/Debora_OPC.png'),
+    GymLeaderInfo('Débora', 'assets/sprites/characters/gym_leaders/gbc/Débora_OPC.png'),
   ];
 
   static const List<GymLeaderInfo> _kantoGbc = <GymLeaderInfo>[
     GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/gbc/Brock_OPC.png'),
     GymLeaderInfo('Misty', 'assets/sprites/characters/gym_leaders/gbc/Misty_OPC.png'),
-    GymLeaderInfo('Lt. Surge', 'assets/sprites/characters/gym_leaders/gbc/Lt_Surge_OPC.png'),
+    GymLeaderInfo('Lt. Surge', 'assets/sprites/characters/gym_leaders/gbc/Lt._Surge_OPC.png'),
     GymLeaderInfo('Erika', 'assets/sprites/characters/gym_leaders/gbc/Erika_OPC.png'),
-    GymLeaderInfo('Janine', 'assets/sprites/characters/gym_leaders/gbc/Janine_OPC.png'),
+    GymLeaderInfo('Janine', 'assets/sprites/characters/gym_leaders/gbc/Sachiko_OPC.png'),
     GymLeaderInfo('Sabrina', 'assets/sprites/characters/gym_leaders/gbc/Sabrina_OPC.png'),
     GymLeaderInfo('Blaine', 'assets/sprites/characters/gym_leaders/gbc/Blaine_OPC.png'),
-    GymLeaderInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/Blue_OPC.png'),
+    GymLeaderInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/Azul_OPC.png'),
   ];
 }
