@@ -45,6 +45,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
   LibrarySortOption _sortOption = LibrarySortOption.nameAsc;
   bool _refreshingLibrary = false;
+  final ScrollController _gridScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _gridScrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _importRom(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.platform.pickFiles(
@@ -204,7 +211,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               ),
               data: (games) {
                 if (games.isEmpty) {
-                  return Column(
+                  final bool isCompact = MediaQuery.sizeOf(context).width < 700;
+
+                return Column(
                     children: [
                       SizedBox(
                         height: 54,
@@ -268,6 +277,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     if (recentGame != null) DynamicGameBanner(
                       game: recentGame,
                       coverPath: CoverHelper.getCover(recentGame.title, recentGame.console),
+                      height: isCompact ? 140 : 180,
                       onPlay: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -287,6 +297,76 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       ),
                       const SizedBox(height: 10),
                     ],
+                    if (isCompact) ...[
+                      SizedBox(
+                        height: 46,
+                        child: TextField(
+                          onChanged: (value) => setState(() => _searchText = value),
+                          decoration: InputDecoration(
+                            hintText: 'Buscar juego...',
+                            prefixIcon: const Icon(Icons.search),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 46,
+                              child: FilledButton.icon(
+                                onPressed: () => _importRom(context, ref),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Importar'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.outlined(
+                            tooltip: 'Actualizar biblioteca',
+                            onPressed: _refreshingLibrary ? null : _refreshLibrary,
+                            icon: _refreshingLibrary
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.sync),
+                          ),
+                          const SizedBox(width: 8),
+                          PopupMenuButton<LibrarySortOption>(
+                            tooltip: 'Ordenar y filtrar',
+                            initialValue: _sortOption,
+                            onSelected: (value) => setState(() => _sortOption = value),
+                            icon: const Icon(Icons.filter_list),
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: LibrarySortOption.nameAsc,
+                                child: Text('Nombre A-Z'),
+                              ),
+                              PopupMenuItem(
+                                value: LibrarySortOption.nameDesc,
+                                child: Text('Nombre Z-A'),
+                              ),
+                              PopupMenuItem(
+                                value: LibrarySortOption.console,
+                                child: Text('Consola'),
+                              ),
+                              PopupMenuItem(
+                                value: LibrarySortOption.playTime,
+                                child: Text('Horas jugadas'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ] else
                     Row(
                       children: [
                         Expanded(
@@ -371,7 +451,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                           ? const Center(
                               child: Text('No se encontraron juegos'),
                             )
-                          : GridView.builder(
+                          : Scrollbar(
+                              controller: _gridScrollController,
+                              thumbVisibility: true,
+                              child: GridView.builder(
+                                controller: _gridScrollController,
                               itemCount: filteredGames.length,
                               gridDelegate:
                                   const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -446,6 +530,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   ],
                                 );
                               },
+                            ),
                             ),
                     ),
                   ],
