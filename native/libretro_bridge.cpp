@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <deque>
 #include <fstream>
 #include <mutex>
 #include <vector>
@@ -27,7 +26,6 @@ typedef void (*retro_get_system_info_t)(void*);
 typedef bool (*retro_load_game_t)(const void*);
 typedef void (*retro_unload_game_t)(void);
 typedef void (*retro_run_t)(void);
-typedef void (*retro_get_system_av_info_t)(void*);
 typedef size_t (*retro_serialize_size_t)(void);
 typedef bool (*retro_serialize_t)(void*, size_t);
 typedef bool (*retro_unserialize_t)(const void*, size_t);
@@ -75,24 +73,6 @@ struct retro_system_info {
     const char* valid_extensions;
     bool need_fullpath;
     bool block_extract;
-};
-
-struct retro_game_geometry {
-    unsigned base_width;
-    unsigned base_height;
-    unsigned max_width;
-    unsigned max_height;
-    float aspect_ratio;
-};
-
-struct retro_system_timing {
-    double fps;
-    double sample_rate;
-};
-
-struct retro_system_av_info {
-    retro_game_geometry geometry;
-    retro_system_timing timing;
 };
 
 // ============================================================
@@ -187,7 +167,6 @@ static retro_get_system_info_t retro_get_system_info_fn = nullptr;
 static retro_load_game_t retro_load_game_fn = nullptr;
 static retro_unload_game_t retro_unload_game_fn = nullptr;
 static retro_run_t retro_run_fn = nullptr;
-static retro_get_system_av_info_t retro_get_system_av_info_fn = nullptr;
 
 static retro_serialize_size_t retro_serialize_size_fn = nullptr;
 static retro_serialize_t retro_serialize_fn = nullptr;
@@ -230,14 +209,6 @@ static unsigned frame_height = 0;
 static bool frame_ready = false;
 
 static std::mutex frame_mutex;
-
-// PCM estéreo intercalado producido por el core. Dart vacía esta cola y la
-// entrega al dispositivo de audio. El límite evita crecimiento indefinido si
-// la app queda en segundo plano o el consumidor se retrasa.
-static std::deque<int16_t> audio_buffer;
-static std::mutex audio_mutex;
-static int audio_sample_rate = 48000;
-static constexpr size_t MAX_AUDIO_SAMPLES = 48000 * 2 * 2;
 
 // ============================================================
 // Estado de entrada del jugador 1
@@ -471,30 +442,15 @@ static void audio_sample_cb(
     int16_t left,
     int16_t right
 ) {
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    if (audio_buffer.size() + 2 > MAX_AUDIO_SAMPLES) {
-        audio_buffer.pop_front();
-        audio_buffer.pop_front();
-    }
-    audio_buffer.push_back(left);
-    audio_buffer.push_back(right);
+    (void)left;
+    (void)right;
 }
 
 static size_t audio_sample_batch_cb(
     const int16_t* data,
     size_t frames
 ) {
-    if (!data || frames == 0) return 0;
-
-    const size_t sample_count = frames * 2;
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    const size_t overflow = audio_buffer.size() + sample_count > MAX_AUDIO_SAMPLES
-        ? audio_buffer.size() + sample_count - MAX_AUDIO_SAMPLES
-        : 0;
-    for (size_t index = 0; index < overflow; index++) {
-        audio_buffer.pop_front();
-    }
-    audio_buffer.insert(audio_buffer.end(), data, data + sample_count);
+    (void)data;
 
     return frames;
 }
@@ -551,7 +507,6 @@ static void clear_function_pointers() {
     retro_load_game_fn = nullptr;
     retro_unload_game_fn = nullptr;
     retro_run_fn = nullptr;
-    retro_get_system_av_info_fn = nullptr;
 
     retro_serialize_size_fn = nullptr;
     retro_serialize_fn = nullptr;
@@ -565,12 +520,6 @@ static void clear_function_pointers() {
     retro_set_audio_sample_batch_fn = nullptr;
     retro_set_input_poll_fn = nullptr;
     retro_set_input_state_fn = nullptr;
-}
-
-static void reset_audio_state() {
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    audio_buffer.clear();
-    audio_sample_rate = 48000;
 }
 
 static void reset_frame_state() {
@@ -697,11 +646,6 @@ int rh_load_core(const char* core_path) {
             )
         );
 
-    retro_get_system_av_info_fn =
-        reinterpret_cast<retro_get_system_av_info_t>(
-            rh_find_symbol(core, "retro_get_system_av_info")
-        );
-
     retro_serialize_size_fn =
         reinterpret_cast<retro_serialize_size_t>(
             rh_find_symbol(
@@ -800,7 +744,6 @@ int rh_load_core(const char* core_path) {
         retro_load_game_fn &&
         retro_unload_game_fn &&
         retro_run_fn &&
-        retro_get_system_av_info_fn &&
         retro_serialize_size_fn &&
         retro_serialize_fn &&
         retro_unserialize_fn &&
@@ -916,7 +859,6 @@ int rh_load_game(const char* rom_path) {
     }
 
     reset_frame_state();
-    reset_audio_state();
     reset_input_state();
     rom_buffer.clear();
 
@@ -981,38 +923,7 @@ int rh_load_game(const char* rom_path) {
 
     game_loaded = true;
 
-    retro_system_av_info av_info{};
-    retro_get_system_av_info_fn(&av_info);
-    if (av_info.timing.sample_rate >= 8000.0 &&
-        av_info.timing.sample_rate <= 192000.0) {
-        audio_sample_rate = static_cast<int>(av_info.timing.sample_rate + 0.5);
-    }
-
     return 1;
-}
-
-RH_EXPORT
-int rh_get_audio_sample_rate() {
-    return audio_sample_rate;
-}
-
-RH_EXPORT
-size_t rh_read_audio_samples(int16_t* destination, size_t max_samples) {
-    if (!destination || max_samples == 0) return 0;
-
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    const size_t count = std::min(max_samples, audio_buffer.size());
-    for (size_t index = 0; index < count; index++) {
-        destination[index] = audio_buffer.front();
-        audio_buffer.pop_front();
-    }
-    return count;
-}
-
-RH_EXPORT
-void rh_clear_audio() {
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    audio_buffer.clear();
 }
 
 RH_EXPORT
