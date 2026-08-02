@@ -127,7 +127,7 @@ using RhLibraryHandle = void*;
 #endif
 
 #if defined(_WIN32)
-#define RH_EXPORT RH_EXPORT
+#define RH_EXPORT extern "C" __declspec(dllexport)
 #else
 #define RH_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
