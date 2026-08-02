@@ -29,8 +29,14 @@ class PokemonGameProfile {
   bool get isGen1 => generation == PokemonGeneration.gen1;
   bool get isGen2 => generation == PokemonGeneration.gen2;
 
-  static PokemonGameProfile fromRomPath(String romPath) {
-    final normalized = romPath.toLowerCase();
+  /// Identifica la versión usando primero el título conservado en la
+  /// biblioteca. La ruta queda como respaldo para instalaciones antiguas
+  /// cuyas ROM todavía mantienen el nombre original.
+  static PokemonGameProfile fromGameIdentity({
+    required String gameTitle,
+    required String romPath,
+  }) {
+    final normalized = _normalize('$gameTitle $romPath');
 
     if (normalized.contains('crystal') || normalized.contains('cristal')) {
       return const PokemonGameProfile(
@@ -85,5 +91,20 @@ class PokemonGameProfile {
       memoryMapVerified: false,
       addresses: null,
     );
+  }
+
+  static PokemonGameProfile fromRomPath(String romPath) {
+    return fromGameIdentity(gameTitle: '', romPath: romPath);
+  }
+
+  static String _normalize(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll('ü', 'u');
   }
 }
