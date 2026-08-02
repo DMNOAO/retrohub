@@ -11,8 +11,71 @@ class CharacterAssetResolver {
     required GameAssetProfile profile,
     required String trainerClass,
   }) {
-    return 'assets/sprites/characters/trainers/${profile.trainerSpriteSet}/${_normalize(trainerClass)}.png';
+    final normalized = _normalize(trainerClass);
+    final fileName = _trainerFileNames[normalized] ?? normalized;
+    return 'assets/sprites/characters/trainers/${profile.trainerSpriteSet}/$fileName.png';
   }
+
+  // Las clases se muestran en español, pero los assets usan nombres
+  // definitivos en inglés. Esta tabla también permite reconstruir sprites
+  // de eventos guardados antes de que se persistiera spritePath.
+  static const Map<String, String> _trainerFileNames = <String, String>{
+    'bella': 'beauty',
+    'caballero': 'gentleman',
+    'calvo': 'cue_ball',
+    'campista': 'camper',
+    'cazabichos': 'bug_catcher',
+    'chica': 'lass',
+    'senorita': 'lass',
+    'domador': 'tamer',
+    'dominguera': 'picnicker',
+    'excursionista_campo': 'picnicker',
+    'entrenador_guay': 'cooltrainer_male',
+    'mister_genial': 'cooltrainer_male',
+    'entrenadora_guay': 'cooltrainer_female',
+    'miss_genial': 'cooltrainer_female',
+    'exorcista': 'channeler',
+    'joven': 'youngster',
+    'jugon': 'gambler',
+    'karateka': 'black_belt',
+    'cinturon_negro': 'black_belt',
+    'ladron': 'burglar',
+    'malabarista': 'juggler',
+    'marinero': 'sailor',
+    'mecanico': 'engineer',
+    'medium': 'medium',
+    'mentalista': 'psychic',
+    'medium_psiquico': 'psychic',
+    'excursionista': 'hiker',
+    'montanero': 'hiker',
+    'motorista': 'biker',
+    'nadador': 'swimmer_male',
+    'nadadora': 'swimmer_female',
+    'ave_cuidador': 'bird_keeper',
+    'ornitologo': 'bird_keeper',
+    'pescador': 'fisherman',
+    'fanatico_pokemon': 'pokemaniac',
+    'pokemaniaco': 'pokemaniac',
+    'rockero': 'rocker',
+    'empollon': 'super_nerd',
+    'supernecio': 'super_nerd',
+    'colegial': 'schoolboy',
+    'escolar': 'schoolboy',
+    'esquiadora': 'skier',
+    'profesora': 'teacher',
+    'guitarrista': 'guitarist',
+    'lanzallamas': 'firebreather',
+    'comefuego': 'firebreather',
+    'sabio': 'sage',
+    'pensador': 'sage',
+    'snowboarder': 'snowboarder',
+    'aficionado_pokemon_m': 'pokefan_male',
+    'aficionada_pokemon_f': 'pokefan_female',
+    'chica_kimono': 'kimono_girl',
+    'gemelas': 'twins',
+    'oficial': 'officer',
+    'policia': 'officer',
+  };
 
   static String specialTrainer(String key) {
     final normalized = _normalize(key);
