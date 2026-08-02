@@ -15,6 +15,7 @@ import '../models/trainer_class.dart';
 class PokemonJournalTracker {
   final AppDatabase database;
   final String gameId;
+  final String gameTitle;
   final String romPath;
   final LibretroGameController controller;
   final int Function() playTimeMinutes;
@@ -56,6 +57,7 @@ class PokemonJournalTracker {
   PokemonJournalTracker({
     required this.database,
     required this.gameId,
+    required this.gameTitle,
     required this.romPath,
     required this.controller,
     required this.playTimeMinutes,
@@ -82,7 +84,10 @@ class PokemonJournalTracker {
     _busy = true;
 
     try {
-      final profile = PokemonGameProfile.fromRomPath(romPath);
+      final profile = PokemonGameProfile.fromGameIdentity(
+        gameTitle: gameTitle,
+        romPath: romPath,
+      );
       final current = PokemonControllerMemoryReader(
         controller: controller,
         profile: profile,
