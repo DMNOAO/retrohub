@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/assets/badge_asset_resolver.dart';
+import '../../core/assets/character_asset_resolver.dart';
 import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
@@ -239,7 +240,17 @@ class _ProgressJournal extends StatelessWidget {
                 _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(game.playTimeSeconds)),
                 _InfoCard(icon: Icons.catching_pokemon, title: 'Pokédex', value: '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados'),
                 _InfoCard(icon: Icons.emoji_events_outlined, title: 'Liga Pokémon', value: '${snapshot.leagueWins} victorias'),
-                _InfoCard(icon: Icons.sports_martial_arts, title: 'Último entrenador', value: snapshot.lastDefeatedTrainer ?? 'Sin registro'),
+                _InfoCard(
+                  icon: Icons.sports_martial_arts,
+                  title: 'Último entrenador',
+                  value: snapshot.lastDefeatedTrainer ?? 'Sin registro',
+                  spritePath: snapshot.lastDefeatedTrainer == null
+                      ? null
+                      : CharacterAssetResolver.trainerForKnownClass(
+                          profile: profile,
+                          trainerClass: snapshot.lastDefeatedTrainer!,
+                        ),
+                ),
                 _InfoCard(icon: Icons.workspace_premium_outlined, title: 'Medallas', value: '$totalBadges/$badgeMaximum obtenidas'),
               ],
             );
@@ -598,7 +609,14 @@ class _InfoCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String value;
-  const _InfoCard({required this.icon, required this.title, required this.value});
+  final String? spritePath;
+
+  const _InfoCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.spritePath,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -608,7 +626,14 @@ class _InfoCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Icon(icon),
+            if (spritePath == null)
+              Icon(icon)
+            else
+              SpriteImage(
+                path: spritePath,
+                size: 44,
+                fallbackIcon: icon,
+              ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
