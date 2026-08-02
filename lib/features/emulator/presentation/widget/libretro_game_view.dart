@@ -139,6 +139,9 @@ class _LibretroGameViewState extends State<LibretroGameView>
   Timer? _emulationTimer;
   Timer? _sramTimer;
   Timer? _memoryDebugTimer;
+  final Stopwatch _emulationClock = Stopwatch();
+  int _lastEmulationMicros = 0;
+  double _pendingCoreFrames = 0;
 
   ui.Image? _currentImage;
   GamePersistencePaths? _persistencePaths;
@@ -294,8 +297,13 @@ class _LibretroGameViewState extends State<LibretroGameView>
 
       _focusNode.requestFocus();
 
+      _emulationClock
+        ..reset()
+        ..start();
+      _lastEmulationMicros = 0;
+      _pendingCoreFrames = 0;
       _emulationTimer = Timer.periodic(
-        const Duration(microseconds: 16667),
+        const Duration(milliseconds: 4),
         (_) => _emulationTick(),
       );
 
@@ -330,31 +338,63 @@ class _LibretroGameViewState extends State<LibretroGameView>
   }
 
   void _emulationTick() {
+    final LibretroBridge? bridge = _bridge;
     if (_disposed ||
         !_isRunning ||
-        _isDecodingFrame ||
         _persistenceOperationInProgress ||
-        _bridge == null) {
+        bridge == null) {
+      _resetEmulationClock();
       return;
     }
 
-    final LibretroBridge bridge = _bridge!;
-
-    for (int index = 0; index < _speedMultiplier; index++) {
-      if (!bridge.runOnce()) {
-        return;
-      }
+    final int nowMicros = _emulationClock.elapsedMicroseconds;
+    if (_lastEmulationMicros == 0) {
+      _lastEmulationMicros = nowMicros;
+      return;
     }
 
-    _audioPlayer?.pump(bridge);
+    // SameBoy produce aproximadamente un frame cada 16,667 ms. El
+    // acumulador conserva el tiempo aunque el hilo de UI entregue un timer
+    // tarde, en vez de ralentizar el core o apilar callbacks periódicos.
+    final int elapsedMicros =
+        (nowMicros - _lastEmulationMicros).clamp(0, 100000);
+    _lastEmulationMicros = nowMicros;
+    _pendingCoreFrames +=
+        (elapsedMicros / 16667.0) * _speedMultiplier;
+
+    int framesToRun = _pendingCoreFrames.floor();
+    final int maxCatchUpFrames = 6 * _speedMultiplier;
+    if (framesToRun > maxCatchUpFrames) {
+      framesToRun = maxCatchUpFrames;
+      _pendingCoreFrames = 0;
+    } else {
+      _pendingCoreFrames -= framesToRun;
+    }
+
+    if (framesToRun == 0) return;
+
+    for (int index = 0; index < framesToRun; index++) {
+      if (!bridge.runOnce()) return;
+    }
+
+    if (_speedMultiplier == 1) {
+      _audioPlayer?.pump(bridge);
+    } else {
+      bridge.clearAudio();
+    }
+
+    // La decodificación de Flutter es asíncrona. El core nunca se detiene
+    // esperando una imagen: si aún hay una en proceso, se conserva el frame
+    // nativo más reciente para el siguiente tick.
+    if (_isDecodingFrame) return;
 
     final LibretroFrame? frame = bridge.readFrame();
+    if (frame != null) _decodeFrame(frame);
+  }
 
-    if (frame == null) {
-      return;
-    }
-
-    _decodeFrame(frame);
+  void _resetEmulationClock() {
+    _lastEmulationMicros = _emulationClock.elapsedMicroseconds;
+    _pendingCoreFrames = 0;
   }
 
   void _cycleSpeed() {
@@ -371,8 +411,6 @@ class _LibretroGameViewState extends State<LibretroGameView>
           _speedMultiplier = 4;
           break;
         case 4:
-          _speedMultiplier = 8;
-          break;
         default:
           _speedMultiplier = 1;
       }
@@ -661,6 +699,9 @@ class _LibretroGameViewState extends State<LibretroGameView>
 
     _emulationTimer?.cancel();
     _emulationTimer = null;
+    _emulationClock.stop();
+    _lastEmulationMicros = 0;
+    _pendingCoreFrames = 0;
 
     _sramTimer?.cancel();
     _sramTimer = null;
