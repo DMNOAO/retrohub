@@ -552,20 +552,17 @@ class _BadgeGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 900
-            ? 8
-            : constraints.maxWidth >= 560
-                ? 4
-                : 2;
+        final compact = constraints.maxWidth < 720;
+        final columns = compact ? 4 : 8;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: badgeIndices.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: .95,
+            mainAxisSpacing: compact ? 6 : 10,
+            crossAxisSpacing: compact ? 6 : 10,
+            childAspectRatio: compact ? .82 : .95,
           ),
           itemBuilder: (context, visualIndex) {
             final fullIndex = badgeIndices[visualIndex];
@@ -575,26 +572,44 @@ class _BadgeGrid extends StatelessWidget {
               duration: const Duration(milliseconds: 280),
               opacity: obtained ? 1 : .34,
               child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SpriteImage(
-                        path: asset.path,
-                        size: 54,
-                        fallbackIcon: Icons.workspace_premium_outlined,
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(compact ? 5 : 10),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SpriteImage(
+                            path: asset.path,
+                            size: compact ? 38 : 54,
+                            fallbackIcon: Icons.workspace_premium_outlined,
+                          ),
+                          SizedBox(height: compact ? 4 : 7),
+                          Text(
+                            asset.displayName,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: compact
+                                ? Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontSize: 10.5,
+                                      height: 1.05,
+                                    )
+                                : null,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 7),
-                      Text(
-                        asset.displayName,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                    ),
+                    if (obtained)
+                      Positioned(
+                        top: compact ? 3 : 6,
+                        right: compact ? 3 : 6,
+                        child: Icon(
+                          Icons.check_circle,
+                          size: compact ? 14 : 17,
+                        ),
                       ),
-                      if (obtained) const Icon(Icons.check_circle, size: 17),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             );
