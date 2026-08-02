@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
-import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
@@ -115,8 +114,7 @@ class LibretroGameView extends StatefulWidget {
   State<LibretroGameView> createState() => _LibretroGameViewState();
 }
 
-class _LibretroGameViewState extends State<LibretroGameView>
-    with WidgetsBindingObserver {
+class _LibretroGameViewState extends State<LibretroGameView> {
   static const int _buttonB = 0;
   static const int _buttonSelect = 2;
   static const int _buttonStart = 3;
@@ -135,13 +133,9 @@ class _LibretroGameViewState extends State<LibretroGameView>
   final Set<int> _pressedButtons = <int>{};
 
   LibretroBridge? _bridge;
-  LibretroAudioPlayer? _audioPlayer;
   Timer? _emulationTimer;
   Timer? _sramTimer;
   Timer? _memoryDebugTimer;
-  final Stopwatch _emulationClock = Stopwatch();
-  int _lastEmulationMicros = 0;
-  double _pendingCoreFrames = 0;
 
   ui.Image? _currentImage;
   GamePersistencePaths? _persistencePaths;
@@ -167,7 +161,6 @@ class _LibretroGameViewState extends State<LibretroGameView>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _sessionStartedAt = DateTime.now();
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
@@ -279,10 +272,6 @@ class _LibretroGameViewState extends State<LibretroGameView>
 
       bridge.resetInput();
 
-      final audioPlayer = LibretroAudioPlayer();
-      _audioPlayer = audioPlayer;
-      await audioPlayer.start(bridge);
-
       _pokemonEngine = PokemonEngine(
         bridge: bridge,
         gameTitle: widget.gameTitle,
@@ -297,13 +286,8 @@ class _LibretroGameViewState extends State<LibretroGameView>
 
       _focusNode.requestFocus();
 
-      _emulationClock
-        ..reset()
-        ..start();
-      _lastEmulationMicros = 0;
-      _pendingCoreFrames = 0;
       _emulationTimer = Timer.periodic(
-        const Duration(milliseconds: 4),
+        const Duration(microseconds: 16667),
         (_) => _emulationTick(),
       );
 
@@ -338,63 +322,29 @@ class _LibretroGameViewState extends State<LibretroGameView>
   }
 
   void _emulationTick() {
-    final LibretroBridge? bridge = _bridge;
     if (_disposed ||
         !_isRunning ||
+        _isDecodingFrame ||
         _persistenceOperationInProgress ||
-        bridge == null) {
-      _resetEmulationClock();
+        _bridge == null) {
       return;
     }
 
-    final int nowMicros = _emulationClock.elapsedMicroseconds;
-    if (_lastEmulationMicros == 0) {
-      _lastEmulationMicros = nowMicros;
-      return;
+    final LibretroBridge bridge = _bridge!;
+
+    for (int index = 0; index < _speedMultiplier; index++) {
+      if (!bridge.runOnce()) {
+        return;
+      }
     }
-
-    // SameBoy produce aproximadamente un frame cada 16,667 ms. El
-    // acumulador conserva el tiempo aunque el hilo de UI entregue un timer
-    // tarde, en vez de ralentizar el core o apilar callbacks periódicos.
-    final int elapsedMicros =
-        (nowMicros - _lastEmulationMicros).clamp(0, 100000).toInt();
-    _lastEmulationMicros = nowMicros;
-    _pendingCoreFrames +=
-        (elapsedMicros / 16667.0) * _speedMultiplier;
-
-    int framesToRun = _pendingCoreFrames.floor();
-    final int maxCatchUpFrames = 6 * _speedMultiplier;
-    if (framesToRun > maxCatchUpFrames) {
-      framesToRun = maxCatchUpFrames;
-      _pendingCoreFrames = 0;
-    } else {
-      _pendingCoreFrames -= framesToRun;
-    }
-
-    if (framesToRun == 0) return;
-
-    for (int index = 0; index < framesToRun; index++) {
-      if (!bridge.runOnce()) return;
-    }
-
-    if (_speedMultiplier == 1) {
-      _audioPlayer?.pump(bridge);
-    } else {
-      bridge.clearAudio();
-    }
-
-    // La decodificación de Flutter es asíncrona. El core nunca se detiene
-    // esperando una imagen: si aún hay una en proceso, se conserva el frame
-    // nativo más reciente para el siguiente tick.
-    if (_isDecodingFrame) return;
 
     final LibretroFrame? frame = bridge.readFrame();
-    if (frame != null) _decodeFrame(frame);
-  }
 
-  void _resetEmulationClock() {
-    _lastEmulationMicros = _emulationClock.elapsedMicroseconds;
-    _pendingCoreFrames = 0;
+    if (frame == null) {
+      return;
+    }
+
+    _decodeFrame(frame);
   }
 
   void _cycleSpeed() {
@@ -411,16 +361,12 @@ class _LibretroGameViewState extends State<LibretroGameView>
           _speedMultiplier = 4;
           break;
         case 4:
+          _speedMultiplier = 8;
+          break;
         default:
           _speedMultiplier = 1;
       }
     });
-
-    // El audio acelerado acumularía latencia. Se silencia durante turbo y se
-    // reanuda limpio al volver a velocidad normal.
-    _audioPlayer?.setPaused(_speedMultiplier != 1);
-    if (_speedMultiplier != 1) _bridge?.clearAudio();
-    _resetEmulationClock();
 
     _focusNode.requestFocus();
   }
@@ -700,9 +646,6 @@ class _LibretroGameViewState extends State<LibretroGameView>
 
     _emulationTimer?.cancel();
     _emulationTimer = null;
-    _emulationClock.stop();
-    _lastEmulationMicros = 0;
-    _pendingCoreFrames = 0;
 
     _sramTimer?.cancel();
     _sramTimer = null;
@@ -729,10 +672,6 @@ class _LibretroGameViewState extends State<LibretroGameView>
     _pokemonStatus = null;
 
     _bridge = null;
-
-    final audioPlayer = _audioPlayer;
-    _audioPlayer = null;
-    audioPlayer?.dispose();
 
     try {
       bridge?.dispose();
@@ -761,20 +700,12 @@ class _LibretroGameViewState extends State<LibretroGameView>
   @override
   void dispose() {
     _disposed = true;
-    WidgetsBinding.instance.removeObserver(this);
     widget.controller?._detach();
     _stopEmulator();
     _currentImage?.dispose();
     _currentImage = null;
     _focusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final bool paused = state != AppLifecycleState.resumed;
-    _audioPlayer?.setPaused(paused || _speedMultiplier != 1);
-    if (paused) _bridge?.clearAudio();
   }
 
   @override

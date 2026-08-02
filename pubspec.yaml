@@ -24,7 +24,6 @@ dependencies:
   uuid: ^4.5.1
   ffi: ^2.1.4
   crypto: ^3.0.7
-  flutter_soloud: ^4.1.4
 
 dev_dependencies:
   flutter_test:
@@ -94,3 +93,4 @@ flutter:
     - assets/sprites/characters/special_trainers/
     - assets/sprites/characters/special_trainers/battle_frontier/emerald/
     - assets/sprites/frontier_symbols/emerald/
+
