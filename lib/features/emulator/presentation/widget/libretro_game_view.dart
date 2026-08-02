@@ -357,7 +357,7 @@ class _LibretroGameViewState extends State<LibretroGameView>
     // acumulador conserva el tiempo aunque el hilo de UI entregue un timer
     // tarde, en vez de ralentizar el core o apilar callbacks periódicos.
     final int elapsedMicros =
-        (nowMicros - _lastEmulationMicros).clamp(0, 100000);
+        (nowMicros - _lastEmulationMicros).clamp(0, 100000).toInt();
     _lastEmulationMicros = nowMicros;
     _pendingCoreFrames +=
         (elapsedMicros / 16667.0) * _speedMultiplier;
@@ -420,6 +420,7 @@ class _LibretroGameViewState extends State<LibretroGameView>
     // reanuda limpio al volver a velocidad normal.
     _audioPlayer?.setPaused(_speedMultiplier != 1);
     if (_speedMultiplier != 1) _bridge?.clearAudio();
+    _resetEmulationClock();
 
     _focusNode.requestFocus();
   }
