@@ -48,9 +48,11 @@ class LibretroAudioPlayer {
       sampleRate: _sampleRate,
       channels: Channels.stereo,
       format: BufferType.s16le,
-      bufferingType: BufferingType.released,
-      bufferingTimeNeeds: 0.06,
-      maxBufferSizeDuration: const Duration(milliseconds: 500),
+      // El emulador es una fuente continua. preserved evita que SoLoud cierre
+      // automáticamente el stream durante una breve falta de datos.
+      bufferingType: BufferingType.preserved,
+      bufferingTimeNeeds: 0.08,
+      maxBufferSizeDuration: const Duration(milliseconds: 250),
     );
   }
 
@@ -75,7 +77,10 @@ class LibretroAudioPlayer {
       _bufferedBytes += bytes.length;
       _startPlaybackIfPrebuffered();
     } on SoLoudPcmBufferFullCppException {
-      _replaceStream(bytes);
+      // El bloque nativo ya fue drenado. Si SoLoud aún tiene suficiente
+      // audio, se descarta este bloque sin reconstruir el stream ni cortar
+      // la reproducción.
+      return;
     } on SoLoudStreamEndedAlreadyCppException {
       _replaceStream(bytes);
     } catch (error) {
