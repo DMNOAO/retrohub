@@ -254,7 +254,7 @@ final class PokemonEmeraldMemoryReader {
     final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
     if (checksum != storedChecksum) return null;
 
-    final int growthPosition = _growthPositions[personality % 24];
+    final int growthPosition = growthSubstructurePosition(personality);
     final int growthOffset = growthPosition * 12;
     final int internalSpeciesId =
         _littleEndian(decrypted.sublist(growthOffset, growthOffset + 2));
@@ -297,11 +297,24 @@ final class PokemonEmeraldMemoryReader {
     return 0;
   }
 
+  /// Posición de la subestructura Growth dentro de los cuatro bloques
+  /// permutados de un Pokémon de Gen III.
+  ///
+  /// El orden depende de personality % 24. No se agrupa en seis posiciones
+  /// consecutivas: a partir de AGEM las posiciones 1, 2 y 3 se intercalan.
+  static int growthSubstructurePosition(int personality) {
+    return _growthPositions[personality % 24];
+  }
+
   static const List<int> _growthPositions = <int>[
+    // GAEM, GAME, GEAM, GEMA, GMAE, GMEA
     0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3,
+    // AGEM, AGME, AEGM, AEMG, AMGE, AMEG
+    1, 1, 2, 3, 2, 3,
+    // EGAM, EGMA, EAGM, EAMG, EMGA, EMAG
+    1, 1, 2, 3, 2, 3,
+    // MGAE, MGEA, MAGE, MAEG, MEGA, MEAG
+    1, 1, 2, 3, 2, 3,
   ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {
