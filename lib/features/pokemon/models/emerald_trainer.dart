@@ -65,15 +65,54 @@ final class EmeraldTrainerResolver {
     if (id > 0 && id < _regular.length) {
       final _EmeraldRegularTrainer? trainer = _regular[id];
       if (trainer != null) {
-        return EmeraldTrainerInfo(
-          '${trainer.className} ${trainer.name}',
-          EmeraldTrainerKind.regular,
-          'assets/sprites/characters/trainers/gba/Hoenn/${trainer.spriteName}.png',
-        );
+        return _resolveRegularTrainer(trainer);
+
       }
     }
 
     return EmeraldTrainerInfo('Entrenador #$id', EmeraldTrainerKind.regular);
+  }
+
+  static EmeraldTrainerInfo _resolveRegularTrainer(
+    _EmeraldRegularTrainer trainer,
+  ) {
+    final String? villainSprite = switch (trainer.spriteName) {
+      'aqua_grunt_m' =>
+        'assets/sprites/characters/villains/aqua/grunt_male.png',
+      'aqua_grunt_f' =>
+        'assets/sprites/characters/villains/aqua/grunt_female.png',
+      'aqua_admin_m' => 'assets/sprites/characters/villains/aqua/matt.png',
+      'aqua_admin_f' => 'assets/sprites/characters/villains/aqua/shelly.png',
+      'aqua_leader_archie' =>
+        'assets/sprites/characters/villains/aqua/archie.png',
+      'magma_grunt_m' =>
+        'assets/sprites/characters/villains/magma/grunt_male.png',
+      'magma_grunt_f' =>
+        'assets/sprites/characters/villains/magma/grunt_female.png',
+      'magma_admin' => 'assets/sprites/characters/villains/magma/tabitha.png',
+      'magma_leader_maxie' =>
+        'assets/sprites/characters/villains/magma/maxie.png',
+      _ => null,
+    };
+
+    if (villainSprite != null) {
+      final String name = switch (trainer.spriteName) {
+        'aqua_grunt_m' || 'aqua_grunt_f' => 'Recluta del Equipo Aqua',
+        'magma_grunt_m' || 'magma_grunt_f' => 'Recluta del Equipo Magma',
+        _ => '${trainer.className} ${trainer.name}',
+      };
+      return EmeraldTrainerInfo(
+        name,
+        EmeraldTrainerKind.regular,
+        villainSprite,
+      );
+    }
+
+    return EmeraldTrainerInfo(
+      '${trainer.className} ${trainer.name}',
+      EmeraldTrainerKind.regular,
+      'assets/sprites/characters/trainers/gba/Hoenn/${trainer.spriteName}.png',
+    );
   }
 
   static const List<_EmeraldRegularTrainer?> _regular =
