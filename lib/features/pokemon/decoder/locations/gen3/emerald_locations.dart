@@ -1,4 +1,4 @@
-import '../../models/pokemon_location.dart';
+import '../../../models/pokemon_location.dart';
 
 /// Ubicaciones de Pokémon Esmeralda.
 ///
