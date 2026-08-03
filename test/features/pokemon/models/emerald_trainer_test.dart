@@ -59,6 +59,27 @@ void main() {
     );
   });
 
+  test('usa los sprites reales de los reclutas Aqua y Magma', () {
+    final aquaMale = EmeraldTrainerResolver.forTrainerId(2);
+    final aquaFemale = EmeraldTrainerResolver.forTrainerId(14);
+    final magmaMale = EmeraldTrainerResolver.forTrainerId(22);
+
+    expect(aquaMale.name, 'Recluta del Equipo Aqua');
+    expect(
+      aquaMale.spritePath,
+      'assets/sprites/characters/villains/aqua/grunt_male.png',
+    );
+    expect(
+      aquaFemale.spritePath,
+      'assets/sprites/characters/villains/aqua/grunt_female.png',
+    );
+    expect(magmaMale.name, 'Recluta del Equipo Magma');
+    expect(
+      magmaMale.spritePath,
+      'assets/sprites/characters/villains/magma/grunt_male.png',
+    );
+  });
+
   test('conserva el ID cuando el entrenador no existe', () {
     final trainer = EmeraldTrainerResolver.forTrainerId(9999);
     expect(trainer.kind, EmeraldTrainerKind.regular);
