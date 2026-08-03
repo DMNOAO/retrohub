@@ -63,6 +63,20 @@ typedef _RhReadMemoryBlockDart = int Function(
   int,
 );
 
+typedef _RhIsMemoryAddressMappedNative = Int32 Function(Uint64);
+typedef _RhIsMemoryAddressMappedDart = int Function(int);
+
+typedef _RhReadMemoryAddressNative = Size Function(
+  Uint64,
+  Pointer<Uint8>,
+  Size,
+);
+typedef _RhReadMemoryAddressDart = int Function(
+  int,
+  Pointer<Uint8>,
+  int,
+);
+
 
 abstract final class LibretroMemoryRegion {
   static const int saveRam = 0;
@@ -161,6 +175,8 @@ class LibretroBridge {
   late final _RhGetMemoryRegionSizeDart _getMemoryRegionSize;
   late final _RhReadMemoryByteDart _readMemoryByte;
   late final _RhReadMemoryBlockDart _readMemoryBlock;
+  late final _RhIsMemoryAddressMappedDart _isMemoryAddressMapped;
+  late final _RhReadMemoryAddressDart _readMemoryAddress;
 
   bool _coreLoaded = false;
   bool _gameLoaded = false;
@@ -318,6 +334,14 @@ class LibretroBridge {
     _readMemoryBlock = _lib.lookupFunction<
         _RhReadMemoryBlockNative,
         _RhReadMemoryBlockDart>('rh_read_memory_block');
+
+    _isMemoryAddressMapped = _lib.lookupFunction<
+        _RhIsMemoryAddressMappedNative,
+        _RhIsMemoryAddressMappedDart>('rh_is_memory_address_mapped');
+
+    _readMemoryAddress = _lib.lookupFunction<
+        _RhReadMemoryAddressNative,
+        _RhReadMemoryAddressDart>('rh_read_memory_address');
   }
 
   // ============================================================
@@ -634,6 +658,36 @@ class LibretroBridge {
       return Uint8List.fromList(
         destination.asTypedList(bytesRead),
       );
+    } finally {
+      calloc.free(destination);
+    }
+  }
+
+  bool isMemoryAddressMapped(int address) {
+    _ensureNotDisposed();
+    if (!_coreLoaded || !_gameLoaded || address < 0) return false;
+    return _isMemoryAddressMapped(address) == 1;
+  }
+
+  Uint8List readMemoryAddress({
+    required int address,
+    required int length,
+  }) {
+    _ensureNotDisposed();
+
+    if (!_coreLoaded || !_gameLoaded || address < 0 || length <= 0) {
+      return Uint8List(0);
+    }
+
+    final Pointer<Uint8> destination = calloc<Uint8>(length);
+    try {
+      final int bytesRead = _readMemoryAddress(
+        address,
+        destination,
+        length,
+      );
+      if (bytesRead <= 0) return Uint8List(0);
+      return Uint8List.fromList(destination.asTypedList(bytesRead));
     } finally {
       calloc.free(destination);
     }
