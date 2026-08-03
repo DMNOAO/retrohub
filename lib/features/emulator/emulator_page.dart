@@ -850,7 +850,35 @@ class _EmulatorVisualTheme {
     Color secondary;
     Color accent;
 
-    if (identity.contains('crystal') || identity.contains('cristal')) {
+    if (identity.contains('firered') ||
+        identity.contains('fire red') ||
+        identity.contains('rojo fuego')) {
+      primary = const Color(0xFF45151A);
+      secondary = const Color(0xFF7A281E);
+      accent = const Color(0xFFFF805C);
+    } else if (identity.contains('leafgreen') ||
+        identity.contains('leaf green') ||
+        identity.contains('verde hoja')) {
+      primary = const Color(0xFF123D2A);
+      secondary = const Color(0xFF277044);
+      accent = const Color(0xFF78E58F);
+    } else if (identity.contains('emerald') ||
+        identity.contains('esmeralda')) {
+      primary = const Color(0xFF0E382D);
+      secondary = const Color(0xFF176A4B);
+      accent = const Color(0xFF66E6A4);
+    } else if (identity.contains('sapphire') ||
+        identity.contains('zafiro')) {
+      primary = const Color(0xFF102A4A);
+      secondary = const Color(0xFF175A88);
+      accent = const Color(0xFF6ED4FF);
+    } else if (identity.contains('ruby') ||
+        identity.contains('rubi') ||
+        identity.contains('rubí')) {
+      primary = const Color(0xFF42131C);
+      secondary = const Color(0xFF7A2135);
+      accent = const Color(0xFFFF6F86);
+    } else if (identity.contains('crystal') || identity.contains('cristal')) {
       primary = const Color(0xFF102A43);
       secondary = const Color(0xFF39265F);
       accent = const Color(0xFF7DE3FF);
@@ -933,7 +961,7 @@ class _CoreNotFoundView extends StatelessWidget {
               size: 52,
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No se encontró ${core.displayName}',
               textAlign: TextAlign.center,
               style: TextStyle(
