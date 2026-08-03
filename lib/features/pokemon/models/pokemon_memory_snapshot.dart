@@ -41,7 +41,11 @@ class PokemonMemorySnapshot {
   final int? otherTrainerClassId;
   final int? otherTrainerId;
   final int? battleResultRaw;
-  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,this.nationalDexUnlocked=false,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
+  // IDs cuyas banderas de derrota ya están activas en Gen III. Permiten
+  // detectar la primera victoria sin depender de globals que cambian entre
+  // idiomas de la ROM.
+  final List<int> defeatedTrainerIds;
+  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,this.nationalDexUnlocked=false,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw,this.defeatedTrainerIds=const <int>[]});
   List<int> get partySpeciesIds=>party.map((e)=>e.pokedexId).toList(growable:false);
   int get badgeCount=>PokemonDecoder.countBits(<int>[badgesMask&0xff,(badgesMask>>8)&0xff]);
   String get currentLocation=>PokemonDecoder.mapName(profile,currentMapId);
