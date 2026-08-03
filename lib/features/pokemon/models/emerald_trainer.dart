@@ -4,6 +4,7 @@ enum EmeraldTrainerKind {
   gymLeader,
   eliteFour,
   champion,
+  specialTrainer,
   frontierBrain,
 }
 
@@ -31,6 +32,12 @@ final class EmeraldTrainerResolver {
     if (id >= 770 && id <= 801) {
       final int firstBattleId = 265 + ((id - 770) ~/ 4);
       return _special[firstBattleId]!;
+    }
+
+    // Los Cerebros de la Frontera tienen un ID para el símbolo de plata
+    // (805-811) y otro para el de oro (812-818).
+    if (id >= 812 && id <= 818) {
+      return _special[id - 7]!;
     }
 
     if (_brendanIds.contains(id)) {
@@ -1007,7 +1014,7 @@ final class EmeraldTrainerResolver {
     ),
     804: EmeraldTrainerInfo(
       'Steven',
-      EmeraldTrainerKind.regular,
+      EmeraldTrainerKind.specialTrainer,
       'assets/sprites/characters/champions/steven_hoenn.png',
     ),
     805: EmeraldTrainerInfo(
