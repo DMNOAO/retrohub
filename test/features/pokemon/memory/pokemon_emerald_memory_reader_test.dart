@@ -51,6 +51,22 @@ void main() {
   });
 
   group('Combates de Pokémon Emerald', () {
+    test('decodifica las banderas de entrenadores derrotados', () {
+      final bytes = List<int>.filled(3, 0);
+      // FLAG_TRAINER_FLAG_START (0x500) está alineado a byte: los IDs 1 y
+      // 9 corresponden a los bits 1 de los bytes 0 y 1.
+      bytes[0] = 1 << 1;
+      bytes[1] = 1 << 1;
+
+      expect(
+        PokemonEmeraldMemoryReader.decodeDefeatedTrainerIds(
+          bytes,
+          maximumTrainerId: 16,
+        ),
+        <int>[1, 9],
+      );
+    });
+
     test('distingue un combate de entrenador por BATTLE_TYPE_TRAINER', () {
       expect(PokemonEmeraldMemoryReader.decodeBattleState(1 << 3), 2);
       expect(PokemonEmeraldMemoryReader.decodeBattleState((1 << 3) | 1), 2);
