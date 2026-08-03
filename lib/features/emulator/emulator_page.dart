@@ -40,6 +40,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   static const int _buttonLeft = 6;
   static const int _buttonRight = 7;
   static const int _buttonA = 8;
+  static const int _buttonL = 10;
+  static const int _buttonR = 11;
 
   final LibretroGameController _gameController =
       LibretroGameController();
@@ -339,7 +341,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final String? sameBoyPath = CoreLoader.findSameBoyPath();
+    final EmulationCore core = CoreLoader.coreForRom(game.romPath);
+    final String? corePath = CoreLoader.findCorePath(game.romPath);
+    final bool isGba = CoreLoader.isGbaRom(game.romPath);
     final _EmulatorVisualTheme visualTheme =
         _EmulatorVisualTheme.forGame(game);
 
@@ -425,7 +429,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: sameBoyPath != null
+                  color: corePath != null
                       ? visualTheme.accent
                       : Theme.of(context).colorScheme.error,
                   width: 3,
@@ -433,12 +437,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
-                child: sameBoyPath != null
+                child: corePath != null
                       ? LibretroGameView(
                         key: _gameViewKey,
                         gameId: game.id,
                         gameTitle: game.title,
-                        corePath: sameBoyPath,
+                        corePath: corePath,
                         romPath: game.romPath,
                         initialPlayTimeMinutes:
                             game.playTimeSeconds ~/ 60,
@@ -446,6 +450,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       )
                     : _CoreNotFoundView(
                         romPath: game.romPath,
+                        core: core,
                       ),
               ),
             );
@@ -467,13 +472,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                         buttonLeft: _buttonLeft,
                         buttonRight: _buttonRight,
                         buttonSelect: _buttonSelect,
+                        buttonL: _buttonL,
+                        showShoulder: isGba,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Center(
                         child: AspectRatio(
-                          aspectRatio: 10 / 9,
+                          aspectRatio: isGba ? 3 / 2 : 10 / 9,
                           child: gameView,
                         ),
                       ),
@@ -486,6 +493,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                         buttonA: _buttonA,
                         buttonB: _buttonB,
                         buttonStart: _buttonStart,
+                        buttonR: _buttonR,
+                        showShoulder: isGba,
                       ),
                     ),
                   ],
@@ -500,7 +509,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                   Expanded(
                     child: Center(
                       child: AspectRatio(
-                        aspectRatio: 10 / 9,
+                        aspectRatio: isGba ? 3 / 2 : 10 / 9,
                         child: gameView,
                       ),
                     ),
@@ -517,6 +526,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                     buttonB: _buttonB,
                     buttonSelect: _buttonSelect,
                     buttonStart: _buttonStart,
+                    buttonL: _buttonL,
+                    buttonR: _buttonR,
+                    showShoulder: isGba,
                   ),
                 ],
               ),
@@ -860,6 +872,10 @@ class _EmulatorVisualTheme {
       primary = const Color(0xFF102A4A);
       secondary = const Color(0xFF174B70);
       accent = const Color(0xFF72D5FF);
+    } else if (identity.contains('gba')) {
+      primary = const Color(0xFF202842);
+      secondary = const Color(0xFF35305F);
+      accent = const Color(0xFFA7B8FF);
     } else if (identity.contains('gbc')) {
       primary = const Color(0xFF241B3D);
       secondary = const Color(0xFF3F2B5B);
@@ -891,9 +907,11 @@ class _EmulatorVisualTheme {
 
 class _CoreNotFoundView extends StatelessWidget {
   final String romPath;
+  final EmulationCore core;
 
   const _CoreNotFoundView({
     required this.romPath,
+    required this.core,
   });
 
   @override
@@ -913,7 +931,7 @@ class _CoreNotFoundView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'No se encontró SameBoy',
+              'No se encontró ${core.displayName}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -923,7 +941,7 @@ class _CoreNotFoundView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'No se encontró el archivo sameboy_libretro.dll.',
+              'No se encontró el core necesario para esta ROM.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.75),
@@ -932,7 +950,7 @@ class _CoreNotFoundView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Rutas revisadas:\n${CoreLoader.debugSearchPaths}',
+              'Rutas revisadas:\n${CoreLoader.debugCoreSearchPathsForRom(romPath)}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.55),
@@ -965,6 +983,8 @@ class _LandscapeLeftControls extends StatelessWidget {
   final int buttonLeft;
   final int buttonRight;
   final int buttonSelect;
+  final int buttonL;
+  final bool showShoulder;
 
   const _LandscapeLeftControls({
     required this.controller,
@@ -973,6 +993,8 @@ class _LandscapeLeftControls extends StatelessWidget {
     required this.buttonLeft,
     required this.buttonRight,
     required this.buttonSelect,
+    required this.buttonL,
+    required this.showShoulder,
   });
 
   @override
@@ -980,6 +1002,14 @@ class _LandscapeLeftControls extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        if (showShoulder) ...[
+          _GameBoyShoulderButton(
+            label: 'L',
+            buttonId: buttonL,
+            controller: controller,
+          ),
+          const SizedBox(height: 10),
+        ],
         _GameBoySystemButton(
           width: 76,
           height: 26,
@@ -1006,12 +1036,16 @@ class _LandscapeRightControls extends StatelessWidget {
   final int buttonA;
   final int buttonB;
   final int buttonStart;
+  final int buttonR;
+  final bool showShoulder;
 
   const _LandscapeRightControls({
     required this.controller,
     required this.buttonA,
     required this.buttonB,
     required this.buttonStart,
+    required this.buttonR,
+    required this.showShoulder,
   });
 
   @override
@@ -1019,6 +1053,14 @@ class _LandscapeRightControls extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        if (showShoulder) ...[
+          _GameBoyShoulderButton(
+            label: 'R',
+            buttonId: buttonR,
+            controller: controller,
+          ),
+          const SizedBox(height: 10),
+        ],
         _GameBoySystemButton(
           width: 76,
           height: 26,
@@ -1064,6 +1106,9 @@ class _GameBoyControls extends StatelessWidget {
   final int buttonB;
   final int buttonSelect;
   final int buttonStart;
+  final int buttonL;
+  final int buttonR;
+  final bool showShoulder;
 
   const _GameBoyControls({
     required this.compact,
@@ -1076,6 +1121,9 @@ class _GameBoyControls extends StatelessWidget {
     required this.buttonB,
     required this.buttonSelect,
     required this.buttonStart,
+    required this.buttonL,
+    required this.buttonR,
+    required this.showShoulder,
   });
 
   @override
@@ -1141,10 +1189,30 @@ class _GameBoyControls extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final Widget shoulderButtons = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _GameBoyShoulderButton(
+          label: 'L',
+          buttonId: buttonL,
+          controller: controller,
+        ),
+        _GameBoyShoulderButton(
+          label: 'R',
+          buttonId: buttonR,
+          controller: controller,
+        ),
+      ],
+    );
+
     return SizedBox(
-      height: 184,
+      height: showShoulder ? 224 : 184,
       child: Column(
         children: [
+          if (showShoulder) ...[
+            shoulderButtons,
+            const SizedBox(height: 10),
+          ],
           systemButtons,
           const SizedBox(height: 10),
           Expanded(
@@ -1381,6 +1449,54 @@ class _GameBoyActionButton extends StatelessWidget {
           style: TextStyle(
             color: Colors.white,
             fontSize: size * 0.34,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GameBoyShoulderButton extends StatelessWidget {
+  final String label;
+  final int buttonId;
+  final LibretroGameController controller;
+
+  const _GameBoyShoulderButton({
+    required this.label,
+    required this.buttonId,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _PressableControl(
+      buttonId: buttonId,
+      controller: controller,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 64,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFF47464D),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.14),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 7,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
             fontWeight: FontWeight.w900,
           ),
         ),
