@@ -92,13 +92,13 @@ class PokemonDecoder {
   }
 
   static String mapName(PokemonGameProfile profile, int mapId) {
+    final PokemonLocation? location = locationFor(profile, mapId);
+    if (location != null) return location.name;
     if (profile.isGen3) {
       final String group = ((mapId >> 8) & 0xFF).toString().padLeft(2, '0');
       final String map = (mapId & 0xFF).toString().padLeft(2, '0');
       return 'Mapa $group:$map';
     }
-    final PokemonLocation? location = locationFor(profile, mapId);
-    if (location != null) return location.name;
     if (profile.isGen2) {
       return 'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
     }
