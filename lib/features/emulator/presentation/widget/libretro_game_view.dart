@@ -24,6 +24,7 @@ class LibretroGameController {
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
   Uint8List Function(int memoryId, int offset, int length)? _readMemoryBlock;
+  Uint8List Function(int address, int length)? _readMemoryAddress;
 
   bool get isAttached => _setButtonState != null;
 
@@ -60,6 +61,10 @@ class LibretroGameController {
     return _readMemoryBlock?.call(memoryId, offset, length) ?? Uint8List(0);
   }
 
+  Uint8List readMemoryAddress({required int address, required int length}) {
+    return _readMemoryAddress?.call(address, length) ?? Uint8List(0);
+  }
+
   void _attach({
     required void Function(int buttonId, bool pressed) setButtonState,
     required VoidCallback resetInput,
@@ -69,6 +74,7 @@ class LibretroGameController {
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
     required Uint8List Function(int memoryId, int offset, int length) readMemoryBlock,
+    required Uint8List Function(int address, int length) readMemoryAddress,
   }) {
     _setButtonState = setButtonState;
     _resetInput = resetInput;
@@ -78,6 +84,7 @@ class LibretroGameController {
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
     _inspectMemoryRegions = inspectMemoryRegions;
     _readMemoryBlock = readMemoryBlock;
+    _readMemoryAddress = readMemoryAddress;
   }
 
   void _detach() {
@@ -89,6 +96,7 @@ class LibretroGameController {
     _currentPlayTimeMinutes = null;
     _inspectMemoryRegions = null;
     _readMemoryBlock = null;
+    _readMemoryAddress = null;
   }
 }
 
@@ -197,6 +205,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
       inspectMemoryRegions: _inspectMemoryRegions,
       readMemoryBlock: _readMemoryBlock,
+      readMemoryAddress: _readMemoryAddress,
     );
   }
 
@@ -212,6 +221,20 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (_disposed || !_isRunning || bridge == null || _persistenceOperationInProgress) return Uint8List(0);
     try { return bridge.readMemoryBlock(memoryId: memoryId, offset: offset, length: length); }
     catch (error) { debugPrint('Error leyendo memoria: $error'); return Uint8List(0); }
+  }
+
+  Uint8List _readMemoryAddress(int address, int length) {
+    final bridge = _bridge;
+    if (_disposed || !_isRunning || bridge == null ||
+        _persistenceOperationInProgress) {
+      return Uint8List(0);
+    }
+    try {
+      return bridge.readMemoryAddress(address: address, length: length);
+    } catch (error) {
+      debugPrint('Error leyendo dirección GBA: $error');
+      return Uint8List(0);
+    }
   }
 
   Future<void> _startEmulator() async {
