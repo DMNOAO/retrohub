@@ -34,9 +34,20 @@ void main() {
     );
   });
 
-  test('conserva el ID de un entrenador corriente', () {
-    final trainer = EmeraldTrainerResolver.forTrainerId(42);
+  test('resuelve el Cazabichos Rick de Ruta 102', () {
+    final trainer = EmeraldTrainerResolver.forTrainerId(615);
     expect(trainer.kind, EmeraldTrainerKind.regular);
-    expect(trainer.name, 'Entrenador #42');
+    expect(trainer.name, 'Cazabichos Rick');
+    expect(
+      trainer.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/bug_catcher.png',
+    );
+  });
+
+  test('conserva el ID cuando el entrenador no existe', () {
+    final trainer = EmeraldTrainerResolver.forTrainerId(9999);
+    expect(trainer.kind, EmeraldTrainerKind.regular);
+    expect(trainer.name, 'Entrenador #9999');
+    expect(trainer.spritePath, isNull);
   });
 }
