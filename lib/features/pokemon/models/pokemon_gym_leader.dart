@@ -27,12 +27,24 @@ class GymLeaderAssetResolver {
       case PokemonGameVersion.ruby:
       case PokemonGameVersion.sapphire:
       case PokemonGameVersion.emerald:
+        return badgeIndex < _hoennGba.length ? _hoennGba[badgeIndex] : null;
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
         return null;
     }
   }
+
+  static const List<GymLeaderInfo> _hoennGba = <GymLeaderInfo>[
+    GymLeaderInfo('Roxanne', 'assets/sprites/characters/trainers/gba/Hoenn/leader_roxanne.png'),
+    GymLeaderInfo('Brawly', 'assets/sprites/characters/trainers/gba/Hoenn/leader_brawly.png'),
+    GymLeaderInfo('Wattson', 'assets/sprites/characters/trainers/gba/Hoenn/leader_wattson.png'),
+    GymLeaderInfo('Flannery', 'assets/sprites/characters/trainers/gba/Hoenn/leader_flannery.png'),
+    GymLeaderInfo('Norman', 'assets/sprites/characters/trainers/gba/Hoenn/leader_norman.png'),
+    GymLeaderInfo('Winona', 'assets/sprites/characters/trainers/gba/Hoenn/leader_winona.png'),
+    GymLeaderInfo('Tate y Liza', 'assets/sprites/characters/trainers/gba/Hoenn/leader_tate_and_liza.png'),
+    GymLeaderInfo('Juan', 'assets/sprites/characters/trainers/gba/Hoenn/leader_juan.png'),
+  ];
 
   static const List<GymLeaderInfo> _kantoGb = <GymLeaderInfo>[
     GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/gb/brock_kanto.png'),
