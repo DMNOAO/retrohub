@@ -254,10 +254,10 @@ final class PokemonEmeraldMemoryReader {
     final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
     if (checksum != storedChecksum) return null;
 
-    final int growthPosition = growthSubstructurePosition(personality);
-    final int growthOffset = growthPosition * 12;
-    final int internalSpeciesId =
-        _littleEndian(decrypted.sublist(growthOffset, growthOffset + 2));
+    final int internalSpeciesId = internalSpeciesIdFromDecryptedData(
+      personality: personality,
+      decryptedData: decrypted,
+    );
     final int pokedexId = emeraldNationalDexId(internalSpeciesId);
     if (pokedexId < 1 || pokedexId > 386) return null;
 
@@ -304,6 +304,18 @@ final class PokemonEmeraldMemoryReader {
   /// consecutivas: a partir de AGEM las posiciones 1, 2 y 3 se intercalan.
   static int growthSubstructurePosition(int personality) {
     return _growthPositions[personality % 24];
+  }
+
+  /// Extrae la especie interna desde los datos ya descifrados y todavía
+  /// permutados. Se expone para probar casos reales con distintas
+  /// personalidades sin depender del puente nativo.
+  static int internalSpeciesIdFromDecryptedData({
+    required int personality,
+    required List<int> decryptedData,
+  }) {
+    if (decryptedData.length != 48) return 0;
+    final int offset = growthSubstructurePosition(personality) * 12;
+    return decryptedData[offset] | (decryptedData[offset + 1] << 8);
   }
 
   static const List<int> _growthPositions = <int>[
