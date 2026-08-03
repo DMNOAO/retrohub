@@ -24,6 +24,11 @@ class GymLeaderAssetResolver {
         return kantoIndex >= 0 && kantoIndex < _kantoGbc.length
             ? _kantoGbc[kantoIndex]
             : null;
+      case PokemonGameVersion.ruby:
+      case PokemonGameVersion.sapphire:
+      case PokemonGameVersion.emerald:
+      case PokemonGameVersion.fireRed:
+      case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
         return null;
     }
