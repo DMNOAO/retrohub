@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/assets/game_asset_profile.dart';
+import '../../core/assets/sprite_resolver.dart';
 import '../../core/emulation/core_loader.dart';
 import '../../core/utils/cover_helper.dart';
 import '../../data/database/app_database.dart';
@@ -757,38 +759,10 @@ String _cleanGameTitle(String title) {
 }
 
 String _pokemonSpritePath(Game game, int speciesId) {
-  final identity = '${game.title} ${game.console}'.toLowerCase();
-  final id = speciesId.toString().padLeft(4, '0');
-
-  if (identity.contains('yellow') || identity.contains('amarillo')) {
-    return 'assets/sprites/pokemon/gb/yellow/$id.png';
-  }
-  if (identity.contains('crystal') || identity.contains('cristal')) {
-    return 'assets/sprites/pokemon/gbc/crystal/$id.png';
-  }
-  if (identity.contains('silver') || identity.contains('plata')) {
-    return 'assets/sprites/pokemon/gbc/silver/$id.png';
-  }
-  if (identity.contains('gold') || identity.contains('oro')) {
-    return 'assets/sprites/pokemon/gbc/gold/$id.png';
-  }
-  if (identity.contains('emerald') || identity.contains('esmeralda')) {
-    return 'assets/sprites/pokemon/gba/emerald/$id.png';
-  }
-  if (identity.contains('ruby') ||
-      identity.contains('rubi') ||
-      identity.contains('sapphire') ||
-      identity.contains('zafiro')) {
-    return 'assets/sprites/pokemon/gba/ruby_sapphire/$id.png';
-  }
-  if (identity.contains('gba') ||
-      identity.contains('fire') ||
-      identity.contains('fuego') ||
-      identity.contains('leaf') ||
-      identity.contains('hoja')) {
-    return 'assets/sprites/pokemon/gba/fire_red_leaf_green/$id.png';
-  }
-  return 'assets/sprites/pokemon/gb/red_blue/$id.png';
+  return SpriteResolver.pokemonForGame(
+    profile: GameAssetProfile.fromGame(game),
+    pokemonId: speciesId,
+  );
 }
 
 class _EmulatorVisualTheme {
