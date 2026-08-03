@@ -1,6 +1,7 @@
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_location.dart';
 import 'locations/gen2/crystal_locations.g.dart';
+import 'locations/gen3/emerald_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -123,6 +124,7 @@ class PokemonDecoder {
       case PokemonGameVersion.ruby:
       case PokemonGameVersion.sapphire:
       case PokemonGameVersion.emerald:
+        return emeraldLocations[mapId];
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
