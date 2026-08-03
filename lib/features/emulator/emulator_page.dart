@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/emulation/core_loader.dart';
+import '../../core/utils/cover_helper.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
@@ -39,6 +41,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   final LibretroGameController _gameController =
       LibretroGameController();
+  final GlobalKey _gameViewKey = GlobalKey(debugLabel: 'libretro-game-view');
 
   late final AppDatabase _database;
   late final JournalEventService _journalEventService;
@@ -46,6 +49,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   late final DateTime _sessionStartedAt;
   bool _sessionClosedLogged = false;
   bool _sessionPersisted = false;
+  bool _isClosing = false;
+  bool _exitDialogOpen = false;
+  Timer? _headerRefreshTimer;
+  List<int> _partySpeciesIds = const <int>[];
 
   Game get game => widget.game;
 
@@ -72,12 +79,50 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
       playTimeMinutes: () => _currentPlayTimeMinutes,
     );
     _pokemonJournalTracker.start();
+    unawaited(_refreshHeaderParty());
+    _headerRefreshTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => unawaited(_refreshHeaderParty()),
+    );
 
     unawaited(
       _journalEventService.logGameStarted(
         playTimeMinutes: game.playTimeSeconds ~/ 60,
       ),
     );
+  }
+
+  Future<void> _refreshHeaderParty() async {
+    final snapshot = await _database.getLatestProgressSnapshot(game.id);
+    if (!mounted || snapshot?.partyJson == null) return;
+
+    try {
+      final decoded = jsonDecode(snapshot!.partyJson!);
+      if (decoded is! List) return;
+
+      final ids = decoded
+          .whereType<Map>()
+          .map((pokemon) => pokemon['id'])
+          .whereType<num>()
+          .map((id) => id.toInt())
+          .where((id) => id > 0)
+          .take(6)
+          .toList(growable: false);
+
+      if (!_sameIds(ids, _partySpeciesIds)) {
+        setState(() => _partySpeciesIds = ids);
+      }
+    } catch (_) {
+      // A corrupt or older snapshot must not affect the emulator screen.
+    }
+  }
+
+  bool _sameIds(List<int> first, List<int> second) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) return false;
+    }
+    return true;
   }
 
   int get _currentPlayTimeMinutes {
@@ -186,14 +231,40 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         );
         break;
       case 'exit':
-        await _gameController.saveSram();
-        await _pokemonJournalTracker.stop();
-        await _logSessionClosed();
-
-        if (!context.mounted) return;
-
-        Navigator.of(context).pop();
+        await _requestExit(context);
         break;
+    }
+  }
+
+  Future<void> _requestExit(BuildContext context) async {
+    if (_isClosing || _exitDialogOpen) return;
+    _exitDialogOpen = true;
+
+    final visualTheme = _EmulatorVisualTheme.forGame(game);
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => _ExitGameDialog(
+        game: game,
+        accent: visualTheme.accent,
+        partySpeciesIds: _partySpeciesIds,
+      ),
+    );
+    _exitDialogOpen = false;
+
+    if (shouldExit != true || !context.mounted) return;
+    await _closeAndPop(context);
+  }
+
+  Future<void> _closeAndPop(BuildContext context) async {
+    if (_isClosing) return;
+    setState(() => _isClosing = true);
+
+    await _gameController.saveSram();
+    await _pokemonJournalTracker.stop();
+    await _logSessionClosed();
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -257,6 +328,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   @override
   void dispose() {
+    _headerRefreshTimer?.cancel();
     _gameController.resetInput();
     unawaited(_pokemonJournalTracker.stop());
     unawaited(_logSessionClosed());
@@ -269,12 +341,23 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final _EmulatorVisualTheme visualTheme =
         _EmulatorVisualTheme.forGame(game);
 
-    return Scaffold(
-      backgroundColor: visualTheme.background,
-      appBar: AppBar(
+    return PopScope(
+      canPop: _isClosing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_requestExit(context));
+      },
+      child: Scaffold(
+        backgroundColor: visualTheme.background,
+        appBar: AppBar(
+        toolbarHeight: 58,
         backgroundColor: visualTheme.appBar,
         foregroundColor: Colors.white,
-        title: Text(game.title),
+        titleSpacing: 4,
+        title: _EmulatorHeader(
+          game: game,
+          accent: visualTheme.accent,
+          partySpeciesIds: _partySpeciesIds,
+        ),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -349,7 +432,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
                 child: sameBoyPath != null
-                    ? LibretroGameView(
+                      ? LibretroGameView(
+                        key: _gameViewKey,
                         gameId: game.id,
                         gameTitle: game.title,
                         corePath: sameBoyPath,
@@ -439,8 +523,272 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           ),
         ),
       ),
+      ),
     );
   }
+}
+
+class _EmulatorHeader extends StatelessWidget {
+  final Game game;
+  final Color accent;
+  final List<int> partySpeciesIds;
+
+  const _EmulatorHeader({
+    required this.game,
+    required this.accent,
+    required this.partySpeciesIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final coverPath = CoverHelper.getCover(game.title, game.console);
+
+    return Row(
+      children: [
+        _GameArtwork(
+          coverPath: coverPath,
+          accent: accent,
+          width: 36,
+          height: 44,
+          iconSize: 20,
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            _cleanGameTitle(game.title),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        if (partySpeciesIds.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          _PartySprites(
+            game: game,
+            speciesIds: partySpeciesIds,
+            accent: accent,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PartySprites extends StatelessWidget {
+  final Game game;
+  final List<int> speciesIds;
+  final Color accent;
+
+  const _PartySprites({
+    required this.game,
+    required this.speciesIds,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final visibleIds = speciesIds
+        .take(isLandscape ? 6 : 3)
+        .toList(growable: false);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: visibleIds.map((speciesId) {
+        return Container(
+          width: 30,
+          height: 30,
+          margin: const EdgeInsets.only(left: 2),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.24),
+            shape: BoxShape.circle,
+            border: Border.all(color: accent.withValues(alpha: 0.55)),
+          ),
+          child: Image.asset(
+            _pokemonSpritePath(game, speciesId),
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.none,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.catching_pokemon,
+              size: 18,
+              color: Colors.white70,
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+class _ExitGameDialog extends StatelessWidget {
+  final Game game;
+  final Color accent;
+  final List<int> partySpeciesIds;
+
+  const _ExitGameDialog({
+    required this.game,
+    required this.accent,
+    required this.partySpeciesIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final coverPath = CoverHelper.getCover(game.title, game.console);
+    final firstPokemon = partySpeciesIds.isEmpty ? null : partySpeciesIds.first;
+
+    return AlertDialog(
+      backgroundColor: Color.lerp(accent, Colors.black, 0.82),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: accent, width: 2),
+      ),
+      icon: SizedBox(
+        width: 92,
+        height: 92,
+        child: firstPokemon == null
+            ? _GameArtwork(
+                coverPath: coverPath,
+                accent: accent,
+                width: 92,
+                height: 92,
+                iconSize: 46,
+              )
+            : Image.asset(
+                _pokemonSpritePath(game, firstPokemon),
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.none,
+                errorBuilder: (_, __, ___) => _GameArtwork(
+                  coverPath: coverPath,
+                  accent: accent,
+                  width: 92,
+                  height: 92,
+                  iconSize: 46,
+                ),
+              ),
+      ),
+      title: const Text(
+        '¿Salir del juego?',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+      ),
+      content: Text(
+        'Se guardará el progreso de ${_cleanGameTitle(game.title)} antes de salir.',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white70),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceEvenly,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Seguir jugando'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: accent,
+            foregroundColor: Colors.black,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Guardar y salir'),
+        ),
+      ],
+    );
+  }
+}
+
+class _GameArtwork extends StatelessWidget {
+  final String? coverPath;
+  final Color accent;
+  final double width;
+  final double height;
+  final double iconSize;
+
+  const _GameArtwork({
+    required this.coverPath,
+    required this.accent,
+    required this.width,
+    required this.height,
+    required this.iconSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.65)),
+      ),
+      child: coverPath == null
+          ? Icon(Icons.sports_esports_rounded, color: accent, size: iconSize)
+          : Image.asset(
+              coverPath!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.sports_esports_rounded,
+                color: accent,
+                size: iconSize,
+              ),
+            ),
+    );
+  }
+}
+
+String _cleanGameTitle(String title) {
+  final cleaned = title
+      .replaceAll('_', ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (cleaned.isEmpty) return 'Juego';
+
+  return cleaned
+      .split(' ')
+      .map((word) => word.isEmpty
+          ? word
+          : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ')
+      .replaceAll(RegExp(r'^Pokemon\b', caseSensitive: false), 'Pokémon');
+}
+
+String _pokemonSpritePath(Game game, int speciesId) {
+  final identity = '${game.title} ${game.console}'.toLowerCase();
+  final id = speciesId.toString().padLeft(4, '0');
+
+  if (identity.contains('yellow') || identity.contains('amarillo')) {
+    return 'assets/sprites/pokemon/gb/yellow/$id.png';
+  }
+  if (identity.contains('crystal') || identity.contains('cristal')) {
+    return 'assets/sprites/pokemon/gbc/crystal/$id.png';
+  }
+  if (identity.contains('silver') || identity.contains('plata')) {
+    return 'assets/sprites/pokemon/gbc/silver/$id.png';
+  }
+  if (identity.contains('gold') || identity.contains('oro')) {
+    return 'assets/sprites/pokemon/gbc/gold/$id.png';
+  }
+  if (identity.contains('emerald') || identity.contains('esmeralda')) {
+    return 'assets/sprites/pokemon/gba/emerald/$id.png';
+  }
+  if (identity.contains('ruby') ||
+      identity.contains('rubi') ||
+      identity.contains('sapphire') ||
+      identity.contains('zafiro')) {
+    return 'assets/sprites/pokemon/gba/ruby_sapphire/$id.png';
+  }
+  if (identity.contains('gba') ||
+      identity.contains('fire') ||
+      identity.contains('fuego') ||
+      identity.contains('leaf') ||
+      identity.contains('hoja')) {
+    return 'assets/sprites/pokemon/gba/fire_red_leaf_green/$id.png';
+  }
+  return 'assets/sprites/pokemon/gb/red_blue/$id.png';
 }
 
 class _EmulatorVisualTheme {
