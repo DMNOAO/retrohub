@@ -33,6 +33,14 @@ final class PokemonEmeraldMemoryReader {
   static const int _nationalDexVarOffset = 0x1428;
   static const int _nationalDexFlag = 0x896;
 
+  // Variables de batalla de Pokémon Emerald (pret/pokeemerald, revisión
+  // inglesa). A diferencia de Gen I/II, BATTLE_TYPE_TRAINER es un bit de
+  // gBattleTypeFlags y B_OUTCOME_WON vale 1.
+  static const int _battleTypeFlagsAddress = 0x02022FEC;
+  static const int _trainerOpponentAddress = 0x02038BCA;
+  static const int _battleOutcomeAddress = 0x0203ABF4;
+  static const int _battleTypeTrainer = 1 << 3;
+
   final LibretroGameController? controller;
   final LibretroBridge? bridge;
   final PokemonGameProfile profile;
@@ -89,6 +97,7 @@ final class PokemonEmeraldMemoryReader {
       nationalDexVar: _u16(saveBlock1 + _nationalDexVarOffset),
       nationalDexFlagSet: _readFlag(saveBlock1, _nationalDexFlag),
     );
+    final _EmeraldBattleState? battle = _readBattleState();
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -108,6 +117,34 @@ final class PokemonEmeraldMemoryReader {
       caughtPokemonIds: caughtPokemonIds,
       party: party,
       gamePlayTimeMinutes: hours * 60 + minutes,
+      battleState: battle?.state,
+      otherTrainerId: battle?.trainerId,
+      battleResultRaw: battle?.outcome,
+    );
+  }
+
+  static int decodeBattleState(int battleTypeFlags) {
+    return (battleTypeFlags & _battleTypeTrainer) != 0 ? 2 : 0;
+  }
+
+  static bool didPlayerWinBattle(int outcome) => outcome == 1;
+
+  _EmeraldBattleState? _readBattleState() {
+    final List<int> flagsBytes = _read(_battleTypeFlagsAddress, 4);
+    final List<int> trainerBytes = _read(_trainerOpponentAddress, 2);
+    final List<int> outcomeBytes = _read(_battleOutcomeAddress, 1);
+    if (flagsBytes.length != 4 ||
+        trainerBytes.length != 2 ||
+        outcomeBytes.length != 1) {
+      return null;
+    }
+
+    final int flags = _littleEndian(flagsBytes);
+    final int state = decodeBattleState(flags);
+    return _EmeraldBattleState(
+      state: state,
+      trainerId: state == 2 ? _littleEndian(trainerBytes) : null,
+      outcome: outcomeBytes.first,
     );
   }
 
@@ -381,5 +418,17 @@ final class _EmeraldSaveBlocks {
   const _EmeraldSaveBlocks({
     required this.saveBlock1,
     required this.saveBlock2,
+  });
+}
+
+final class _EmeraldBattleState {
+  final int state;
+  final int? trainerId;
+  final int outcome;
+
+  const _EmeraldBattleState({
+    required this.state,
+    required this.trainerId,
+    required this.outcome,
   });
 }

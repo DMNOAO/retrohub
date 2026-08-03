@@ -49,4 +49,19 @@ void main() {
       }
     });
   });
+
+  group('Combates de Pokémon Emerald', () {
+    test('distingue un combate de entrenador por BATTLE_TYPE_TRAINER', () {
+      expect(PokemonEmeraldMemoryReader.decodeBattleState(1 << 3), 2);
+      expect(PokemonEmeraldMemoryReader.decodeBattleState((1 << 3) | 1), 2);
+      expect(PokemonEmeraldMemoryReader.decodeBattleState(0), 0);
+      expect(PokemonEmeraldMemoryReader.decodeBattleState(1), 0);
+    });
+
+    test('usa la convención de resultado propia de Gen III', () {
+      expect(PokemonEmeraldMemoryReader.didPlayerWinBattle(1), isTrue);
+      expect(PokemonEmeraldMemoryReader.didPlayerWinBattle(0), isFalse);
+      expect(PokemonEmeraldMemoryReader.didPlayerWinBattle(2), isFalse);
+    });
+  });
 }

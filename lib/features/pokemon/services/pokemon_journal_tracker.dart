@@ -11,6 +11,7 @@ import '../memory/pokemon_controller_memory_reader.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_gym_leader.dart';
 import '../models/pokemon_memory_snapshot.dart';
+import '../models/emerald_trainer.dart';
 import '../models/trainer_class.dart';
 
 class PokemonJournalTracker {
@@ -36,6 +37,7 @@ class PokemonJournalTracker {
   // identificarlo recién cuando el combate termina.
   int? _pendingTrainerClass;
   int? _pendingTrainerId;
+  int? _pendingBattleResult;
   bool _trainerBattlePending = false;
   // Snapshot crudo del sondeo anterior, solo para detectar transiciones de
   // combate. Se actualiza en TODOS los sondeos (a diferencia de _accepted,
@@ -329,6 +331,20 @@ class PokemonJournalTracker {
       _trainerBattlePending = true;
       _pendingTrainerClass = current.otherTrainerClassId;
       _pendingTrainerId = current.otherTrainerId;
+      final int? rawResult = current.battleResultRaw;
+      if (current.profile.version != PokemonGameVersion.emerald ||
+          (rawResult != null && rawResult != 0)) {
+        _pendingBattleResult = rawResult;
+      }
+    } else if (_trainerBattlePending && current.battleResultRaw != null) {
+      // Gen III asigna el resultado al cerrar el combate. Conservar la
+      // última lectura evita perderlo cuando los globals se limpian antes
+      // del siguiente sondeo.
+      final int rawResult = current.battleResultRaw!;
+      if (current.profile.version != PokemonGameVersion.emerald ||
+          rawResult != 0) {
+        _pendingBattleResult = rawResult;
+      }
     }
 
     final bool nowOutOfBattle = current.battleState == 0;
@@ -344,17 +360,24 @@ class PokemonJournalTracker {
     _pendingTrainerClass = null;
     _pendingTrainerId = null;
 
-    // wBattleResult: bits 0-5 codifican victoria/derrota/empate (WIN = 0,
-    // convención estándar de las descompilaciones de pret; no se pudo
-    // verificar byte-exacto esta sesión, a diferencia de las direcciones,
-    // que sí vienen de los .sym reales). Bits 6-7 son flags no
-    // relacionadas (celebi capturado / caja llena) y se descartan con la
-    // máscara. Ante cualquier duda (sin dato de resultado) no se registra
-    // nada, para no arriesgar un evento falso.
-    final int? result = current.battleResultRaw;
+    // Gen I/II usan WIN = 0 en wBattleResult y conservan flags auxiliares en
+    // los bits altos. Emerald usa gBattleOutcome y B_OUTCOME_WON = 1. Ante
+    // cualquier duda (sin dato de resultado) no se registra un evento.
+    final int? result = _pendingBattleResult ?? current.battleResultRaw;
+    _pendingBattleResult = null;
     if (result == null) return;
-    final bool won = (result & 0x3F) == 0;
+    final bool won = current.profile.version == PokemonGameVersion.emerald
+        ? result == 1
+        : (result & 0x3F) == 0;
     if (!won) return;
+
+    if (current.profile.version == PokemonGameVersion.emerald) {
+      await _recordEmeraldTrainerVictory(
+        current: current,
+        trainerId: trainerId,
+      );
+      return;
+    }
 
     if (classId == null || classId == 0) {
       // Gen1 (Red/Blue/Yellow): no se pudo verificar esta sesión cómo
@@ -442,6 +465,65 @@ class PokemonJournalTracker {
       },
     );
     await _rememberLastDefeatedTrainer(info?.name ?? 'Entrenador', current);
+  }
+
+  Future<void> _recordEmeraldTrainerVictory({
+    required PokemonMemorySnapshot current,
+    required int? trainerId,
+  }) async {
+    if (trainerId == null || trainerId <= 0) return;
+
+    final EmeraldTrainerInfo info =
+        EmeraldTrainerResolver.forTrainerId(trainerId);
+    if (info.kind == EmeraldTrainerKind.gymLeader) {
+      // La primera victoria ya se registra al detectar la nueva medalla.
+      // Así se conserva un solo evento con el orden combate -> medalla.
+      return;
+    }
+
+    final (String type, String title, String description) = switch (info.kind) {
+      EmeraldTrainerKind.rival => (
+          'rival_defeated',
+          'Derrotó a ${info.name}',
+          'Ganó el combate contra su rival.',
+        ),
+      EmeraldTrainerKind.eliteFour => (
+          'elite_four_defeated',
+          'Derrotó a ${info.name}',
+          'Venció a un miembro del Alto Mando de Hoenn.',
+        ),
+      EmeraldTrainerKind.champion => (
+          'champion_defeated',
+          'Se convirtió en Campeón Pokémon',
+          'Derrotó a Wallace, Campeón de la Liga de Hoenn.',
+        ),
+      EmeraldTrainerKind.frontierBrain => (
+          'trainer_defeated',
+          'Derrotó a ${info.name}',
+          'Venció a un Cerebro de la Frontera.',
+        ),
+      EmeraldTrainerKind.regular => (
+          'trainer_defeated',
+          'Ganó contra ${info.name}',
+          'Venció a un entrenador durante su aventura.',
+        ),
+      EmeraldTrainerKind.gymLeader => throw StateError(
+          'Los líderes se registran al obtener la medalla.',
+        ),
+    };
+
+    await _insertEvent(
+      type: type,
+      title: title,
+      description: description,
+      metadata: <String, dynamic>{
+        ..._metadata(current),
+        'trainerId': trainerId,
+        'trainerClass': info.name,
+        'spritePath': info.spritePath,
+      },
+    );
+    await _rememberLastDefeatedTrainer(info.name, current);
   }
 
   Future<void> _restorePersistentState() async {
