@@ -298,6 +298,17 @@ class _TimelineCard extends StatelessWidget {
                               _MetaChip(icon: Icons.schedule, label: _formatPlayTime(item.playTimeMinutes)),
                               if (item.metadata['mapName'] != null)
                                 _MetaChip(icon: Icons.place_outlined, label: item.metadata['mapName'].toString()),
+                              if (item.metadata['playerName'] != null &&
+                                  item.metadata['playerName'].toString().isNotEmpty)
+                                _MetaChip(
+                                  icon: Icons.person_outline,
+                                  label: item.metadata['playerName'].toString(),
+                                ),
+                              if (item.metadata['money'] != null)
+                                _MetaChip(
+                                  icon: Icons.payments_outlined,
+                                  label: '\${item.metadata['money']}',
+                                ),
                               if (item.metadata['level'] != null)
                                 _MetaChip(icon: Icons.trending_up, label: 'Nv. ${item.metadata['level']}'),
                               if (item.metadata['isShiny'] == true)
