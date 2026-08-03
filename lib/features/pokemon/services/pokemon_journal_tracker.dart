@@ -105,7 +105,7 @@ class PokemonJournalTracker {
       final PokemonMemorySnapshot? previousRaw = _lastRawSnapshot;
       _lastRawSnapshot = current;
       if (previousRaw != null) {
-        await _recordBattleChanges(current);
+        await _recordBattleChanges(previousRaw, current);
       }
 
       if (_candidate != null && _sameCoreState(_candidate!, current)) {
@@ -323,8 +323,31 @@ class PokemonJournalTracker {
   /// del estado (dinero, ubicación, etc.), porque un combate puede
   /// empezar y terminar sin que nada más cambie mientras tanto.
   Future<void> _recordBattleChanges(
+    PokemonMemorySnapshot previous,
     PokemonMemorySnapshot current,
   ) async {
+    if (current.profile.version == PokemonGameVersion.emerald) {
+      final Set<int> previousIds = previous.defeatedTrainerIds.toSet();
+      final List<int> newTrainerIds = current.defeatedTrainerIds
+          .where((id) => !previousIds.contains(id))
+          .toList(growable: false);
+      if (newTrainerIds.isNotEmpty) {
+        // La bandera se activa únicamente tras la primera victoria. Es una
+        // señal estable y compatible con ROMs de cualquier idioma.
+        _trainerBattlePending = false;
+        _pendingTrainerClass = null;
+        _pendingTrainerId = null;
+        _pendingBattleResult = null;
+        for (final int trainerId in newTrainerIds) {
+          await _recordEmeraldTrainerVictory(
+            current: current,
+            trainerId: trainerId,
+          );
+        }
+        return;
+      }
+    }
+
     if (current.battleState == null) return; // versión sin soporte de combate
 
     if (current.battleState == 2) {
