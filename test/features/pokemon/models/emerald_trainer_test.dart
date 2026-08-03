@@ -32,6 +32,21 @@ void main() {
       EmeraldTrainerResolver.forTrainerId(811).kind,
       EmeraldTrainerKind.frontierBrain,
     );
+    expect(
+      EmeraldTrainerResolver.forTrainerId(818).name,
+      'Brandon',
+    );
+    expect(
+      EmeraldTrainerResolver.forTrainerId(818).kind,
+      EmeraldTrainerKind.frontierBrain,
+    );
+  });
+
+  test('distingue a Steven como combate especial', () {
+    final trainer = EmeraldTrainerResolver.forTrainerId(804);
+    expect(trainer.name, 'Steven');
+    expect(trainer.kind, EmeraldTrainerKind.specialTrainer);
+    expect(trainer.spritePath, contains('steven_hoenn.png'));
   });
 
   test('resuelve el Cazabichos Rick de Ruta 102', () {
