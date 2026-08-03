@@ -13,6 +13,7 @@
 #include <atomic>
 #include <fstream>
 #include <mutex>
+#include <cstring>
 #include <vector>
 
 // ============================================================
@@ -75,6 +76,25 @@ struct retro_system_info {
     bool block_extract;
 };
 
+// Descriptores publicados por RETRO_ENVIRONMENT_SET_MEMORY_MAPS.
+// mGBA usa este mecanismo para exponer EWRAM (0x02000000) e IWRAM
+// (0x03000000), en vez de RETRO_MEMORY_SYSTEM_RAM.
+struct retro_memory_descriptor {
+    uint64_t flags;
+    void* ptr;
+    size_t offset;
+    size_t start;
+    size_t select;
+    size_t disconnect;
+    size_t len;
+    const char* addrspace;
+};
+
+struct retro_memory_map {
+    const retro_memory_descriptor* descriptors;
+    unsigned num_descriptors;
+};
+
 // ============================================================
 // Constantes Libretro
 // ============================================================
@@ -83,6 +103,7 @@ struct retro_system_info {
 #define RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY 9
 #define RETRO_ENVIRONMENT_SET_PIXEL_FORMAT 10
 #define RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY 31
+#define RETRO_ENVIRONMENT_SET_MEMORY_MAPS 36
 
 #define RETRO_PIXEL_FORMAT_0RGB1555 0
 #define RETRO_PIXEL_FORMAT_XRGB8888 1
@@ -188,6 +209,11 @@ static bool game_loaded = false;
 // Conserva los bytes de la ROM durante toda la sesión del juego.
 static std::vector<uint8_t> rom_buffer;
 
+// Copia propia de los descriptores. El arreglo original que entrega el core
+// puede vivir sólo durante la llamada a environment_cb.
+static std::vector<retro_memory_descriptor> memory_descriptors;
+static std::mutex memory_map_mutex;
+
 // ============================================================
 // Configuración
 // ============================================================
@@ -244,6 +270,26 @@ static bool environment_cb(
     void* data
 ) {
     switch (command) {
+        case RETRO_ENVIRONMENT_SET_MEMORY_MAPS: {
+            if (!data) {
+                return false;
+            }
+
+            const auto* memory_map =
+                static_cast<const retro_memory_map*>(data);
+
+            if (!memory_map->descriptors || memory_map->num_descriptors == 0) {
+                return false;
+            }
+
+            std::lock_guard<std::mutex> lock(memory_map_mutex);
+            memory_descriptors.assign(
+                memory_map->descriptors,
+                memory_map->descriptors + memory_map->num_descriptors
+            );
+            return true;
+        }
+
         case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: {
             if (!data) {
                 return false;
@@ -1075,6 +1121,72 @@ size_t rh_read_memory_block(
 }
 
 RH_EXPORT
+int rh_is_memory_address_mapped(uint64_t address) {
+    if (!game_loaded) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(memory_map_mutex);
+    for (const auto& descriptor : memory_descriptors) {
+        if (!descriptor.ptr || descriptor.len == 0) {
+            continue;
+        }
+        if (address >= descriptor.start &&
+            address - descriptor.start < descriptor.len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+RH_EXPORT
+size_t rh_read_memory_address(
+    uint64_t address,
+    uint8_t* destination,
+    size_t destination_size
+) {
+    if (!game_loaded || !destination || destination_size == 0) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(memory_map_mutex);
+    size_t total = 0;
+
+    while (total < destination_size) {
+        const uint64_t current = address + total;
+        const retro_memory_descriptor* match = nullptr;
+
+        for (const auto& descriptor : memory_descriptors) {
+            if (!descriptor.ptr || descriptor.len == 0) {
+                continue;
+            }
+            if (current >= descriptor.start &&
+                current - descriptor.start < descriptor.len) {
+                match = &descriptor;
+                break;
+            }
+        }
+
+        if (!match) {
+            break;
+        }
+
+        const size_t relative =
+            static_cast<size_t>(current - match->start);
+        const size_t available = match->len - relative;
+        const size_t remaining = destination_size - total;
+        const size_t count = remaining < available ? remaining : available;
+        const auto* source = static_cast<const uint8_t*>(match->ptr) +
+            match->offset + relative;
+
+        std::memcpy(destination + total, source, count);
+        total += count;
+    }
+
+    return total;
+}
+
+RH_EXPORT
 int rh_save_sram(const char* file_path) {
     if (
         !game_loaded ||
@@ -1344,6 +1456,11 @@ void rh_unload_game() {
 
     rom_buffer.clear();
 
+    {
+        std::lock_guard<std::mutex> lock(memory_map_mutex);
+        memory_descriptors.clear();
+    }
+
     reset_input_state();
     reset_frame_state();
 }
@@ -1360,6 +1477,11 @@ void rh_unload() {
     game_loaded = false;
 
     rom_buffer.clear();
+
+    {
+        std::lock_guard<std::mutex> lock(memory_map_mutex);
+        memory_descriptors.clear();
+    }
 
     if (
         core_initialized &&
