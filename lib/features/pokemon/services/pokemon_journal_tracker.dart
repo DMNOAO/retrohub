@@ -587,6 +587,7 @@ class PokemonJournalTracker {
       'seenPokemonIds': value.seenPokemonIds,
       'caughtPokemonIds': value.caughtPokemonIds,
       'memoryShift': value.memoryShift,
+      'playTimeMinutes': value.gamePlayTimeMinutes ?? playTimeMinutes(),
       'gamePlayTimeMinutes': value.gamePlayTimeMinutes,
     };
   }
