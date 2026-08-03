@@ -512,7 +512,7 @@ class PokemonJournalTracker {
       GameProgressSnapshotsCompanion(
         gameId: Value(gameId),
         savedAt: Value(DateTime.now()),
-        playTimeMinutes: Value(playTimeMinutes()),
+        playTimeMinutes: Value(value.gamePlayTimeMinutes ?? playTimeMinutes()),
         currentLocation: Value(
           PokemonDecoder.mapName(value.profile, value.currentMapId),
         ),
@@ -587,6 +587,7 @@ class PokemonJournalTracker {
       'seenPokemonIds': value.seenPokemonIds,
       'caughtPokemonIds': value.caughtPokemonIds,
       'memoryShift': value.memoryShift,
+      'gamePlayTimeMinutes': value.gamePlayTimeMinutes,
     };
   }
 }
