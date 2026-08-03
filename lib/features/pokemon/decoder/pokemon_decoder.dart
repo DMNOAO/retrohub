@@ -15,6 +15,36 @@ class PokemonDecoder {
     return out.toString().trim();
   }
 
+  /// Decodifica la tabla de caracteres occidental usada por Gen III.
+  static String decodeGen3Text(List<int> bytes) {
+    final StringBuffer out = StringBuffer();
+    for (final int value in bytes) {
+      if (value == 0xFF) break;
+      if (value == 0x00) {
+        out.write(' ');
+      } else if (value >= 0xA1 && value <= 0xAA) {
+        out.writeCharCode(0x30 + value - 0xA1);
+      } else if (value >= 0xBB && value <= 0xD4) {
+        out.writeCharCode(0x41 + value - 0xBB);
+      } else if (value >= 0xD5 && value <= 0xEE) {
+        out.writeCharCode(0x61 + value - 0xD5);
+      } else {
+        const Map<int, String> punctuation = <int, String>{
+          0xAB: '!',
+          0xAC: '?',
+          0xAD: '.',
+          0xAE: '-',
+          0xB4: "'",
+          0xB5: '♂',
+          0xB6: '♀',
+        };
+        final String? character = punctuation[value];
+        if (character != null) out.write(character);
+      }
+    }
+    return out.toString().trim();
+  }
+
   static int decodeBcd(List<int> bytes) {
     int result = 0;
     for (final byte in bytes) {
@@ -61,6 +91,11 @@ class PokemonDecoder {
   }
 
   static String mapName(PokemonGameProfile profile, int mapId) {
+    if (profile.isGen3) {
+      final String group = ((mapId >> 8) & 0xFF).toString().padLeft(2, '0');
+      final String map = (mapId & 0xFF).toString().padLeft(2, '0');
+      return 'Mapa $group:$map';
+    }
     final PokemonLocation? location = locationFor(profile, mapId);
     if (location != null) return location.name;
     if (profile.isGen2) {
