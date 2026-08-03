@@ -600,21 +600,13 @@ class _PartySprites extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: visibleIds.map((speciesId) {
-        return Container(
-          width: 30,
-          height: 30,
-          margin: const EdgeInsets.only(left: 2),
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.24),
-            shape: BoxShape.circle,
-            border: Border.all(color: accent.withValues(alpha: 0.55)),
-          ),
-          child: Image.asset(
-            _pokemonSpritePath(game, speciesId),
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.none,
-            errorBuilder: (_, __, ___) => const Icon(
+        return Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: _PokemonAvatar(
+            spritePath: _pokemonSpritePath(game, speciesId),
+            accent: accent,
+            size: 30,
+            fallback: const Icon(
               Icons.catching_pokemon,
               size: 18,
               color: Colors.white70,
@@ -622,6 +614,62 @@ class _PartySprites extends StatelessWidget {
           ),
         );
       }).toList(growable: false),
+    );
+  }
+}
+
+class _PokemonAvatar extends StatelessWidget {
+  final String spritePath;
+  final Color accent;
+  final double size;
+  final double padding;
+  final Widget fallback;
+
+  const _PokemonAvatar({
+    required this.spritePath,
+    required this.accent,
+    required this.size,
+    required this.fallback,
+    this.padding = 2,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(padding),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          center: const Alignment(-0.25, -0.3),
+          radius: 0.9,
+          colors: <Color>[
+            accent.withValues(alpha: 0.22),
+            Color.lerp(accent, Colors.black, 0.78)!,
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.58),
+          width: size >= 60 ? 2 : 1,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: size >= 60 ? 10 : 4,
+            offset: Offset(0, size >= 60 ? 4 : 2),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          spritePath,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.none,
+          errorBuilder: (_, __, ___) => Center(child: fallback),
+        ),
+      ),
     );
   }
 }
@@ -659,11 +707,12 @@ class _ExitGameDialog extends StatelessWidget {
                 height: 92,
                 iconSize: 46,
               )
-            : Image.asset(
-                _pokemonSpritePath(game, firstPokemon),
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
-                errorBuilder: (_, __, ___) => _GameArtwork(
+            : _PokemonAvatar(
+                spritePath: _pokemonSpritePath(game, firstPokemon),
+                accent: accent,
+                size: 92,
+                padding: 5,
+                fallback: _GameArtwork(
                   coverPath: coverPath,
                   accent: accent,
                   width: 92,
