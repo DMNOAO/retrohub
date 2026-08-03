@@ -302,11 +302,20 @@ class _ProgressJournal extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 12,
                 children: party.map((pokemon) {
+                  final int? currentHp = int.tryParse(
+                    pokemon['currentHp']?.toString() ?? '',
+                  );
+                  final int? maximumHp = int.tryParse(
+                    pokemon['maximumHp']?.toString() ?? '',
+                  );
+                  final String hp = currentHp != null && maximumHp != null
+                      ? ' · PS $currentHp/$maximumHp'
+                      : '';
                   return SizedBox(
                     width: width,
                     child: _PokemonTile(
                       name: pokemon['name']?.toString() ?? 'Pokémon',
-                      detail: 'Nivel ${pokemon['level'] ?? '—'}',
+                      detail: 'Nivel ${pokemon['level'] ?? '—'}$hp',
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                     ),

@@ -27,10 +27,14 @@ class _PokedexGridState extends State<PokedexGrid> {
   PokedexOrder _order = PokedexOrder.johto;
 
   bool get _isGen2 => widget.profile.region == PokemonAssetRegion.johto;
+  bool get _isGen3 => widget.profile.region == PokemonAssetRegion.hoenn;
 
   @override
   Widget build(BuildContext context) {
-    final national = List<int>.generate(_isGen2 ? 251 : 151, (index) => index + 1);
+    final national = List<int>.generate(
+      _isGen3 ? 386 : (_isGen2 ? 251 : 151),
+      (index) => index + 1,
+    );
     final ids = _isGen2 && _order == PokedexOrder.johto ? _johtoOrder : national;
     final scheme = Theme.of(context).colorScheme;
 

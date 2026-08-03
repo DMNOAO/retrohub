@@ -163,7 +163,7 @@ class PokemonJournalTracker {
         value.badgesMask >= 0 &&
         value.badgesMask <= 0xFFFF &&
         value.partySpeciesIds.length <= 6 &&
-        value.partySpeciesIds.every((id) => id >= 0 && id <= 255);
+        value.partySpeciesIds.every((id) => id >= 1 && id <= 386);
   }
 
   bool _sameCoreState(PokemonMemorySnapshot a, PokemonMemorySnapshot b) {
@@ -174,7 +174,7 @@ class PokemonJournalTracker {
         a.playerY == b.playerY &&
         a.money == b.money &&
         a.badgesMask == b.badgesMask &&
-        _sameList(a.partySpeciesIds, b.partySpeciesIds) &&
+        _sameParty(a.party, b.party) &&
         a.pokedexSeen == b.pokedexSeen &&
         a.pokedexCaught == b.pokedexCaught;
   }
@@ -183,6 +183,24 @@ class PokemonJournalTracker {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  bool _sameParty(List<PokemonPartyMember> a, List<PokemonPartyMember> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      final left = a[index];
+      final right = b[index];
+      if (left.pokedexId != right.pokedexId ||
+          left.level != right.level ||
+          left.currentHp != right.currentHp ||
+          left.maximumHp != right.maximumHp ||
+          left.status != right.status ||
+          left.nickname != right.nickname ||
+          left.isShiny != right.isShiny) {
+        return false;
+      }
     }
     return true;
   }

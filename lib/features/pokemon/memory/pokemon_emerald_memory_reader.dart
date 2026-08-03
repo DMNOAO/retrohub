@@ -21,6 +21,14 @@ final class PokemonEmeraldMemoryReader {
 
   static const int _saveBlock1Size = 0x3D88;
   static const int _saveBlock2Size = 0x0F2C;
+  static const int _partyCountOffset = 0x234;
+  static const int _partyOffset = 0x238;
+  static const int _partyMemberSize = 100;
+  static const int _pokedexOwnedOffset = 0x28;
+  static const int _pokedexSeenOffset = 0x5C;
+  static const int _pokedexBytes = 52;
+  static const int _flagsOffset = 0x1270;
+  static const int _firstBadgeFlag = 0x867;
 
   final LibretroGameController? controller;
   final LibretroBridge? bridge;
@@ -65,6 +73,14 @@ final class PokemonEmeraldMemoryReader {
 
     final int encryptionKey = _u32(saveBlock2 + 0xAC);
     final int money = _u32(saveBlock1 + 0x490) ^ encryptionKey;
+    final List<PokemonPartyMember> party = _readParty(saveBlock1);
+    final List<int> caughtPokemonIds = _readPokedexIds(
+      saveBlock2 + _pokedexOwnedOffset,
+    );
+    final List<int> seenPokemonIds = _readPokedexIds(
+      saveBlock2 + _pokedexSeenOffset,
+    );
+    final int badgesMask = _readBadgesMask(saveBlock1);
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -76,15 +92,125 @@ final class PokemonEmeraldMemoryReader {
       playerX: x,
       playerY: y,
       money: money,
-      badgesMask: 0,
-      pokedexSeen: 0,
-      pokedexCaught: 0,
-      seenPokemonIds: const <int>[],
-      caughtPokemonIds: const <int>[],
-      party: const <PokemonPartyMember>[],
+      badgesMask: badgesMask,
+      pokedexSeen: seenPokemonIds.length,
+      pokedexCaught: caughtPokemonIds.length,
+      seenPokemonIds: seenPokemonIds,
+      caughtPokemonIds: caughtPokemonIds,
+      party: party,
       gamePlayTimeMinutes: hours * 60 + minutes,
     );
   }
+
+  List<int> _readPokedexIds(int address) {
+    final List<int> bytes = _read(address, _pokedexBytes);
+    if (bytes.length != _pokedexBytes) return const <int>[];
+    final List<int> ids = <int>[];
+    for (int id = 1; id <= 386; id++) {
+      final int bit = id - 1;
+      if ((bytes[bit >> 3] & (1 << (bit & 7))) != 0) ids.add(id);
+    }
+    return ids;
+  }
+
+  int _readBadgesMask(int saveBlock1) {
+    int result = 0;
+    for (int badge = 0; badge < 8; badge++) {
+      final int flag = _firstBadgeFlag + badge;
+      final int value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+      if ((value & (1 << (flag & 7))) != 0) result |= 1 << badge;
+    }
+    return result;
+  }
+
+  List<PokemonPartyMember> _readParty(int saveBlock1) {
+    final int count = _u8(saveBlock1 + _partyCountOffset);
+    if (count < 0 || count > 6) return const <PokemonPartyMember>[];
+
+    final List<PokemonPartyMember> result = <PokemonPartyMember>[];
+    for (int index = 0; index < count; index++) {
+      final List<int> bytes = _read(
+        saveBlock1 + _partyOffset + index * _partyMemberSize,
+        _partyMemberSize,
+      );
+      final PokemonPartyMember? member = _decodePartyMember(bytes);
+      if (member == null) return const <PokemonPartyMember>[];
+      result.add(member);
+    }
+    return result;
+  }
+
+  PokemonPartyMember? _decodePartyMember(List<int> bytes) {
+    if (bytes.length != _partyMemberSize) return null;
+
+    final int personality = _littleEndian(bytes.sublist(0, 4));
+    final int originalTrainerId = _littleEndian(bytes.sublist(4, 8));
+    final int key = personality ^ originalTrainerId;
+    final List<int> decrypted = List<int>.filled(48, 0);
+    for (int offset = 0; offset < 48; offset += 4) {
+      final int word =
+          _littleEndian(bytes.sublist(32 + offset, 36 + offset)) ^ key;
+      for (int byte = 0; byte < 4; byte++) {
+        decrypted[offset + byte] = (word >> (byte * 8)) & 0xFF;
+      }
+    }
+
+    int checksum = 0;
+    for (int offset = 0; offset < decrypted.length; offset += 2) {
+      checksum = (checksum + _littleEndian(decrypted.sublist(offset, offset + 2))) & 0xFFFF;
+    }
+    final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
+    if (checksum != storedChecksum) return null;
+
+    final int growthPosition = _growthPositions[personality % 24];
+    final int growthOffset = growthPosition * 12;
+    final int internalSpeciesId =
+        _littleEndian(decrypted.sublist(growthOffset, growthOffset + 2));
+    final int pokedexId = emeraldNationalDexId(internalSpeciesId);
+    if (pokedexId < 1 || pokedexId > 386) return null;
+
+    final String nickname =
+        PokemonDecoder.decodeGen3Text(bytes.sublist(8, 18));
+    final int level = bytes[84];
+    if (level < 1 || level > 100) return null;
+
+    final int trainerHigh = (originalTrainerId >> 16) & 0xFFFF;
+    final int trainerLow = originalTrainerId & 0xFFFF;
+    final int personalityHigh = (personality >> 16) & 0xFFFF;
+    final int personalityLow = personality & 0xFFFF;
+    final bool isShiny =
+        (trainerHigh ^ trainerLow ^ personalityHigh ^ personalityLow) < 8;
+
+    return PokemonPartyMember(
+      internalSpeciesId: internalSpeciesId,
+      pokedexId: pokedexId,
+      name: PokemonDecoder.pokemonName(pokedexId),
+      nickname: nickname.isEmpty ? null : nickname,
+      level: level,
+      isShiny: isShiny,
+      status: _littleEndian(bytes.sublist(80, 84)),
+      currentHp: _littleEndian(bytes.sublist(86, 88)),
+      maximumHp: _littleEndian(bytes.sublist(88, 90)),
+    );
+  }
+
+  static int emeraldNationalDexId(int internalSpeciesId) {
+    if (internalSpeciesId >= 1 && internalSpeciesId <= 251) {
+      return internalSpeciesId;
+    }
+    // Emerald conserva 25 huecos internos entre Celebi y Treecko.
+    if (internalSpeciesId >= 277 && internalSpeciesId <= 411) {
+      return internalSpeciesId - 25;
+    }
+    return 0;
+  }
+
+  static const List<int> _growthPositions = <int>[
+    0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3,
+  ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {
     final int? englishSaveBlock1 =

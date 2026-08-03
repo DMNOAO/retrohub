@@ -7,8 +7,12 @@ class PokemonPartyMember {
   final String name;
   final int level;
   final bool isShiny;
-  const PokemonPartyMember({required this.internalSpeciesId,required this.pokedexId,required this.name,required this.level,this.isShiny=false});
-  Map<String,dynamic> toJson()=>{'id':pokedexId,'internalId':internalSpeciesId,'name':name,'level':level,'isShiny':isShiny};
+  final String? nickname;
+  final int? currentHp;
+  final int? maximumHp;
+  final int? status;
+  const PokemonPartyMember({required this.internalSpeciesId,required this.pokedexId,required this.name,required this.level,this.isShiny=false,this.nickname,this.currentHp,this.maximumHp,this.status});
+  Map<String,dynamic> toJson()=>{'id':pokedexId,'internalId':internalSpeciesId,'name':name,'level':level,'isShiny':isShiny,'nickname':nickname,'currentHp':currentHp,'maximumHp':maximumHp,'status':status};
 }
 
 class PokemonMemorySnapshot {
