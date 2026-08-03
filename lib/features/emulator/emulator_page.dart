@@ -265,7 +265,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     setState(() => _isClosing = true);
 
     await _gameController.saveSram();
-    await _pokemonJournalTracker?.stop();
+    final tracker = _pokemonJournalTracker;
+    if (tracker != null) await tracker.stop();
     await _logSessionClosed();
 
     if (context.mounted) {
