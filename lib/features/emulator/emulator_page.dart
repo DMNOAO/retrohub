@@ -49,7 +49,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   late final AppDatabase _database;
   late final JournalEventService _journalEventService;
-  late final PokemonJournalTracker _pokemonJournalTracker;
+  PokemonJournalTracker? _pokemonJournalTracker;
   late final DateTime _sessionStartedAt;
   bool _sessionClosedLogged = false;
   bool _sessionPersisted = false;
@@ -74,20 +74,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
       gameId: game.id,
     );
 
-    _pokemonJournalTracker = PokemonJournalTracker(
-      database: _database,
-      gameId: game.id,
-      gameTitle: game.title,
-      romPath: game.romPath,
-      controller: _gameController,
-      playTimeMinutes: () => _currentPlayTimeMinutes,
-    );
-    _pokemonJournalTracker.start();
-    unawaited(_refreshHeaderParty());
-    _headerRefreshTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(_refreshHeaderParty()),
-    );
+    if (!CoreLoader.isGbaRom(game.romPath)) {
+      _pokemonJournalTracker = PokemonJournalTracker(
+        database: _database,
+        gameId: game.id,
+        gameTitle: game.title,
+        romPath: game.romPath,
+        controller: _gameController,
+        playTimeMinutes: () => _currentPlayTimeMinutes,
+      )..start();
+      unawaited(_refreshHeaderParty());
+      _headerRefreshTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => unawaited(_refreshHeaderParty()),
+      );
+    }
 
     unawaited(
       _journalEventService.logGameStarted(
@@ -264,7 +265,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     setState(() => _isClosing = true);
 
     await _gameController.saveSram();
-    await _pokemonJournalTracker.stop();
+    await _pokemonJournalTracker?.stop();
     await _logSessionClosed();
 
     if (context.mounted) {
@@ -334,7 +335,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   void dispose() {
     _headerRefreshTimer?.cancel();
     _gameController.resetInput();
-    unawaited(_pokemonJournalTracker.stop());
+    final tracker = _pokemonJournalTracker;
+    if (tracker != null) unawaited(tracker.stop());
     unawaited(_logSessionClosed());
     super.dispose();
   }
