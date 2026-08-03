@@ -237,7 +237,7 @@ class _ProgressJournal extends StatelessWidget {
               childAspectRatio: columns == 1 ? 4.2 : 3.2,
               children: [
                 _InfoCard(icon: Icons.place_outlined, title: 'Ubicación actual', value: snapshot.currentLocation ?? 'Sin ubicación detectada'),
-                _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(game.playTimeSeconds)),
+                _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(snapshot.playTimeMinutes * 60)),
                 _InfoCard(icon: Icons.catching_pokemon, title: 'Pokédex', value: '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados'),
                 _InfoCard(icon: Icons.emoji_events_outlined, title: 'Liga Pokémon', value: '${snapshot.leagueWins} victorias'),
                 _InfoCard(
