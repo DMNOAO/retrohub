@@ -1,6 +1,7 @@
 import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
+import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 
 /// Primera lectura segura de Pokémon Emerald.
@@ -21,16 +22,24 @@ final class PokemonEmeraldMemoryReader {
   static const int _saveBlock1Size = 0x3D88;
   static const int _saveBlock2Size = 0x0F2C;
 
-  final LibretroGameController controller;
+  final LibretroGameController? controller;
+  final LibretroBridge? bridge;
   final PokemonGameProfile profile;
 
   const PokemonEmeraldMemoryReader({
-    required this.controller,
+    required LibretroGameController this.controller,
     required this.profile,
-  });
+  }) : bridge = null;
+
+  const PokemonEmeraldMemoryReader.fromBridge({
+    required LibretroBridge this.bridge,
+    required this.profile,
+  }) : controller = null;
 
   PokemonMemorySnapshot? capture() {
-    if (!controller.isAttached ||
+    final bool memoryAvailable =
+        controller?.isAttached ?? (bridge?.isGameLoaded ?? false);
+    if (!memoryAvailable ||
         profile.version != PokemonGameVersion.emerald) {
       return null;
     }
@@ -171,8 +180,20 @@ final class PokemonEmeraldMemoryReader {
     return address <= _ewramEnd - size;
   }
 
-  List<int> _read(int address, int length) =>
-      controller.readMemoryAddress(address: address, length: length);
+  List<int> _read(int address, int length) {
+    final LibretroGameController? activeController = controller;
+    if (activeController != null) {
+      return activeController.readMemoryAddress(
+        address: address,
+        length: length,
+      );
+    }
+    return bridge?.readMemoryAddress(
+          address: address,
+          length: length,
+        ) ??
+        const <int>[];
+  }
 
   int _u8(int address) {
     final List<int> bytes = _read(address, 1);
