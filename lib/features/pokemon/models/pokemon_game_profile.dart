@@ -1,6 +1,6 @@
 import '../memory/pokemon_addresses.dart';
 
-enum PokemonGeneration { gen1, gen2, unsupported }
+enum PokemonGeneration { gen1, gen2, gen3, unsupported }
 
 enum PokemonGameVersion {
   redBlue,
@@ -8,6 +8,11 @@ enum PokemonGameVersion {
   gold,
   silver,
   crystal,
+  ruby,
+  sapphire,
+  emerald,
+  fireRed,
+  leafGreen,
   unsupported,
 }
 
@@ -28,6 +33,7 @@ class PokemonGameProfile {
 
   bool get isGen1 => generation == PokemonGeneration.gen1;
   bool get isGen2 => generation == PokemonGeneration.gen2;
+  bool get isGen3 => generation == PokemonGeneration.gen3;
 
   /// Identifica la versión usando primero el título conservado en la
   /// biblioteca. La ruta queda como respaldo para instalaciones antiguas
@@ -37,6 +43,59 @@ class PokemonGameProfile {
     required String romPath,
   }) {
     final normalized = _normalize('$gameTitle $romPath');
+
+    // Gen III debe resolverse antes que Gen I: "FireRed" también contiene
+    // "red" y, sin este orden, podía activar por error el mapa de memoria
+    // de Pokémon Red/Blue sobre una ROM de GBA.
+    if (normalized.contains('firered') ||
+        normalized.contains('fire red') ||
+        normalized.contains('rojo fuego')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.fireRed,
+        generation: PokemonGeneration.gen3,
+        displayName: 'Pokémon FireRed',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('leafgreen') ||
+        normalized.contains('leaf green') ||
+        normalized.contains('verde hoja')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.leafGreen,
+        generation: PokemonGeneration.gen3,
+        displayName: 'Pokémon LeafGreen',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('emerald') || normalized.contains('esmeralda')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.emerald,
+        generation: PokemonGeneration.gen3,
+        displayName: 'Pokémon Emerald',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('sapphire') || normalized.contains('zafiro')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.sapphire,
+        generation: PokemonGeneration.gen3,
+        displayName: 'Pokémon Sapphire',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('ruby') || normalized.contains('rubi')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.ruby,
+        generation: PokemonGeneration.gen3,
+        displayName: 'Pokémon Ruby',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
 
     if (normalized.contains('crystal') || normalized.contains('cristal')) {
       return const PokemonGameProfile(
