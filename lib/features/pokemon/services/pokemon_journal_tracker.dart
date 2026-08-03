@@ -574,8 +574,24 @@ class PokemonJournalTracker {
       if (rawMetadata == null || rawMetadata.trim().isEmpty) continue;
       try {
         final decoded = jsonDecode(rawMetadata);
-        if (decoded is Map && decoded['badgeIndex'] is num) {
-          recordedBadgeIndexes.add((decoded['badgeIndex'] as num).toInt());
+        if (decoded is! Map || decoded['badgeIndex'] is! num) continue;
+
+        final badgeIndex = (decoded['badgeIndex'] as num).toInt();
+        recordedBadgeIndexes.add(badgeIndex);
+
+        // Los eventos recuperados por versiones anteriores pueden conservar
+        // una ruta nula o antigua. Migra el registro existente a la ruta
+        // canónica sin alterar su fecha ni crear una segunda victoria.
+        final leader =
+            GymLeaderAssetResolver.forBadge(current.profile, badgeIndex);
+        if (leader != null && decoded['spritePath'] != leader.spritePath) {
+          final updatedMetadata = Map<String, dynamic>.from(decoded);
+          updatedMetadata['leaderName'] = leader.name;
+          updatedMetadata['spritePath'] = leader.spritePath;
+          await database.updateProgressEventMetadata(
+            event.id,
+            jsonEncode(updatedMetadata),
+          );
         }
       } catch (_) {}
     }
