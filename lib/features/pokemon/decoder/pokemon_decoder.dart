@@ -85,6 +85,11 @@ class PokemonDecoder {
         return _silverLocations[mapId];
       case PokemonGameVersion.crystal:
         return generatedCrystalLocations[mapId];
+      case PokemonGameVersion.ruby:
+      case PokemonGameVersion.sapphire:
+      case PokemonGameVersion.emerald:
+      case PokemonGameVersion.fireRed:
+      case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
         return null;
     }
