@@ -12,6 +12,7 @@ import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_gym_leader.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import '../models/emerald_trainer.dart';
+import '../models/ruby_sapphire_trainer.dart';
 import '../models/trainer_class.dart';
 
 class PokemonJournalTracker {
@@ -329,7 +330,9 @@ class PokemonJournalTracker {
     PokemonMemorySnapshot previous,
     PokemonMemorySnapshot current,
   ) async {
-    if (current.profile.version == PokemonGameVersion.emerald) {
+    if (current.profile.version == PokemonGameVersion.emerald ||
+        current.profile.version == PokemonGameVersion.ruby ||
+        current.profile.version == PokemonGameVersion.sapphire) {
       final Set<int> previousIds = previous.defeatedTrainerIds.toSet();
       final List<int> newTrainerIds = current.defeatedTrainerIds
           .where((id) => !previousIds.contains(id))
@@ -342,7 +345,7 @@ class PokemonJournalTracker {
         _pendingTrainerId = null;
         _pendingBattleResult = null;
         for (final int trainerId in newTrainerIds) {
-          await _recordEmeraldTrainerVictory(
+          await _recordGen3TrainerVictory(
             current: current,
             trainerId: trainerId,
           );
@@ -392,13 +395,13 @@ class PokemonJournalTracker {
     final int? result = _pendingBattleResult ?? current.battleResultRaw;
     _pendingBattleResult = null;
     if (result == null) return;
-    final bool won = current.profile.version == PokemonGameVersion.emerald
+    final bool won = current.profile.isGen3
         ? result == 1
         : (result & 0x3F) == 0;
     if (!won) return;
 
-    if (current.profile.version == PokemonGameVersion.emerald) {
-      await _recordEmeraldTrainerVictory(
+    if (current.profile.isGen3) {
+      await _recordGen3TrainerVictory(
         current: current,
         trainerId: trainerId,
       );
@@ -493,14 +496,16 @@ class PokemonJournalTracker {
     await _rememberLastDefeatedTrainer(info?.name ?? 'Entrenador', current);
   }
 
-  Future<void> _recordEmeraldTrainerVictory({
+  Future<void> _recordGen3TrainerVictory({
     required PokemonMemorySnapshot current,
     required int? trainerId,
   }) async {
     if (trainerId == null || trainerId <= 0) return;
 
     final EmeraldTrainerInfo info =
-        EmeraldTrainerResolver.forTrainerId(trainerId);
+        current.profile.version == PokemonGameVersion.emerald
+            ? EmeraldTrainerResolver.forTrainerId(trainerId)
+            : RubySapphireTrainerResolver.forTrainerId(trainerId);
     if (info.kind == EmeraldTrainerKind.gymLeader) {
       // La primera victoria ya se registra al detectar la nueva medalla.
       // Así se conserva un solo evento con el orden combate -> medalla.
@@ -521,7 +526,7 @@ class PokemonJournalTracker {
       EmeraldTrainerKind.champion => (
           'champion_defeated',
           'Se convirtió en Campeón Pokémon',
-          'Derrotó a Wallace, Campeón de la Liga de Hoenn.',
+          'Derrotó al Campeón de la Liga de Hoenn.',
         ),
       EmeraldTrainerKind.frontierBrain => (
           'trainer_defeated',
@@ -531,7 +536,9 @@ class PokemonJournalTracker {
       EmeraldTrainerKind.specialTrainer => (
           'trainer_defeated',
           'Derrotó a ${info.name}',
-          'Superó uno de los combates especiales de Pokémon Esmeralda.',
+          current.profile.version == PokemonGameVersion.emerald
+              ? 'Superó uno de los combates especiales de Pokémon Esmeralda.'
+              : 'Superó uno de los combates especiales de Pokémon Ruby/Sapphire.',
         ),
       EmeraldTrainerKind.regular => (
           'trainer_defeated',
