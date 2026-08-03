@@ -525,6 +525,11 @@ class PokemonJournalTracker {
           'Derrotó a ${info.name}',
           'Venció a un Cerebro de la Frontera.',
         ),
+      EmeraldTrainerKind.specialTrainer => (
+          'trainer_defeated',
+          'Derrotó a ${info.name}',
+          'Superó uno de los combates especiales de Pokémon Esmeralda.',
+        ),
       EmeraldTrainerKind.regular => (
           'trainer_defeated',
           'Ganó contra ${info.name}',
