@@ -13,13 +13,63 @@ void main() {
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(252), 0);
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(276), 0);
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(277), 252);
-      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(411), 386);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(364), 287);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(392), 280);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(411), 358);
     });
 
     test('contains all Gen III species names', () {
       expect(PokemonDecoder.pokemonName(252), 'Treecko');
       expect(PokemonDecoder.pokemonName(386), 'Deoxys');
     });
+  });
+
+  group('Equipo de Pokémon Emerald', () {
+    test('usa las 24 posiciones oficiales de la subestructura Growth', () {
+      const expected = <int>[
+        0, 0, 0, 0, 0, 0,
+        1, 1, 2, 3, 2, 3,
+        1, 1, 2, 3, 2, 3,
+        1, 1, 2, 3, 2, 3,
+      ];
+
+      for (int personality = 0; personality < 24; personality++) {
+        expect(
+          PokemonEmeraldMemoryReader.growthSubstructurePosition(personality),
+          expected[personality],
+          reason: 'permutación $personality',
+        );
+      }
+    });
+
+    for (final pokemon in <(String, int, int, int)>[
+      // nombre, personality % 24, especie interna, número nacional
+      ('Treecko', 0, 277, 252),
+      ('Ralts', 8, 392, 280),
+      ('Slakoth', 9, 364, 287),
+    ]) {
+      test('decodifica ${pokemon.$1} desde su permutación', () {
+        final data = List<int>.filled(48, 0);
+        final growthPosition =
+            PokemonEmeraldMemoryReader.growthSubstructurePosition(pokemon.$2);
+        final offset = growthPosition * 12;
+        data[offset] = pokemon.$3 & 0xFF;
+        data[offset + 1] = pokemon.$3 >> 8;
+
+        final internalId =
+            PokemonEmeraldMemoryReader.internalSpeciesIdFromDecryptedData(
+          personality: pokemon.$2,
+          decryptedData: data,
+        );
+
+        expect(internalId, pokemon.$3);
+        expect(
+          PokemonEmeraldMemoryReader.emeraldNationalDexId(internalId),
+          pokemon.$4,
+        );
+        expect(PokemonDecoder.pokemonName(pokemon.$4), pokemon.$1);
+      });
+    }
   });
 
   group('Pokédex Nacional de Pokémon Emerald', () {

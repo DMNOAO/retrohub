@@ -32,6 +32,21 @@ void main() {
       EmeraldTrainerResolver.forTrainerId(811).kind,
       EmeraldTrainerKind.frontierBrain,
     );
+    expect(
+      EmeraldTrainerResolver.forTrainerId(818).name,
+      'Brandon',
+    );
+    expect(
+      EmeraldTrainerResolver.forTrainerId(818).kind,
+      EmeraldTrainerKind.frontierBrain,
+    );
+  });
+
+  test('distingue a Steven como combate especial', () {
+    final trainer = EmeraldTrainerResolver.forTrainerId(804);
+    expect(trainer.name, 'Steven');
+    expect(trainer.kind, EmeraldTrainerKind.specialTrainer);
+    expect(trainer.spritePath, contains('steven_hoenn.png'));
   });
 
   test('resuelve el Cazabichos Rick de Ruta 102', () {
@@ -41,6 +56,52 @@ void main() {
     expect(
       trainer.spritePath,
       'assets/sprites/characters/trainers/gba/Hoenn/bug_catcher.png',
+    );
+  });
+
+  test('usa los sprites reales de los reclutas Aqua y Magma', () {
+    final aquaMale = EmeraldTrainerResolver.forTrainerId(2);
+    final aquaFemale = EmeraldTrainerResolver.forTrainerId(14);
+    final magmaMale = EmeraldTrainerResolver.forTrainerId(22);
+
+    expect(aquaMale.name, 'Recluta del Equipo Aqua');
+    expect(
+      aquaMale.spritePath,
+      'assets/sprites/characters/villains/aqua/grunt_male.png',
+    );
+    expect(
+      aquaFemale.spritePath,
+      'assets/sprites/characters/villains/aqua/grunt_female.png',
+    );
+    expect(magmaMale.name, 'Recluta del Equipo Magma');
+    expect(
+      magmaMale.spritePath,
+      'assets/sprites/characters/villains/magma/grunt_male.png',
+    );
+  });
+
+  test('usa los nombres reales de sprites con variantes de género', () {
+    final schoolKidFemale = EmeraldTrainerResolver.forTrainerId(280);
+    final schoolKidMale = EmeraldTrainerResolver.forTrainerId(273);
+    final coolTrainerFemale = EmeraldTrainerResolver.forTrainerId(91);
+    final swimmerMale = EmeraldTrainerResolver.forTrainerId(15);
+
+    expect(schoolKidFemale.name, 'Escolar Karen');
+    expect(
+      schoolKidFemale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/school_kid_female.png',
+    );
+    expect(
+      schoolKidMale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/school_kid_male.png',
+    );
+    expect(
+      coolTrainerFemale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/cooltrainer_female.png',
+    );
+    expect(
+      swimmerMale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/swimmer_male.png',
     );
   });
 

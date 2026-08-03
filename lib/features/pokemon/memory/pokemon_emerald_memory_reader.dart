@@ -254,10 +254,10 @@ final class PokemonEmeraldMemoryReader {
     final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
     if (checksum != storedChecksum) return null;
 
-    final int growthPosition = _growthPositions[personality % 24];
-    final int growthOffset = growthPosition * 12;
-    final int internalSpeciesId =
-        _littleEndian(decrypted.sublist(growthOffset, growthOffset + 2));
+    final int internalSpeciesId = internalSpeciesIdFromDecryptedData(
+      personality: personality,
+      decryptedData: decrypted,
+    );
     final int pokedexId = emeraldNationalDexId(internalSpeciesId);
     if (pokedexId < 1 || pokedexId > 386) return null;
 
@@ -290,18 +290,60 @@ final class PokemonEmeraldMemoryReader {
     if (internalSpeciesId >= 1 && internalSpeciesId <= 251) {
       return internalSpeciesId;
     }
-    // Emerald conserva 25 huecos internos entre Celebi y Treecko.
     if (internalSpeciesId >= 277 && internalSpeciesId <= 411) {
-      return internalSpeciesId - 25;
+      return _hoennInternalToNational[internalSpeciesId - 277];
     }
     return 0;
   }
 
+  // Pokémon Emerald numera internamente las especies de Hoenn según su
+  // propio orden, no según la Pokédex Nacional. Índice 0 = SPECIES_TREECKO
+  // (277), último índice = SPECIES_CHIMECHO (411).
+  static const List<int> _hoennInternalToNational = <int>[
+    252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263,
+    264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+    290, 291, 292, 276, 277, 285, 286, 327, 278, 279, 283, 284,
+    320, 321, 300, 301, 352, 343, 344, 299, 324, 302, 339, 340,
+    370, 341, 342, 349, 350, 318, 319, 328, 329, 330, 296, 297,
+    309, 310, 322, 323, 363, 364, 365, 331, 332, 361, 362, 337,
+    338, 298, 325, 326, 311, 312, 303, 307, 308, 333, 334, 360,
+    355, 356, 315, 287, 288, 289, 316, 317, 357, 293, 294, 295,
+    366, 367, 368, 359, 353, 354, 336, 335, 369, 304, 305, 306,
+    351, 313, 314, 345, 346, 347, 348, 280, 281, 282, 371, 372,
+    373, 374, 375, 376, 377, 378, 379, 382, 383, 384, 380, 381,
+    385, 386, 358,
+  ];
+
+  /// Posición de la subestructura Growth dentro de los cuatro bloques
+  /// permutados de un Pokémon de Gen III.
+  ///
+  /// El orden depende de personality % 24. No se agrupa en seis posiciones
+  /// consecutivas: a partir de AGEM las posiciones 1, 2 y 3 se intercalan.
+  static int growthSubstructurePosition(int personality) {
+    return _growthPositions[personality % 24];
+  }
+
+  /// Extrae la especie interna desde los datos ya descifrados y todavía
+  /// permutados. Se expone para probar casos reales con distintas
+  /// personalidades sin depender del puente nativo.
+  static int internalSpeciesIdFromDecryptedData({
+    required int personality,
+    required List<int> decryptedData,
+  }) {
+    if (decryptedData.length != 48) return 0;
+    final int offset = growthSubstructurePosition(personality) * 12;
+    return decryptedData[offset] | (decryptedData[offset + 1] << 8);
+  }
+
   static const List<int> _growthPositions = <int>[
+    // GAEM, GAME, GEAM, GEMA, GMAE, GMEA
     0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3,
+    // AGEM, AGME, AEGM, AEMG, AMGE, AMEG
+    1, 1, 2, 3, 2, 3,
+    // EGAM, EGMA, EAGM, EAMG, EMGA, EMAG
+    1, 1, 2, 3, 2, 3,
+    // MGAE, MGEA, MAGE, MAEG, MEGA, MEAG
+    1, 1, 2, 3, 2, 3,
   ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {

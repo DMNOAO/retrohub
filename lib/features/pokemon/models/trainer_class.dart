@@ -82,7 +82,7 @@ class TrainerClassResolver {
     0x3D: TrainerClassInfo('Gemelas', 'assets/sprites/characters/trainers/gbc/twins.png'),
     0x3E: TrainerClassInfo('Aficionada Pokémon (F)', 'assets/sprites/characters/trainers/gbc/pokefan_female.png'),
     0x3F: TrainerClassInfo('Red'),
-    0x40: TrainerClassInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/Azul_OPC.png'),
+    0x40: TrainerClassInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/blue_kanto.png'),
     0x41: TrainerClassInfo('Oficial', 'assets/sprites/characters/trainers/gbc/officer.png'),
     0x42: TrainerClassInfo('Rocket (F)'),
     0x43: TrainerClassInfo('Eusine'),

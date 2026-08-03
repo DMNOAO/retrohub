@@ -27,12 +27,24 @@ class GymLeaderAssetResolver {
       case PokemonGameVersion.ruby:
       case PokemonGameVersion.sapphire:
       case PokemonGameVersion.emerald:
+        return badgeIndex < _hoennGba.length ? _hoennGba[badgeIndex] : null;
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
         return null;
     }
   }
+
+  static const List<GymLeaderInfo> _hoennGba = <GymLeaderInfo>[
+    GymLeaderInfo('Roxanne', 'assets/sprites/characters/gym_leaders/gba/Hoenn/roxanne_hoenn.png'),
+    GymLeaderInfo('Brawly', 'assets/sprites/characters/gym_leaders/gba/Hoenn/brawly_hoenn.png'),
+    GymLeaderInfo('Wattson', 'assets/sprites/characters/gym_leaders/gba/Hoenn/wattson_hoenn.png'),
+    GymLeaderInfo('Flannery', 'assets/sprites/characters/gym_leaders/gba/Hoenn/flannery_hoenn.png'),
+    GymLeaderInfo('Norman', 'assets/sprites/characters/gym_leaders/gba/Hoenn/norman_hoenn.png'),
+    GymLeaderInfo('Winona', 'assets/sprites/characters/gym_leaders/gba/Hoenn/winona_hoenn.png'),
+    GymLeaderInfo('Tate y Liza', 'assets/sprites/characters/gym_leaders/gba/Hoenn/tate_liza_hoenn.png'),
+    GymLeaderInfo('Juan', 'assets/sprites/characters/gym_leaders/gba/Hoenn/juan_hoenn.png'),
+  ];
 
   static const List<GymLeaderInfo> _kantoGb = <GymLeaderInfo>[
     GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/gb/brock_kanto.png'),
@@ -46,24 +58,24 @@ class GymLeaderAssetResolver {
   ];
 
   static const List<GymLeaderInfo> _johtoGbc = <GymLeaderInfo>[
-    GymLeaderInfo('Pegaso', 'assets/sprites/characters/gym_leaders/gbc/Pegaso_OPC.png'),
-    GymLeaderInfo('Antón', 'assets/sprites/characters/gym_leaders/gbc/Antón_OPC.png'),
-    GymLeaderInfo('Blanca', 'assets/sprites/characters/gym_leaders/gbc/Blanca_OPC.png'),
-    GymLeaderInfo('Morti', 'assets/sprites/characters/gym_leaders/gbc/Morti_OPC.png'),
-    GymLeaderInfo('Aníbal', 'assets/sprites/characters/gym_leaders/gbc/Aníbal_OPC.png'),
-    GymLeaderInfo('Yasmina', 'assets/sprites/characters/gym_leaders/gbc/Yasmina_OPC.png'),
-    GymLeaderInfo('Fredo', 'assets/sprites/characters/gym_leaders/gbc/Fredo_OPC.png'),
-    GymLeaderInfo('Débora', 'assets/sprites/characters/gym_leaders/gbc/Débora_OPC.png'),
+    GymLeaderInfo('Pegaso', 'assets/sprites/characters/gym_leaders/gbc/falkner_johto.png'),
+    GymLeaderInfo('Antón', 'assets/sprites/characters/gym_leaders/gbc/bugsy_johto.png'),
+    GymLeaderInfo('Blanca', 'assets/sprites/characters/gym_leaders/gbc/whitney_johto.png'),
+    GymLeaderInfo('Morti', 'assets/sprites/characters/gym_leaders/gbc/morty_johto.png'),
+    GymLeaderInfo('Aníbal', 'assets/sprites/characters/gym_leaders/gbc/chuck_johto.png'),
+    GymLeaderInfo('Yasmina', 'assets/sprites/characters/gym_leaders/gbc/jasmine_johto.png'),
+    GymLeaderInfo('Fredo', 'assets/sprites/characters/gym_leaders/gbc/pryce_johto.png'),
+    GymLeaderInfo('Débora', 'assets/sprites/characters/gym_leaders/gbc/clair_johto.png'),
   ];
 
   static const List<GymLeaderInfo> _kantoGbc = <GymLeaderInfo>[
-    GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/gbc/Brock_OPC.png'),
-    GymLeaderInfo('Misty', 'assets/sprites/characters/gym_leaders/gbc/Misty_OPC.png'),
-    GymLeaderInfo('Lt. Surge', 'assets/sprites/characters/gym_leaders/gbc/Lt._Surge_OPC.png'),
-    GymLeaderInfo('Erika', 'assets/sprites/characters/gym_leaders/gbc/Erika_OPC.png'),
-    GymLeaderInfo('Janine', 'assets/sprites/characters/gym_leaders/gbc/Sachiko_OPC.png'),
-    GymLeaderInfo('Sabrina', 'assets/sprites/characters/gym_leaders/gbc/Sabrina_OPC.png'),
-    GymLeaderInfo('Blaine', 'assets/sprites/characters/gym_leaders/gbc/Blaine_OPC.png'),
-    GymLeaderInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/Azul_OPC.png'),
+    GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/gbc/brock_kanto_gsc.png'),
+    GymLeaderInfo('Misty', 'assets/sprites/characters/gym_leaders/gbc/misty_kanto_gsc.png'),
+    GymLeaderInfo('Lt. Surge', 'assets/sprites/characters/gym_leaders/gbc/lt_surge_kanto_gsc.png'),
+    GymLeaderInfo('Erika', 'assets/sprites/characters/gym_leaders/gbc/erika_kanto_gsc.png'),
+    GymLeaderInfo('Janine', 'assets/sprites/characters/gym_leaders/gbc/janine_kanto.png'),
+    GymLeaderInfo('Sabrina', 'assets/sprites/characters/gym_leaders/gbc/sabrina_kanto_gsc.png'),
+    GymLeaderInfo('Blaine', 'assets/sprites/characters/gym_leaders/gbc/blaine_kanto_gsc.png'),
+    GymLeaderInfo('Blue', 'assets/sprites/characters/gym_leaders/gbc/blue_kanto.png'),
   ];
 }

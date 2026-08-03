@@ -30,6 +30,7 @@ class PokemonJournalTracker {
   PokemonPartyMember? _lastCapturedPokemon;
   String? _lastDefeatedTrainer;
   bool _persistentStateRestored = false;
+  bool _gymLeaderEventsRepaired = false;
   bool _busy = false;
 
   // Estado transitorio de combate (Fase 4.2/4.3): se recuerda contra qué
@@ -101,6 +102,8 @@ class PokemonJournalTracker {
       ).capture();
 
       if (current == null || !_isPlausible(current)) return;
+
+      await _ensureEmeraldGymLeaderEvents(current);
 
       final PokemonMemorySnapshot? previousRaw = _lastRawSnapshot;
       _lastRawSnapshot = current;
@@ -525,6 +528,11 @@ class PokemonJournalTracker {
           'Derrotó a ${info.name}',
           'Venció a un Cerebro de la Frontera.',
         ),
+      EmeraldTrainerKind.specialTrainer => (
+          'trainer_defeated',
+          'Derrotó a ${info.name}',
+          'Superó uno de los combates especiales de Pokémon Esmeralda.',
+        ),
       EmeraldTrainerKind.regular => (
           'trainer_defeated',
           'Ganó contra ${info.name}',
@@ -547,6 +555,69 @@ class PokemonJournalTracker {
       },
     );
     await _rememberLastDefeatedTrainer(info.name, current);
+  }
+
+  Future<void> _ensureEmeraldGymLeaderEvents(
+    PokemonMemorySnapshot current,
+  ) async {
+    if (_gymLeaderEventsRepaired ||
+        current.profile.version != PokemonGameVersion.emerald) {
+      return;
+    }
+    _gymLeaderEventsRepaired = true;
+
+    final events = await database.getProgressEventsByGame(gameId);
+    final recordedBadgeIndexes = <int>{};
+    for (final event in events) {
+      if (event.eventType != 'gym_leader_defeated') continue;
+      final rawMetadata = event.metadataJson;
+      if (rawMetadata == null || rawMetadata.trim().isEmpty) continue;
+      try {
+        final decoded = jsonDecode(rawMetadata);
+        if (decoded is! Map || decoded['badgeIndex'] is! num) continue;
+
+        final badgeIndex = (decoded['badgeIndex'] as num).toInt();
+        recordedBadgeIndexes.add(badgeIndex);
+
+        // Los eventos recuperados por versiones anteriores pueden conservar
+        // una ruta nula o antigua. Migra el registro existente a la ruta
+        // canónica sin alterar su fecha ni crear una segunda victoria.
+        final leader =
+            GymLeaderAssetResolver.forBadge(current.profile, badgeIndex);
+        if (leader != null && decoded['spritePath'] != leader.spritePath) {
+          final updatedMetadata = Map<String, dynamic>.from(decoded);
+          updatedMetadata['leaderName'] = leader.name;
+          updatedMetadata['spritePath'] = leader.spritePath;
+          await database.updateProgressEventMetadata(
+            event.id,
+            jsonEncode(updatedMetadata),
+          );
+        }
+      } catch (_) {}
+    }
+
+    for (var index = 0; index < 8; index++) {
+      if ((current.badgesMask & (1 << index)) == 0 ||
+          recordedBadgeIndexes.contains(index)) {
+        continue;
+      }
+      final leader = GymLeaderAssetResolver.forBadge(current.profile, index);
+      if (leader == null) continue;
+
+      _lastDefeatedTrainer = leader.name;
+      await _insertEvent(
+        type: 'gym_leader_defeated',
+        title: 'Derrotó a ${leader.name}',
+        description: 'Venció al líder de gimnasio ${leader.name}.',
+        metadata: <String, dynamic>{
+          ..._metadata(current),
+          'leaderName': leader.name,
+          'spritePath': leader.spritePath,
+          'badgeIndex': index,
+          'recoveredFromBadge': true,
+        },
+      );
+    }
   }
 
   Future<void> _restorePersistentState() async {
