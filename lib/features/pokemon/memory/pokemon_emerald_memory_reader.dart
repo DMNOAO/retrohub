@@ -32,6 +32,8 @@ final class PokemonEmeraldMemoryReader {
   static const int _nationalDexMagicOffset = 0x1A;
   static const int _nationalDexVarOffset = 0x1428;
   static const int _nationalDexFlag = 0x896;
+  static const int _trainerFlagStart = 0x500;
+  static const int _lastTrainerId = 854;
 
   // Variables de batalla de Pokémon Emerald (pret/pokeemerald, revisión
   // inglesa). A diferencia de Gen I/II, BATTLE_TYPE_TRAINER es un bit de
@@ -98,6 +100,7 @@ final class PokemonEmeraldMemoryReader {
       nationalDexFlagSet: _readFlag(saveBlock1, _nationalDexFlag),
     );
     final _EmeraldBattleState? battle = _readBattleState();
+    final List<int> defeatedTrainerIds = _readDefeatedTrainerIds(saveBlock1);
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -120,7 +123,35 @@ final class PokemonEmeraldMemoryReader {
       battleState: battle?.state,
       otherTrainerId: battle?.trainerId,
       battleResultRaw: battle?.outcome,
+      defeatedTrainerIds: defeatedTrainerIds,
     );
+  }
+
+  List<int> _readDefeatedTrainerIds(int saveBlock1) {
+    final int firstByte = _trainerFlagStart >> 3;
+    final int lastByte = (_trainerFlagStart + _lastTrainerId) >> 3;
+    final List<int> bytes = _read(
+      saveBlock1 + _flagsOffset + firstByte,
+      lastByte - firstByte + 1,
+    );
+    return decodeDefeatedTrainerIds(bytes, maximumTrainerId: _lastTrainerId);
+  }
+
+  static List<int> decodeDefeatedTrainerIds(
+    List<int> bytes, {
+    int maximumTrainerId = _lastTrainerId,
+  }) {
+    final int firstByte = _trainerFlagStart >> 3;
+    final List<int> result = <int>[];
+    for (int trainerId = 1; trainerId <= maximumTrainerId; trainerId++) {
+      final int flag = _trainerFlagStart + trainerId;
+      final int byteIndex = (flag >> 3) - firstByte;
+      if (byteIndex >= bytes.length) break;
+      if ((bytes[byteIndex] & (1 << (flag & 7))) != 0) {
+        result.add(trainerId);
+      }
+    }
+    return result;
   }
 
   static int decodeBattleState(int battleTypeFlags) {
