@@ -22,6 +22,54 @@ void main() {
     });
   });
 
+  group('Equipo de Pokémon Emerald', () {
+    test('usa las 24 posiciones oficiales de la subestructura Growth', () {
+      const expected = <int>[
+        0, 0, 0, 0, 0, 0,
+        1, 1, 2, 3, 2, 3,
+        1, 1, 2, 3, 2, 3,
+        1, 1, 2, 3, 2, 3,
+      ];
+
+      for (int personality = 0; personality < 24; personality++) {
+        expect(
+          PokemonEmeraldMemoryReader.growthSubstructurePosition(personality),
+          expected[personality],
+          reason: 'permutación $personality',
+        );
+      }
+    });
+
+    for (final pokemon in <(String, int, int, int)>[
+      // nombre, personality % 24, especie interna, número nacional
+      ('Treecko', 0, 277, 252),
+      ('Ralts', 8, 305, 280),
+      ('Slakoth', 9, 312, 287),
+    ]) {
+      test('decodifica ${pokemon.$1} desde su permutación', () {
+        final data = List<int>.filled(48, 0);
+        final growthPosition =
+            PokemonEmeraldMemoryReader.growthSubstructurePosition(pokemon.$2);
+        final offset = growthPosition * 12;
+        data[offset] = pokemon.$3 & 0xFF;
+        data[offset + 1] = pokemon.$3 >> 8;
+
+        final internalId =
+            PokemonEmeraldMemoryReader.internalSpeciesIdFromDecryptedData(
+          personality: pokemon.$2,
+          decryptedData: data,
+        );
+
+        expect(internalId, pokemon.$3);
+        expect(
+          PokemonEmeraldMemoryReader.emeraldNationalDexId(internalId),
+          pokemon.$4,
+        );
+        expect(PokemonDecoder.pokemonName(pokemon.$4), pokemon.$1);
+      });
+    }
+  });
+
   group('Pokédex Nacional de Pokémon Emerald', () {
     test('requires all three official unlock indicators', () {
       expect(
