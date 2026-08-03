@@ -4,6 +4,7 @@ import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
+import 'pokemon_emerald_memory_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
 
 class PokemonControllerMemoryReader {
@@ -17,6 +18,13 @@ class PokemonControllerMemoryReader {
 
   PokemonMemorySnapshot? capture() {
     if (!controller.isAttached) return null;
+
+    if (profile.version == PokemonGameVersion.emerald) {
+      return PokemonEmeraldMemoryReader(
+        controller: controller,
+        profile: profile,
+      ).capture();
+    }
 
     return _capture(
       (int offset, int length) => controller.readMemoryBlock(

@@ -1,6 +1,7 @@
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_location.dart';
 import 'locations/gen2/crystal_locations.g.dart';
+import 'locations/gen3/emerald_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -11,6 +12,36 @@ class PokemonDecoder {
       if (value == 0x50 || value == 0x00) break;
       final character = _characters[value];
       if (character != null) out.write(character);
+    }
+    return out.toString().trim();
+  }
+
+  /// Decodifica la tabla de caracteres occidental usada por Gen III.
+  static String decodeGen3Text(List<int> bytes) {
+    final StringBuffer out = StringBuffer();
+    for (final int value in bytes) {
+      if (value == 0xFF) break;
+      if (value == 0x00) {
+        out.write(' ');
+      } else if (value >= 0xA1 && value <= 0xAA) {
+        out.writeCharCode(0x30 + value - 0xA1);
+      } else if (value >= 0xBB && value <= 0xD4) {
+        out.writeCharCode(0x41 + value - 0xBB);
+      } else if (value >= 0xD5 && value <= 0xEE) {
+        out.writeCharCode(0x61 + value - 0xD5);
+      } else {
+        const Map<int, String> punctuation = <int, String>{
+          0xAB: '!',
+          0xAC: '?',
+          0xAD: '.',
+          0xAE: '-',
+          0xB4: "'",
+          0xB5: '♂',
+          0xB6: '♀',
+        };
+        final String? character = punctuation[value];
+        if (character != null) out.write(character);
+      }
     }
     return out.toString().trim();
   }
@@ -63,6 +94,11 @@ class PokemonDecoder {
   static String mapName(PokemonGameProfile profile, int mapId) {
     final PokemonLocation? location = locationFor(profile, mapId);
     if (location != null) return location.name;
+    if (profile.isGen3) {
+      final String group = ((mapId >> 8) & 0xFF).toString().padLeft(2, '0');
+      final String map = (mapId & 0xFF).toString().padLeft(2, '0');
+      return 'Mapa $group:$map';
+    }
     if (profile.isGen2) {
       return 'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
     }
@@ -88,6 +124,7 @@ class PokemonDecoder {
       case PokemonGameVersion.ruby:
       case PokemonGameVersion.sapphire:
       case PokemonGameVersion.emerald:
+        return emeraldLocations[mapId];
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
       case PokemonGameVersion.unsupported:
@@ -96,7 +133,9 @@ class PokemonDecoder {
   }
 
   static String badgeName(PokemonGameProfile profile, int index) {
-    final names = profile.isGen2 ? _gen2Badges : _gen1Badges;
+    final names = profile.isGen3
+        ? _gen3Badges
+        : (profile.isGen2 ? _gen2Badges : _gen1Badges);
     return index >= 0 && index < names.length ? names[index] : 'Medalla';
   }
 
@@ -109,6 +148,10 @@ class PokemonDecoder {
     'Medalla Tormenta','Medalla Mineral','Medalla Glaciar','Medalla Dragón',
     'Medalla Trueno','Medalla Pantano','Medalla Arcoíris','Medalla Alma',
     'Medalla Cascada','Medalla Roca','Medalla Volcán','Medalla Tierra',
+  ];
+  static const _gen3Badges = <String>[
+    'Medalla Piedra','Medalla Puño','Medalla Dinamo','Medalla Calor',
+    'Medalla Equilibrio','Medalla Pluma','Medalla Mente','Medalla Lluvia',
   ];
 
   static const Map<int,String> _characters = <int,String>{
@@ -123,7 +166,8 @@ class PokemonDecoder {
 
   static const List<String> _names = <String>[
     '', 'Bulbasaur','Ivysaur','Venusaur','Charmander','Charmeleon','Charizard','Squirtle','Wartortle','Blastoise','Caterpie','Metapod','Butterfree','Weedle','Kakuna','Beedrill','Pidgey','Pidgeotto','Pidgeot','Rattata','Raticate','Spearow','Fearow','Ekans','Arbok','Pikachu','Raichu','Sandshrew','Sandslash','Nidoran♀','Nidorina','Nidoqueen','Nidoran♂','Nidorino','Nidoking','Clefairy','Clefable','Vulpix','Ninetales','Jigglypuff','Wigglytuff','Zubat','Golbat','Oddish','Gloom','Vileplume','Paras','Parasect','Venonat','Venomoth','Diglett','Dugtrio','Meowth','Persian','Psyduck','Golduck','Mankey','Primeape','Growlithe','Arcanine','Poliwag','Poliwhirl','Poliwrath','Abra','Kadabra','Alakazam','Machop','Machoke','Machamp','Bellsprout','Weepinbell','Victreebel','Tentacool','Tentacruel','Geodude','Graveler','Golem','Ponyta','Rapidash','Slowpoke','Slowbro','Magnemite','Magneton','Farfetch’d','Doduo','Dodrio','Seel','Dewgong','Grimer','Muk','Shellder','Cloyster','Gastly','Haunter','Gengar','Onix','Drowzee','Hypno','Krabby','Kingler','Voltorb','Electrode','Exeggcute','Exeggutor','Cubone','Marowak','Hitmonlee','Hitmonchan','Lickitung','Koffing','Weezing','Rhyhorn','Rhydon','Chansey','Tangela','Kangaskhan','Horsea','Seadra','Goldeen','Seaking','Staryu','Starmie','Mr. Mime','Scyther','Jynx','Electabuzz','Magmar','Pinsir','Tauros','Magikarp','Gyarados','Lapras','Ditto','Eevee','Vaporeon','Jolteon','Flareon','Porygon','Omanyte','Omastar','Kabuto','Kabutops','Aerodactyl','Snorlax','Articuno','Zapdos','Moltres','Dratini','Dragonair','Dragonite','Mewtwo','Mew',
-    'Chikorita','Bayleef','Meganium','Cyndaquil','Quilava','Typhlosion','Totodile','Croconaw','Feraligatr','Sentret','Furret','Hoothoot','Noctowl','Ledyba','Ledian','Spinarak','Ariados','Crobat','Chinchou','Lanturn','Pichu','Cleffa','Igglybuff','Togepi','Togetic','Natu','Xatu','Mareep','Flaaffy','Ampharos','Bellossom','Marill','Azumarill','Sudowoodo','Politoed','Hoppip','Skiploom','Jumpluff','Aipom','Sunkern','Sunflora','Yanma','Wooper','Quagsire','Espeon','Umbreon','Murkrow','Slowking','Misdreavus','Unown','Wobbuffet','Girafarig','Pineco','Forretress','Dunsparce','Gligar','Steelix','Snubbull','Granbull','Qwilfish','Scizor','Shuckle','Heracross','Sneasel','Teddiursa','Ursaring','Slugma','Magcargo','Swinub','Piloswine','Corsola','Remoraid','Octillery','Delibird','Mantine','Skarmory','Houndour','Houndoom','Kingdra','Phanpy','Donphan','Porygon2','Stantler','Smeargle','Tyrogue','Hitmontop','Smoochum','Elekid','Magby','Miltank','Blissey','Raikou','Entei','Suicune','Larvitar','Pupitar','Tyranitar','Lugia','Ho-Oh','Celebi'
+    'Chikorita','Bayleef','Meganium','Cyndaquil','Quilava','Typhlosion','Totodile','Croconaw','Feraligatr','Sentret','Furret','Hoothoot','Noctowl','Ledyba','Ledian','Spinarak','Ariados','Crobat','Chinchou','Lanturn','Pichu','Cleffa','Igglybuff','Togepi','Togetic','Natu','Xatu','Mareep','Flaaffy','Ampharos','Bellossom','Marill','Azumarill','Sudowoodo','Politoed','Hoppip','Skiploom','Jumpluff','Aipom','Sunkern','Sunflora','Yanma','Wooper','Quagsire','Espeon','Umbreon','Murkrow','Slowking','Misdreavus','Unown','Wobbuffet','Girafarig','Pineco','Forretress','Dunsparce','Gligar','Steelix','Snubbull','Granbull','Qwilfish','Scizor','Shuckle','Heracross','Sneasel','Teddiursa','Ursaring','Slugma','Magcargo','Swinub','Piloswine','Corsola','Remoraid','Octillery','Delibird','Mantine','Skarmory','Houndour','Houndoom','Kingdra','Phanpy','Donphan','Porygon2','Stantler','Smeargle','Tyrogue','Hitmontop','Smoochum','Elekid','Magby','Miltank','Blissey','Raikou','Entei','Suicune','Larvitar','Pupitar','Tyranitar','Lugia','Ho-Oh','Celebi',
+    'Treecko','Grovyle','Sceptile','Torchic','Combusken','Blaziken','Mudkip','Marshtomp','Swampert','Poochyena','Mightyena','Zigzagoon','Linoone','Wurmple','Silcoon','Beautifly','Cascoon','Dustox','Lotad','Lombre','Ludicolo','Seedot','Nuzleaf','Shiftry','Taillow','Swellow','Wingull','Pelipper','Ralts','Kirlia','Gardevoir','Surskit','Masquerain','Shroomish','Breloom','Slakoth','Vigoroth','Slaking','Nincada','Ninjask','Shedinja','Whismur','Loudred','Exploud','Makuhita','Hariyama','Azurill','Nosepass','Skitty','Delcatty','Sableye','Mawile','Aron','Lairon','Aggron','Meditite','Medicham','Electrike','Manectric','Plusle','Minun','Volbeat','Illumise','Roselia','Gulpin','Swalot','Carvanha','Sharpedo','Wailmer','Wailord','Numel','Camerupt','Torkoal','Spoink','Grumpig','Spinda','Trapinch','Vibrava','Flygon','Cacnea','Cacturne','Swablu','Altaria','Zangoose','Seviper','Lunatone','Solrock','Barboach','Whiscash','Corphish','Crawdaunt','Baltoy','Claydol','Lileep','Cradily','Anorith','Armaldo','Feebas','Milotic','Castform','Kecleon','Shuppet','Banette','Duskull','Dusclops','Tropius','Chimecho','Absol','Wynaut','Snorunt','Glalie','Spheal','Sealeo','Walrein','Clamperl','Huntail','Gorebyss','Relicanth','Luvdisc','Bagon','Shelgon','Salamence','Beldum','Metang','Metagross','Regirock','Regice','Registeel','Latias','Latios','Kyogre','Groudon','Rayquaza','Jirachi','Deoxys'
   ];
 
   // --- Fase 4.1A: tabla de ubicaciones propia por versión de juego. ---
@@ -281,4 +325,3 @@ class PokemonGen1Decoder {
       ? PokemonDecoder._gen1Badges[index]
       : 'Medalla';
 }
-

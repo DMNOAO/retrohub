@@ -237,7 +237,7 @@ class _ProgressJournal extends StatelessWidget {
               childAspectRatio: columns == 1 ? 4.2 : 3.2,
               children: [
                 _InfoCard(icon: Icons.place_outlined, title: 'Ubicación actual', value: snapshot.currentLocation ?? 'Sin ubicación detectada'),
-                _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(game.playTimeSeconds)),
+                _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(snapshot.playTimeMinutes * 60)),
                 _InfoCard(icon: Icons.catching_pokemon, title: 'Pokédex', value: '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados'),
                 _InfoCard(icon: Icons.emoji_events_outlined, title: 'Liga Pokémon', value: '${snapshot.leagueWins} victorias'),
                 _InfoCard(
@@ -302,11 +302,20 @@ class _ProgressJournal extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 12,
                 children: party.map((pokemon) {
+                  final int? currentHp = int.tryParse(
+                    pokemon['currentHp']?.toString() ?? '',
+                  );
+                  final int? maximumHp = int.tryParse(
+                    pokemon['maximumHp']?.toString() ?? '',
+                  );
+                  final String hp = currentHp != null && maximumHp != null
+                      ? ' · PS $currentHp/$maximumHp'
+                      : '';
                   return SizedBox(
                     width: width,
                     child: _PokemonTile(
                       name: pokemon['name']?.toString() ?? 'Pokémon',
-                      detail: 'Nivel ${pokemon['level'] ?? '—'}',
+                      detail: 'Nivel ${pokemon['level'] ?? '—'}$hp',
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                     ),

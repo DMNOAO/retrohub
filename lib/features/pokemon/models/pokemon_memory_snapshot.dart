@@ -7,8 +7,12 @@ class PokemonPartyMember {
   final String name;
   final int level;
   final bool isShiny;
-  const PokemonPartyMember({required this.internalSpeciesId,required this.pokedexId,required this.name,required this.level,this.isShiny=false});
-  Map<String,dynamic> toJson()=>{'id':pokedexId,'internalId':internalSpeciesId,'name':name,'level':level,'isShiny':isShiny};
+  final String? nickname;
+  final int? currentHp;
+  final int? maximumHp;
+  final int? status;
+  const PokemonPartyMember({required this.internalSpeciesId,required this.pokedexId,required this.name,required this.level,this.isShiny=false,this.nickname,this.currentHp,this.maximumHp,this.status});
+  Map<String,dynamic> toJson()=>{'id':pokedexId,'internalId':internalSpeciesId,'name':name,'level':level,'isShiny':isShiny,'nickname':nickname,'currentHp':currentHp,'maximumHp':maximumHp,'status':status};
 }
 
 class PokemonMemorySnapshot {
@@ -24,9 +28,11 @@ class PokemonMemorySnapshot {
   final int badgesMask;
   final int pokedexSeen;
   final int pokedexCaught;
+  final bool nationalDexUnlocked;
   final List<int> seenPokemonIds;
   final List<int> caughtPokemonIds;
   final List<PokemonPartyMember> party;
+  final int? gamePlayTimeMinutes;
   // Combate (Fase 4.2/4.3). null = no soportado en esta versión/perfil.
   // battleState: 0 = fuera de combate, 1 = combate salvaje, 2 = combate
   // de entrenador (mismo significado en Gen1 y Gen2, direcciones
@@ -35,7 +41,7 @@ class PokemonMemorySnapshot {
   final int? otherTrainerClassId;
   final int? otherTrainerId;
   final int? battleResultRaw;
-  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
+  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,this.nationalDexUnlocked=false,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
   List<int> get partySpeciesIds=>party.map((e)=>e.pokedexId).toList(growable:false);
   int get badgeCount=>PokemonDecoder.countBits(<int>[badgesMask&0xff,(badgesMask>>8)&0xff]);
   String get currentLocation=>PokemonDecoder.mapName(profile,currentMapId);

@@ -163,7 +163,7 @@ class PokemonJournalTracker {
         value.badgesMask >= 0 &&
         value.badgesMask <= 0xFFFF &&
         value.partySpeciesIds.length <= 6 &&
-        value.partySpeciesIds.every((id) => id >= 0 && id <= 255);
+        value.partySpeciesIds.every((id) => id >= 1 && id <= 386);
   }
 
   bool _sameCoreState(PokemonMemorySnapshot a, PokemonMemorySnapshot b) {
@@ -174,9 +174,10 @@ class PokemonJournalTracker {
         a.playerY == b.playerY &&
         a.money == b.money &&
         a.badgesMask == b.badgesMask &&
-        _sameList(a.partySpeciesIds, b.partySpeciesIds) &&
+        _sameParty(a.party, b.party) &&
         a.pokedexSeen == b.pokedexSeen &&
-        a.pokedexCaught == b.pokedexCaught;
+        a.pokedexCaught == b.pokedexCaught &&
+        a.nationalDexUnlocked == b.nationalDexUnlocked;
   }
 
   bool _sameList(List<int> a, List<int> b) {
@@ -187,10 +188,36 @@ class PokemonJournalTracker {
     return true;
   }
 
+  bool _sameParty(List<PokemonPartyMember> a, List<PokemonPartyMember> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      final left = a[index];
+      final right = b[index];
+      if (left.pokedexId != right.pokedexId ||
+          left.level != right.level ||
+          left.currentHp != right.currentHp ||
+          left.maximumHp != right.maximumHp ||
+          left.status != right.status ||
+          left.nickname != right.nickname ||
+          left.isShiny != right.isShiny) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Future<void> _recordChanges(
     PokemonMemorySnapshot previous,
     PokemonMemorySnapshot current,
   ) async {
+    if (!previous.nationalDexUnlocked && current.nationalDexUnlocked) {
+      await _insertEvent(
+        type: 'national_pokedex_unlocked',
+        title: 'Pokédex Nacional desbloqueada',
+        description: 'Ya puedes consultar las 386 especies conocidas.',
+        metadata: _metadata(current),
+      );
+    }
     if (!_isKantoUnlocked(previous) && _isKantoUnlocked(current)) {
       await _ensureKantoUnlockEvent(current);
     }
@@ -512,7 +539,7 @@ class PokemonJournalTracker {
       GameProgressSnapshotsCompanion(
         gameId: Value(gameId),
         savedAt: Value(DateTime.now()),
-        playTimeMinutes: Value(playTimeMinutes()),
+        playTimeMinutes: Value(value.gamePlayTimeMinutes ?? playTimeMinutes()),
         currentLocation: Value(
           PokemonDecoder.mapName(value.profile, value.currentMapId),
         ),
@@ -584,9 +611,12 @@ class PokemonJournalTracker {
       'party': value.party.map((pokemon) => pokemon.toJson()).toList(),
       'pokedexSeen': value.pokedexSeen,
       'pokedexCaught': value.pokedexCaught,
+      'nationalDexUnlocked': value.nationalDexUnlocked,
       'seenPokemonIds': value.seenPokemonIds,
       'caughtPokemonIds': value.caughtPokemonIds,
       'memoryShift': value.memoryShift,
+      'playTimeMinutes': value.gamePlayTimeMinutes ?? playTimeMinutes(),
+      'gamePlayTimeMinutes': value.gamePlayTimeMinutes,
     };
   }
 }

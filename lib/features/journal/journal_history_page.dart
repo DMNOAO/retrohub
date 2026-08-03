@@ -27,6 +27,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   String _filter = 'all';
   Set<int> _seenPokemonIds = const <int>{};
   Set<int> _caughtPokemonIds = const <int>{};
+  bool _nationalDexUnlocked = false;
 
   @override
   void initState() {
@@ -51,8 +52,12 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
     final seenIds = <int>{};
     final caughtIds = <int>{};
     var detailedStateFound = false;
+    var nationalDexUnlocked = false;
     for (final event in events) {
       final metadata = _TimelineItem._decodeMetadata(event.metadataJson);
+      if (!detailedStateFound && metadata['nationalDexUnlocked'] == true) {
+        nationalDexUnlocked = true;
+      }
       if (!detailedStateFound &&
           metadata['seenPokemonIds'] is List &&
           metadata['caughtPokemonIds'] is List) {
@@ -75,6 +80,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
       _items = items;
       _seenPokemonIds = seenIds;
       _caughtPokemonIds = caughtIds;
+      _nationalDexUnlocked = nationalDexUnlocked;
       _loading = false;
     });
   }
@@ -125,6 +131,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                           profile: profile,
                           seenIds: _seenPokemonIds,
                           caughtIds: _caughtPokemonIds,
+                          nationalDexUnlocked: profile.game != PokemonAssetGame.emerald ||
+                              _nationalDexUnlocked,
                         )
                       : filtered.isEmpty
                           ? const _EmptyHistory()
@@ -298,6 +306,17 @@ class _TimelineCard extends StatelessWidget {
                               _MetaChip(icon: Icons.schedule, label: _formatPlayTime(item.playTimeMinutes)),
                               if (item.metadata['mapName'] != null)
                                 _MetaChip(icon: Icons.place_outlined, label: item.metadata['mapName'].toString()),
+                              if (item.metadata['playerName'] != null &&
+                                  item.metadata['playerName'].toString().isNotEmpty)
+                                _MetaChip(
+                                  icon: Icons.person_outline,
+                                  label: item.metadata['playerName'].toString(),
+                                ),
+                              if (item.metadata['money'] != null)
+                                _MetaChip(
+                                  icon: Icons.payments_outlined,
+                                  label: r'$' + item.metadata['money'].toString(),
+                                ),
                               if (item.metadata['level'] != null)
                                 _MetaChip(icon: Icons.trending_up, label: 'Nv. ${item.metadata['level']}'),
                               if (item.metadata['isShiny'] == true)

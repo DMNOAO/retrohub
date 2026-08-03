@@ -14,6 +14,7 @@ import '../frames/frames_page.dart';
 import '../journal/journal_page.dart';
 import '../journal/services/journal_event_service.dart';
 import '../pokemon/services/pokemon_journal_tracker.dart';
+import '../pokemon/models/pokemon_game_profile.dart';
 import 'data/save_state_service.dart';
 import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
@@ -74,7 +75,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
       gameId: game.id,
     );
 
-    if (!CoreLoader.isGbaRom(game.romPath)) {
+    final PokemonGameProfile pokemonProfile =
+        PokemonGameProfile.fromGameIdentity(
+      gameTitle: game.title,
+      romPath: game.romPath,
+    );
+    final bool supportsPokemonJournal =
+        !CoreLoader.isGbaRom(game.romPath) ||
+        pokemonProfile.version == PokemonGameVersion.emerald;
+
+    if (supportsPokemonJournal) {
       _pokemonJournalTracker = PokemonJournalTracker(
         database: _database,
         gameId: game.id,

@@ -1,6 +1,7 @@
 import '../../emulator/data/libretro_bridge.dart';
 import '../../game_engine/game_engine.dart';
 import '../../game_engine/game_engine_status.dart';
+import '../memory/pokemon_emerald_memory_reader.dart';
 import '../memory/pokemon_memory_reader.dart';
 import '../memory/pokemon_memory_profile_resolver.dart';
 import '../models/pokemon_game_profile.dart';
@@ -26,11 +27,19 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
   String get gameName => profile.displayName;
 
   @override
-  bool get isSupported => profile.memoryMapVerified;
+  bool get isSupported =>
+      profile.memoryMapVerified ||
+      profile.version == PokemonGameVersion.emerald;
 
   @override
   PokemonMemorySnapshot? capture() {
     if (!isSupported) return null;
+    if (profile.version == PokemonGameVersion.emerald) {
+      return PokemonEmeraldMemoryReader.fromBridge(
+        bridge: bridge,
+        profile: profile,
+      ).capture();
+    }
     return PokemonMemoryReader(bridge: bridge, profile: profile).capture();
   }
 

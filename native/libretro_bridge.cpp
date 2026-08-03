@@ -103,7 +103,9 @@ struct retro_memory_map {
 #define RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY 9
 #define RETRO_ENVIRONMENT_SET_PIXEL_FORMAT 10
 #define RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY 31
-#define RETRO_ENVIRONMENT_SET_MEMORY_MAPS 36
+#define RETRO_ENVIRONMENT_EXPERIMENTAL 0x10000
+#define RETRO_ENVIRONMENT_SET_MEMORY_MAPS \
+    (36 | RETRO_ENVIRONMENT_EXPERIMENTAL)
 
 #define RETRO_PIXEL_FORMAT_0RGB1555 0
 #define RETRO_PIXEL_FORMAT_XRGB8888 1
@@ -1120,21 +1122,68 @@ size_t rh_read_memory_block(
     return bytes_to_copy;
 }
 
-RH_EXPORT
-int rh_is_memory_address_mapped(uint64_t address) {
-    if (!game_loaded) {
-        return 0;
-    }
-
-    std::lock_guard<std::mutex> lock(memory_map_mutex);
+static const retro_memory_descriptor* find_gba_memory_descriptor(
+    uint64_t address,
+    size_t* relative
+) {
+    // Ruta literal usada por descriptores simples.
     for (const auto& descriptor : memory_descriptors) {
         if (!descriptor.ptr || descriptor.len == 0) {
             continue;
         }
         if (address >= descriptor.start &&
             address - descriptor.start < descriptor.len) {
+            *relative = static_cast<size_t>(address - descriptor.start);
+            return &descriptor;
+        }
+    }
+
+    // Algunos cores describen el bus mediante select/disconnect y no publican
+    // 0x02000000/0x03000000 como start literal. mGBA identifica ambas RAM por
+    // su tamaño físico, que es inequívoco dentro del mapa GBA.
+    uint64_t region_base = 0;
+    size_t region_size = 0;
+    if (address >= 0x02000000ULL && address < 0x02040000ULL) {
+        region_base = 0x02000000ULL;
+        region_size = 0x40000;
+    } else if (address >= 0x03000000ULL && address < 0x03008000ULL) {
+        region_base = 0x03000000ULL;
+        region_size = 0x8000;
+    } else {
+        return nullptr;
+    }
+
+    for (const auto& descriptor : memory_descriptors) {
+        if (!descriptor.ptr || descriptor.len != region_size) {
+            continue;
+        }
+        *relative = static_cast<size_t>(address - region_base);
+        return &descriptor;
+    }
+    return nullptr;
+}
+
+RH_EXPORT
+int rh_is_memory_address_mapped(uint64_t address) {
+    if (!game_loaded) {
+        return 0;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(memory_map_mutex);
+        size_t relative = 0;
+        if (find_gba_memory_descriptor(address, &relative)) {
             return 1;
         }
+    }
+
+    // mGBA también publica IWRAM como RETRO_MEMORY_SYSTEM_RAM.
+    if (address >= 0x03000000ULL && address < 0x03008000ULL &&
+        retro_get_memory_data_fn && retro_get_memory_size_fn) {
+        return retro_get_memory_data_fn(RETRO_MEMORY_SYSTEM_RAM) &&
+            retro_get_memory_size_fn(RETRO_MEMORY_SYSTEM_RAM) >= 0x8000
+            ? 1
+            : 0;
     }
     return 0;
 }
@@ -1149,38 +1198,51 @@ size_t rh_read_memory_address(
         return 0;
     }
 
-    std::lock_guard<std::mutex> lock(memory_map_mutex);
     size_t total = 0;
-
     while (total < destination_size) {
         const uint64_t current = address + total;
-        const retro_memory_descriptor* match = nullptr;
+        size_t relative = 0;
+        size_t copied = 0;
 
-        for (const auto& descriptor : memory_descriptors) {
-            if (!descriptor.ptr || descriptor.len == 0) {
-                continue;
-            }
-            if (current >= descriptor.start &&
-                current - descriptor.start < descriptor.len) {
-                match = &descriptor;
-                break;
+        {
+            std::lock_guard<std::mutex> lock(memory_map_mutex);
+            const retro_memory_descriptor* match =
+                find_gba_memory_descriptor(current, &relative);
+            if (match) {
+                const size_t available = match->len - relative;
+                const size_t remaining = destination_size - total;
+                copied = remaining < available ? remaining : available;
+                const auto* source =
+                    static_cast<const uint8_t*>(match->ptr) +
+                    match->offset + relative;
+                std::memcpy(destination + total, source, copied);
             }
         }
 
-        if (!match) {
+        if (copied == 0 &&
+            current >= 0x03000000ULL && current < 0x03008000ULL &&
+            retro_get_memory_data_fn && retro_get_memory_size_fn) {
+            void* system_ram =
+                retro_get_memory_data_fn(RETRO_MEMORY_SYSTEM_RAM);
+            const size_t system_ram_size =
+                retro_get_memory_size_fn(RETRO_MEMORY_SYSTEM_RAM);
+            relative = static_cast<size_t>(current - 0x03000000ULL);
+            if (system_ram && relative < system_ram_size) {
+                const size_t available = system_ram_size - relative;
+                const size_t remaining = destination_size - total;
+                copied = remaining < available ? remaining : available;
+                std::memcpy(
+                    destination + total,
+                    static_cast<const uint8_t*>(system_ram) + relative,
+                    copied
+                );
+            }
+        }
+
+        if (copied == 0) {
             break;
         }
-
-        const size_t relative =
-            static_cast<size_t>(current - match->start);
-        const size_t available = match->len - relative;
-        const size_t remaining = destination_size - total;
-        const size_t count = remaining < available ? remaining : available;
-        const auto* source = static_cast<const uint8_t*>(match->ptr) +
-            match->offset + relative;
-
-        std::memcpy(destination + total, source, count);
-        total += count;
+        total += copied;
     }
 
     return total;

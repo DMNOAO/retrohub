@@ -1,0 +1,385 @@
+import '../decoder/pokemon_decoder.dart';
+import '../models/pokemon_game_profile.dart';
+import '../models/pokemon_memory_snapshot.dart';
+import '../../emulator/data/libretro_bridge.dart';
+import '../../emulator/presentation/widget/libretro_game_view.dart';
+
+/// Primera lectura segura de Pokémon Emerald.
+///
+/// Emerald mantiene el progreso en dos bloques alojados dinámicamente en
+/// EWRAM. Las direcciones de los punteros globales cambian entre regiones y
+/// revisiones, por lo que se usa la dirección inglesa como ruta rápida y se
+/// recorre IWRAM como alternativa validada.
+final class PokemonEmeraldMemoryReader {
+  static const int _englishSaveBlock1PointerAddress = 0x03005D8C;
+  static const int _englishSaveBlock2PointerAddress = 0x03005D90;
+
+  static const int _iwramStart = 0x03000000;
+  static const int _iwramSize = 0x00008000;
+  static const int _ewramStart = 0x02000000;
+  static const int _ewramEnd = 0x02040000;
+
+  static const int _saveBlock1Size = 0x3D88;
+  static const int _saveBlock2Size = 0x0F2C;
+  static const int _partyCountOffset = 0x234;
+  static const int _partyOffset = 0x238;
+  static const int _partyMemberSize = 100;
+  static const int _pokedexOwnedOffset = 0x28;
+  static const int _pokedexSeenOffset = 0x5C;
+  static const int _pokedexBytes = 52;
+  static const int _flagsOffset = 0x1270;
+  static const int _firstBadgeFlag = 0x867;
+  static const int _nationalDexMagicOffset = 0x1A;
+  static const int _nationalDexVarOffset = 0x1428;
+  static const int _nationalDexFlag = 0x896;
+
+  final LibretroGameController? controller;
+  final LibretroBridge? bridge;
+  final PokemonGameProfile profile;
+
+  const PokemonEmeraldMemoryReader({
+    required LibretroGameController this.controller,
+    required this.profile,
+  }) : bridge = null;
+
+  const PokemonEmeraldMemoryReader.fromBridge({
+    required LibretroBridge this.bridge,
+    required this.profile,
+  }) : controller = null;
+
+  PokemonMemorySnapshot? capture() {
+    final bool memoryAvailable =
+        controller?.isAttached ?? (bridge?.isGameLoaded ?? false);
+    if (!memoryAvailable ||
+        profile.version != PokemonGameVersion.emerald) {
+      return null;
+    }
+
+    final _EmeraldSaveBlocks? blocks = _resolveSaveBlocks();
+    if (blocks == null) return null;
+
+    final int saveBlock1 = blocks.saveBlock1;
+    final int saveBlock2 = blocks.saveBlock2;
+    final List<int> nameBytes = _read(saveBlock2, 8);
+    final String playerName = PokemonDecoder.decodeGen3Text(nameBytes);
+    if (playerName.isEmpty) return null;
+
+    final int trainerId = _u16(saveBlock2 + 0x0A);
+    final int hours = _u16(saveBlock2 + 0x0E);
+    final int minutes = _u8(saveBlock2 + 0x10);
+
+    final int x = _s16(saveBlock1);
+    final int y = _s16(saveBlock1 + 0x02);
+    final int mapGroup = _u8(saveBlock1 + 0x04);
+    final int mapNumber = _u8(saveBlock1 + 0x05);
+    final int currentMapId = (mapGroup << 8) | mapNumber;
+
+    final int encryptionKey = _u32(saveBlock2 + 0xAC);
+    final int money = _u32(saveBlock1 + 0x490) ^ encryptionKey;
+    final List<PokemonPartyMember> party = _readParty(saveBlock1);
+    final List<int> caughtPokemonIds = _readPokedexIds(
+      saveBlock2 + _pokedexOwnedOffset,
+    );
+    final List<int> seenPokemonIds = _readPokedexIds(
+      saveBlock2 + _pokedexSeenOffset,
+    );
+    final int badgesMask = _readBadgesMask(saveBlock1);
+    final bool nationalDexUnlocked = isNationalDexUnlocked(
+      nationalMagic: _u8(saveBlock2 + _nationalDexMagicOffset),
+      nationalDexVar: _u16(saveBlock1 + _nationalDexVarOffset),
+      nationalDexFlagSet: _readFlag(saveBlock1, _nationalDexFlag),
+    );
+
+    return PokemonMemorySnapshot(
+      capturedAt: DateTime.now(),
+      profile: profile,
+      memoryShift: 0,
+      playerName: playerName,
+      trainerId: trainerId,
+      currentMapId: currentMapId,
+      playerX: x,
+      playerY: y,
+      money: money,
+      badgesMask: badgesMask,
+      pokedexSeen: seenPokemonIds.length,
+      pokedexCaught: caughtPokemonIds.length,
+      nationalDexUnlocked: nationalDexUnlocked,
+      seenPokemonIds: seenPokemonIds,
+      caughtPokemonIds: caughtPokemonIds,
+      party: party,
+      gamePlayTimeMinutes: hours * 60 + minutes,
+    );
+  }
+
+  static bool isNationalDexUnlocked({
+    required int nationalMagic,
+    required int nationalDexVar,
+    required bool nationalDexFlagSet,
+  }) {
+    return nationalMagic == 0xDA &&
+        nationalDexVar == 0x0302 &&
+        nationalDexFlagSet;
+  }
+
+  bool _readFlag(int saveBlock1, int flag) {
+    final value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+    return (value & (1 << (flag & 7))) != 0;
+  }
+
+  List<int> _readPokedexIds(int address) {
+    final List<int> bytes = _read(address, _pokedexBytes);
+    if (bytes.length != _pokedexBytes) return const <int>[];
+    final List<int> ids = <int>[];
+    for (int id = 1; id <= 386; id++) {
+      final int bit = id - 1;
+      if ((bytes[bit >> 3] & (1 << (bit & 7))) != 0) ids.add(id);
+    }
+    return ids;
+  }
+
+  int _readBadgesMask(int saveBlock1) {
+    int result = 0;
+    for (int badge = 0; badge < 8; badge++) {
+      final int flag = _firstBadgeFlag + badge;
+      final int value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+      if ((value & (1 << (flag & 7))) != 0) result |= 1 << badge;
+    }
+    return result;
+  }
+
+  List<PokemonPartyMember> _readParty(int saveBlock1) {
+    final int count = _u8(saveBlock1 + _partyCountOffset);
+    if (count < 0 || count > 6) return const <PokemonPartyMember>[];
+
+    final List<PokemonPartyMember> result = <PokemonPartyMember>[];
+    for (int index = 0; index < count; index++) {
+      final List<int> bytes = _read(
+        saveBlock1 + _partyOffset + index * _partyMemberSize,
+        _partyMemberSize,
+      );
+      final PokemonPartyMember? member = _decodePartyMember(bytes);
+      if (member == null) return const <PokemonPartyMember>[];
+      result.add(member);
+    }
+    return result;
+  }
+
+  PokemonPartyMember? _decodePartyMember(List<int> bytes) {
+    if (bytes.length != _partyMemberSize) return null;
+
+    final int personality = _littleEndian(bytes.sublist(0, 4));
+    final int originalTrainerId = _littleEndian(bytes.sublist(4, 8));
+    final int key = personality ^ originalTrainerId;
+    final List<int> decrypted = List<int>.filled(48, 0);
+    for (int offset = 0; offset < 48; offset += 4) {
+      final int word =
+          _littleEndian(bytes.sublist(32 + offset, 36 + offset)) ^ key;
+      for (int byte = 0; byte < 4; byte++) {
+        decrypted[offset + byte] = (word >> (byte * 8)) & 0xFF;
+      }
+    }
+
+    int checksum = 0;
+    for (int offset = 0; offset < decrypted.length; offset += 2) {
+      checksum = (checksum + _littleEndian(decrypted.sublist(offset, offset + 2))) & 0xFFFF;
+    }
+    final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
+    if (checksum != storedChecksum) return null;
+
+    final int growthPosition = _growthPositions[personality % 24];
+    final int growthOffset = growthPosition * 12;
+    final int internalSpeciesId =
+        _littleEndian(decrypted.sublist(growthOffset, growthOffset + 2));
+    final int pokedexId = emeraldNationalDexId(internalSpeciesId);
+    if (pokedexId < 1 || pokedexId > 386) return null;
+
+    final String nickname =
+        PokemonDecoder.decodeGen3Text(bytes.sublist(8, 18));
+    final int level = bytes[84];
+    if (level < 1 || level > 100) return null;
+
+    final int trainerHigh = (originalTrainerId >> 16) & 0xFFFF;
+    final int trainerLow = originalTrainerId & 0xFFFF;
+    final int personalityHigh = (personality >> 16) & 0xFFFF;
+    final int personalityLow = personality & 0xFFFF;
+    final bool isShiny =
+        (trainerHigh ^ trainerLow ^ personalityHigh ^ personalityLow) < 8;
+
+    return PokemonPartyMember(
+      internalSpeciesId: internalSpeciesId,
+      pokedexId: pokedexId,
+      name: PokemonDecoder.pokemonName(pokedexId),
+      nickname: nickname.isEmpty ? null : nickname,
+      level: level,
+      isShiny: isShiny,
+      status: _littleEndian(bytes.sublist(80, 84)),
+      currentHp: _littleEndian(bytes.sublist(86, 88)),
+      maximumHp: _littleEndian(bytes.sublist(88, 90)),
+    );
+  }
+
+  static int emeraldNationalDexId(int internalSpeciesId) {
+    if (internalSpeciesId >= 1 && internalSpeciesId <= 251) {
+      return internalSpeciesId;
+    }
+    // Emerald conserva 25 huecos internos entre Celebi y Treecko.
+    if (internalSpeciesId >= 277 && internalSpeciesId <= 411) {
+      return internalSpeciesId - 25;
+    }
+    return 0;
+  }
+
+  static const List<int> _growthPositions = <int>[
+    0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3,
+  ];
+
+  _EmeraldSaveBlocks? _resolveSaveBlocks() {
+    final int? englishSaveBlock1 =
+        _readPointer(_englishSaveBlock1PointerAddress);
+    final int? englishSaveBlock2 =
+        _readPointer(_englishSaveBlock2PointerAddress);
+    if (_validPair(englishSaveBlock1, englishSaveBlock2)) {
+      return _EmeraldSaveBlocks(
+        saveBlock1: englishSaveBlock1!,
+        saveBlock2: englishSaveBlock2!,
+      );
+    }
+
+    // En Emerald los globals gSaveBlock1Ptr y gSaveBlock2Ptr son punteros
+    // contiguos. Buscar el par en IWRAM evita mantener una dirección por cada
+    // idioma, pero las validaciones de ambos bloques impiden falsos positivos.
+    final List<int> iwram = _read(_iwramStart, _iwramSize);
+    if (iwram.length != _iwramSize) return null;
+
+    for (int offset = 0; offset <= iwram.length - 8; offset += 4) {
+      final int saveBlock1 =
+          _littleEndian(iwram.sublist(offset, offset + 4));
+      final int saveBlock2 =
+          _littleEndian(iwram.sublist(offset + 4, offset + 8));
+      if (_validPair(saveBlock1, saveBlock2)) {
+        return _EmeraldSaveBlocks(
+          saveBlock1: saveBlock1,
+          saveBlock2: saveBlock2,
+        );
+      }
+    }
+    return null;
+  }
+
+  bool _validPair(int? saveBlock1, int? saveBlock2) {
+    if (!_validBlock(saveBlock1, _saveBlock1Size) ||
+        !_validBlock(saveBlock2, _saveBlock2Size)) {
+      return false;
+    }
+
+    final List<int> name = _read(saveBlock2!, 8);
+    if (!_validPlayerName(name)) return false;
+
+    final int hours = _u16(saveBlock2 + 0x0E);
+    final int minutes = _u8(saveBlock2 + 0x10);
+    final int seconds = _u8(saveBlock2 + 0x11);
+    final int frames = _u8(saveBlock2 + 0x12);
+    if (hours > 9999 || minutes > 59 || seconds > 59 || frames > 59) {
+      return false;
+    }
+
+    final int x = _s16(saveBlock1!);
+    final int y = _s16(saveBlock1 + 0x02);
+    final int mapGroup = _u8(saveBlock1 + 0x04);
+    final int mapNumber = _u8(saveBlock1 + 0x05);
+    if (x < -1 ||
+        x > 255 ||
+        y < -1 ||
+        y > 255 ||
+        mapGroup > 63 ||
+        mapNumber > 127) {
+      return false;
+    }
+
+    final int encryptionKey = _u32(saveBlock2 + 0xAC);
+    final int money = _u32(saveBlock1 + 0x490) ^ encryptionKey;
+    return money >= 0 && money <= 999999;
+  }
+
+  bool _validPlayerName(List<int> bytes) {
+    if (bytes.length != 8) return false;
+    final int terminator = bytes.indexOf(0xFF);
+    if (terminator < 1 || terminator > 7) return false;
+
+    for (final int value in bytes.take(terminator)) {
+      final bool supported =
+          value == 0x00 ||
+          (value >= 0xA1 && value <= 0xB6) ||
+          (value >= 0xBB && value <= 0xEE);
+      if (!supported) return false;
+    }
+    return PokemonDecoder.decodeGen3Text(bytes).isNotEmpty;
+  }
+
+  int? _readPointer(int address) {
+    final List<int> bytes = _read(address, 4);
+    if (bytes.length != 4) return null;
+    return _littleEndian(bytes);
+  }
+
+  bool _validBlock(int? address, int size) {
+    if (address == null || address < _ewramStart) return false;
+    return address <= _ewramEnd - size;
+  }
+
+  List<int> _read(int address, int length) {
+    final LibretroGameController? activeController = controller;
+    if (activeController != null) {
+      return activeController.readMemoryAddress(
+        address: address,
+        length: length,
+      );
+    }
+    return bridge?.readMemoryAddress(
+          address: address,
+          length: length,
+        ) ??
+        const <int>[];
+  }
+
+  int _u8(int address) {
+    final List<int> bytes = _read(address, 1);
+    return bytes.length == 1 ? bytes.first : 0;
+  }
+
+  int _u16(int address) {
+    final List<int> bytes = _read(address, 2);
+    return bytes.length == 2 ? _littleEndian(bytes) : 0;
+  }
+
+  int _u32(int address) {
+    final List<int> bytes = _read(address, 4);
+    return bytes.length == 4 ? _littleEndian(bytes) : 0;
+  }
+
+  int _s16(int address) {
+    final int value = _u16(address);
+    return value >= 0x8000 ? value - 0x10000 : value;
+  }
+
+  int _littleEndian(List<int> bytes) {
+    int value = 0;
+    for (int index = 0; index < bytes.length; index++) {
+      value |= (bytes[index] & 0xFF) << (index * 8);
+    }
+    return value;
+  }
+}
+
+final class _EmeraldSaveBlocks {
+  final int saveBlock1;
+  final int saveBlock2;
+
+  const _EmeraldSaveBlocks({
+    required this.saveBlock1,
+    required this.saveBlock2,
+  });
+}
