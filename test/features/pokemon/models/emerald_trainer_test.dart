@@ -80,6 +80,31 @@ void main() {
     );
   });
 
+  test('usa los nombres reales de sprites con variantes de género', () {
+    final schoolKidFemale = EmeraldTrainerResolver.forTrainerId(280);
+    final schoolKidMale = EmeraldTrainerResolver.forTrainerId(273);
+    final coolTrainerFemale = EmeraldTrainerResolver.forTrainerId(91);
+    final swimmerMale = EmeraldTrainerResolver.forTrainerId(15);
+
+    expect(schoolKidFemale.name, 'Escolar Karen');
+    expect(
+      schoolKidFemale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/school_kid_female.png',
+    );
+    expect(
+      schoolKidMale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/school_kid_male.png',
+    );
+    expect(
+      coolTrainerFemale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/cooltrainer_female.png',
+    );
+    expect(
+      swimmerMale.spritePath,
+      'assets/sprites/characters/trainers/gba/Hoenn/swimmer_male.png',
+    );
+  });
+
   test('conserva el ID cuando el entrenador no existe', () {
     final trainer = EmeraldTrainerResolver.forTrainerId(9999);
     expect(trainer.kind, EmeraldTrainerKind.regular);
