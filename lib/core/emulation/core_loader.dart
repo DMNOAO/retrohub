@@ -19,30 +19,60 @@ class GamePersistencePaths {
   });
 }
 
-class CoreLoader {
-  static const String _windowsRelativeCorePath =
-      'cores/sameboy/sameboy_libretro.dll';
-  static const String _windowsBridgeFileName = 'libretro_bridge.dll';
+class EmulationCore {
+  final String id;
+  final String displayName;
+  final String androidLibraryName;
+  final String windowsRelativePath;
 
-  // Android empaqueta ambas bibliotecas dentro de lib/<ABI>/.
-  // El cargador dinámico de Android puede resolverlas por su nombre SONAME.
-  static const String _androidCoreName = 'libsameboy_libretro.so';
+  const EmulationCore({
+    required this.id,
+    required this.displayName,
+    required this.androidLibraryName,
+    required this.windowsRelativePath,
+  });
+}
+
+class CoreLoader {
+  static const EmulationCore sameBoy = EmulationCore(
+    id: 'sameboy',
+    displayName: 'SameBoy',
+    androidLibraryName: 'libsameboy_libretro.so',
+    windowsRelativePath: 'cores/sameboy/sameboy_libretro.dll',
+  );
+
+  static const EmulationCore mGba = EmulationCore(
+    id: 'mgba',
+    displayName: 'mGBA',
+    androidLibraryName: 'libmgba_libretro.so',
+    windowsRelativePath: 'cores/mgba/mgba_libretro.dll',
+  );
+
+  static const String _windowsBridgeFileName = 'libretro_bridge.dll';
   static const String _androidBridgeName = 'libretro_bridge.so';
 
-  static List<String> get _coreCandidatePaths {
+  static bool isGbaRom(String romPath) {
+    final String normalized = romPath.trim().toLowerCase();
+    return normalized.endsWith('.gba');
+  }
+
+  static EmulationCore coreForRom(String romPath) {
+    return isGbaRom(romPath) ? mGba : sameBoy;
+  }
+
+  static List<String> _coreCandidatePaths(EmulationCore core) {
     if (Platform.isAndroid) {
-      return const <String>[_androidCoreName];
+      return <String>[core.androidLibraryName];
     }
 
     final String current = Directory.current.path;
+    final String relativePath = core.windowsRelativePath;
     return <String>[
-      _windowsRelativeCorePath,
-      '$current/$_windowsRelativeCorePath',
-      '$current/../$_windowsRelativeCorePath',
-      '$current/../../$_windowsRelativeCorePath',
-      '$current/../../../$_windowsRelativeCorePath',
-      'C:/Users/dark_/OneDrive/Escritorio/retrohub/'
-          '$_windowsRelativeCorePath',
+      relativePath,
+      '$current/$relativePath',
+      '$current/../$relativePath',
+      '$current/../../$relativePath',
+      '$current/../../../$relativePath',
     ];
   }
 
@@ -60,18 +90,23 @@ class CoreLoader {
       '$current/../$_windowsBridgeFileName',
       '$current/../../$_windowsBridgeFileName',
       '$current/../../../$_windowsBridgeFileName',
-      'C:/Users/dark_/OneDrive/Escritorio/retrohub/'
-          'build/windows/x64/runner/Debug/$_windowsBridgeFileName',
-      'C:/Users/dark_/OneDrive/Escritorio/retrohub/'
-          'build/windows/x64/runner/Release/$_windowsBridgeFileName',
     ];
   }
 
+  static String? findCorePath(String romPath) {
+    final EmulationCore core = coreForRom(romPath);
+    if (Platform.isAndroid) {
+      return core.androidLibraryName;
+    }
+    return _findExistingFile(_coreCandidatePaths(core));
+  }
+
+  // Se conserva para los puntos antiguos que todavía consultan SameBoy.
   static String? findSameBoyPath() {
     if (Platform.isAndroid) {
-      return _androidCoreName;
+      return sameBoy.androidLibraryName;
     }
-    return _findExistingFile(_coreCandidatePaths);
+    return _findExistingFile(_coreCandidatePaths(sameBoy));
   }
 
   static String? findBridgePath() {
@@ -91,24 +126,33 @@ class CoreLoader {
     return null;
   }
 
-  static String get debugCoreSearchPaths => _coreCandidatePaths.join('\n');
+  static String debugCoreSearchPathsForRom(String romPath) {
+    return _coreCandidatePaths(coreForRom(romPath)).join('\n');
+  }
+
+  static String get debugCoreSearchPaths =>
+      _coreCandidatePaths(sameBoy).join('\n');
   static String get debugBridgeSearchPaths => _bridgeCandidatePaths.join('\n');
   static String get debugSearchPaths => debugCoreSearchPaths;
 
-  static bool sameBoyExists() {
+  static bool coreExistsForRom(String romPath) {
+    final EmulationCore core = coreForRom(romPath);
     if (Platform.isAndroid) {
       try {
-        final DynamicLibrary library = DynamicLibrary.open(_androidCoreName);
+        final DynamicLibrary library =
+            DynamicLibrary.open(core.androidLibraryName);
         library.lookup<NativeFunction<Void Function()>>('retro_init');
         return true;
       } on Object catch (error) {
-        print('SameBoy Android no disponible: $error');
+        print('${core.displayName} Android no disponible: $error');
         return false;
       }
     }
 
-    return findSameBoyPath() != null;
+    return findCorePath(romPath) != null;
   }
+
+  static bool sameBoyExists() => coreExistsForRom('game.gb');
 
   static bool bridgeExists() {
     try {

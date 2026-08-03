@@ -233,7 +233,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       _bridge = bridge;
 
       setState(() {
-        _statusMessage = 'Cargando core SameBoy...';
+        _statusMessage = 'Cargando core libretro...';
       });
 
       final coreLoaded = bridge.loadCore(widget.corePath);
@@ -252,7 +252,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       final gameLoaded = bridge.loadGame(widget.romPath);
 
       if (!gameLoaded) {
-        throw Exception('SameBoy no pudo cargar la ROM:\n${widget.romPath}');
+        throw Exception('$coreName no pudo cargar la ROM:\n${widget.romPath}');
       }
 
       final paths = _persistencePaths;
