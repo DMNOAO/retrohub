@@ -29,6 +29,9 @@ final class PokemonEmeraldMemoryReader {
   static const int _pokedexBytes = 52;
   static const int _flagsOffset = 0x1270;
   static const int _firstBadgeFlag = 0x867;
+  static const int _nationalDexMagicOffset = 0x1A;
+  static const int _nationalDexVarOffset = 0x1428;
+  static const int _nationalDexFlag = 0x896;
 
   final LibretroGameController? controller;
   final LibretroBridge? bridge;
@@ -81,6 +84,11 @@ final class PokemonEmeraldMemoryReader {
       saveBlock2 + _pokedexSeenOffset,
     );
     final int badgesMask = _readBadgesMask(saveBlock1);
+    final bool nationalDexUnlocked = isNationalDexUnlocked(
+      nationalMagic: _u8(saveBlock2 + _nationalDexMagicOffset),
+      nationalDexVar: _u16(saveBlock1 + _nationalDexVarOffset),
+      nationalDexFlagSet: _readFlag(saveBlock1, _nationalDexFlag),
+    );
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -95,11 +103,27 @@ final class PokemonEmeraldMemoryReader {
       badgesMask: badgesMask,
       pokedexSeen: seenPokemonIds.length,
       pokedexCaught: caughtPokemonIds.length,
+      nationalDexUnlocked: nationalDexUnlocked,
       seenPokemonIds: seenPokemonIds,
       caughtPokemonIds: caughtPokemonIds,
       party: party,
       gamePlayTimeMinutes: hours * 60 + minutes,
     );
+  }
+
+  static bool isNationalDexUnlocked({
+    required int nationalMagic,
+    required int nationalDexVar,
+    required bool nationalDexFlagSet,
+  }) {
+    return nationalMagic == 0xDA &&
+        nationalDexVar == 0x0302 &&
+        nationalDexFlagSet;
+  }
+
+  bool _readFlag(int saveBlock1, int flag) {
+    final value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+    return (value & (1 << (flag & 7))) != 0;
   }
 
   List<int> _readPokedexIds(int address) {

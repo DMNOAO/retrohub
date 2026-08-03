@@ -4,19 +4,22 @@ import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
+import 'pokedex_orders.dart';
 
-enum PokedexOrder { johto, national }
+enum PokedexOrder { johto, hoenn, national }
 
 class PokedexGrid extends StatefulWidget {
   final GameAssetProfile profile;
   final Set<int> seenIds;
   final Set<int> caughtIds;
+  final bool nationalDexUnlocked;
 
   const PokedexGrid({
     super.key,
     required this.profile,
     required this.seenIds,
     required this.caughtIds,
+    this.nationalDexUnlocked = true,
   });
 
   @override
@@ -24,10 +27,16 @@ class PokedexGrid extends StatefulWidget {
 }
 
 class _PokedexGridState extends State<PokedexGrid> {
-  PokedexOrder _order = PokedexOrder.johto;
+  late PokedexOrder _order;
 
   bool get _isGen2 => widget.profile.region == PokemonAssetRegion.johto;
   bool get _isGen3 => widget.profile.region == PokemonAssetRegion.hoenn;
+
+  @override
+  void initState() {
+    super.initState();
+    _order = _isGen3 ? PokedexOrder.hoenn : PokedexOrder.johto;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +44,13 @@ class _PokedexGridState extends State<PokedexGrid> {
       _isGen3 ? 386 : (_isGen2 ? 251 : 151),
       (index) => index + 1,
     );
-    final ids = _isGen2 && _order == PokedexOrder.johto ? _johtoOrder : national;
+    final ids = _isGen2 && _order == PokedexOrder.johto
+        ? _johtoOrder
+        : _isGen3 && _order == PokedexOrder.hoenn
+            ? hoennPokedexOrder
+            : national;
+    final visibleSeen = pokedexIdsInOrder(widget.seenIds, ids);
+    final visibleCaught = pokedexIdsInOrder(widget.caughtIds, ids);
     final scheme = Theme.of(context).colorScheme;
 
     return Column(
@@ -46,7 +61,7 @@ class _PokedexGridState extends State<PokedexGrid> {
             children: [
               Expanded(
                 child: Text(
-                  '${widget.seenIds.length} vistos · ${widget.caughtIds.length} capturados',
+                  '${visibleSeen.length} vistos · ${visibleCaught.length} capturados',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -55,6 +70,20 @@ class _PokedexGridState extends State<PokedexGrid> {
                   segments: const [
                     ButtonSegment(value: PokedexOrder.johto, label: Text('Johto')),
                     ButtonSegment(value: PokedexOrder.national, label: Text('Nacional')),
+                  ],
+                  selected: {_order},
+                  onSelectionChanged: (value) => setState(() => _order = value.first),
+                ),
+              if (_isGen3)
+                SegmentedButton<PokedexOrder>(
+                  segments: [
+                    const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')),
+                    ButtonSegment(
+                      value: PokedexOrder.national,
+                      enabled: widget.nationalDexUnlocked,
+                      label: const Text('Nacional'),
+                      icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline),
+                    ),
                   ],
                   selected: {_order},
                   onSelectionChanged: (value) => setState(() => _order = value.first),
@@ -85,7 +114,8 @@ class _PokedexGridState extends State<PokedexGrid> {
                   final dexId = ids[index];
                   final seen = widget.seenIds.contains(dexId);
                   final caught = widget.caughtIds.contains(dexId);
-                  final displayNumber = _isGen2 && _order == PokedexOrder.johto
+                  final displayNumber = (_isGen2 && _order == PokedexOrder.johto) ||
+                          (_isGen3 && _order == PokedexOrder.hoenn)
                       ? index + 1
                       : dexId;
                   return Container(

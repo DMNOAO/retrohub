@@ -28,6 +28,7 @@ class PokemonMemorySnapshot {
   final int badgesMask;
   final int pokedexSeen;
   final int pokedexCaught;
+  final bool nationalDexUnlocked;
   final List<int> seenPokemonIds;
   final List<int> caughtPokemonIds;
   final List<PokemonPartyMember> party;
@@ -40,7 +41,7 @@ class PokemonMemorySnapshot {
   final int? otherTrainerClassId;
   final int? otherTrainerId;
   final int? battleResultRaw;
-  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
+  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,this.nationalDexUnlocked=false,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw});
   List<int> get partySpeciesIds=>party.map((e)=>e.pokedexId).toList(growable:false);
   int get badgeCount=>PokemonDecoder.countBits(<int>[badgesMask&0xff,(badgesMask>>8)&0xff]);
   String get currentLocation=>PokemonDecoder.mapName(profile,currentMapId);

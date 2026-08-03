@@ -21,4 +21,32 @@ void main() {
       expect(PokemonDecoder.pokemonName(386), 'Deoxys');
     });
   });
+
+  group('Pokédex Nacional de Pokémon Emerald', () {
+    test('requires all three official unlock indicators', () {
+      expect(
+        PokemonEmeraldMemoryReader.isNationalDexUnlocked(
+          nationalMagic: 0xDA,
+          nationalDexVar: 0x0302,
+          nationalDexFlagSet: true,
+        ),
+        isTrue,
+      );
+
+      for (final values in <(int, int, bool)>[
+        (0, 0x0302, true),
+        (0xDA, 0, true),
+        (0xDA, 0x0302, false),
+      ]) {
+        expect(
+          PokemonEmeraldMemoryReader.isNationalDexUnlocked(
+            nationalMagic: values.$1,
+            nationalDexVar: values.$2,
+            nationalDexFlagSet: values.$3,
+          ),
+          isFalse,
+        );
+      }
+    });
+  });
 }

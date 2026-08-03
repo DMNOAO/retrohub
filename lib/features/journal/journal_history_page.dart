@@ -27,6 +27,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   String _filter = 'all';
   Set<int> _seenPokemonIds = const <int>{};
   Set<int> _caughtPokemonIds = const <int>{};
+  bool _nationalDexUnlocked = false;
 
   @override
   void initState() {
@@ -51,8 +52,12 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
     final seenIds = <int>{};
     final caughtIds = <int>{};
     var detailedStateFound = false;
+    var nationalDexUnlocked = false;
     for (final event in events) {
       final metadata = _TimelineItem._decodeMetadata(event.metadataJson);
+      if (!detailedStateFound && metadata['nationalDexUnlocked'] == true) {
+        nationalDexUnlocked = true;
+      }
       if (!detailedStateFound &&
           metadata['seenPokemonIds'] is List &&
           metadata['caughtPokemonIds'] is List) {
@@ -75,6 +80,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
       _items = items;
       _seenPokemonIds = seenIds;
       _caughtPokemonIds = caughtIds;
+      _nationalDexUnlocked = nationalDexUnlocked;
       _loading = false;
     });
   }
@@ -125,6 +131,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                           profile: profile,
                           seenIds: _seenPokemonIds,
                           caughtIds: _caughtPokemonIds,
+                          nationalDexUnlocked: profile.game != PokemonAssetGame.emerald ||
+                              _nationalDexUnlocked,
                         )
                       : filtered.isEmpty
                           ? const _EmptyHistory()

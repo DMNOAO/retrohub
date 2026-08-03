@@ -176,7 +176,8 @@ class PokemonJournalTracker {
         a.badgesMask == b.badgesMask &&
         _sameParty(a.party, b.party) &&
         a.pokedexSeen == b.pokedexSeen &&
-        a.pokedexCaught == b.pokedexCaught;
+        a.pokedexCaught == b.pokedexCaught &&
+        a.nationalDexUnlocked == b.nationalDexUnlocked;
   }
 
   bool _sameList(List<int> a, List<int> b) {
@@ -209,6 +210,14 @@ class PokemonJournalTracker {
     PokemonMemorySnapshot previous,
     PokemonMemorySnapshot current,
   ) async {
+    if (!previous.nationalDexUnlocked && current.nationalDexUnlocked) {
+      await _insertEvent(
+        type: 'national_pokedex_unlocked',
+        title: 'Pokédex Nacional desbloqueada',
+        description: 'Ya puedes consultar las 386 especies conocidas.',
+        metadata: _metadata(current),
+      );
+    }
     if (!_isKantoUnlocked(previous) && _isKantoUnlocked(current)) {
       await _ensureKantoUnlockEvent(current);
     }
@@ -602,6 +611,7 @@ class PokemonJournalTracker {
       'party': value.party.map((pokemon) => pokemon.toJson()).toList(),
       'pokedexSeen': value.pokedexSeen,
       'pokedexCaught': value.pokedexCaught,
+      'nationalDexUnlocked': value.nationalDexUnlocked,
       'seenPokemonIds': value.seenPokemonIds,
       'caughtPokemonIds': value.caughtPokemonIds,
       'memoryShift': value.memoryShift,
