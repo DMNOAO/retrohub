@@ -13,7 +13,9 @@ void main() {
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(252), 0);
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(276), 0);
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(277), 252);
-      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(411), 386);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(364), 287);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(392), 280);
+      expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(411), 358);
     });
 
     test('contains all Gen III species names', () {
@@ -43,8 +45,8 @@ void main() {
     for (final pokemon in <(String, int, int, int)>[
       // nombre, personality % 24, especie interna, número nacional
       ('Treecko', 0, 277, 252),
-      ('Ralts', 8, 305, 280),
-      ('Slakoth', 9, 312, 287),
+      ('Ralts', 8, 392, 280),
+      ('Slakoth', 9, 364, 287),
     ]) {
       test('decodifica ${pokemon.$1} desde su permutación', () {
         final data = List<int>.filled(48, 0);
