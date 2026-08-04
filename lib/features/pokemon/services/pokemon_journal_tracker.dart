@@ -119,8 +119,16 @@ class PokemonJournalTracker {
         _candidateRepeats = 1;
       }
 
-      // Evita registrar bytes transitorios: el estado debe repetirse dos lecturas.
-      if (_candidateRepeats < 2) return;
+      // Ruby/Sapphire ya valida la estructura completa de SaveBlock1/2 antes
+      // de devolver una captura. Permitir su primer snapshot inmediatamente
+      // evita que campos transitorios del arranque impidan crear la bitácora.
+      // Las actualizaciones posteriores y los demás juegos conservan las dos
+      // lecturas idénticas que filtran bytes transitorios.
+      final bool canAcceptFirstRubySapphireSnapshot =
+          _accepted == null &&
+          (profile.version == PokemonGameVersion.ruby ||
+              profile.version == PokemonGameVersion.sapphire);
+      if (_candidateRepeats < 2 && !canAcceptFirstRubySapphireSnapshot) return;
 
       final stable = _candidate!;
       final previous = _accepted;
