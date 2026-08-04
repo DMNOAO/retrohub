@@ -3,6 +3,41 @@ import 'package:retrohub/features/pokemon/decoder/pokemon_decoder.dart';
 import 'package:retrohub/features/pokemon/memory/pokemon_emerald_memory_reader.dart';
 
 void main() {
+  group('Detección de bloques de guardado Gen III', () {
+    test('rechaza el buffer temporal AAAAAAA', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xFF],
+        ),
+        isFalse,
+      );
+    });
+
+    test('acepta un nombre normal terminado en FF', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0xBE, 0xBB, 0xC7, 0xC3, 0xFF, 0x00, 0x00, 0x00],
+        ),
+        isTrue,
+      );
+    });
+
+    test('rechaza nombres sin terminador o con bytes inválidos', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          List<int>.filled(8, 0xBB),
+        ),
+        isFalse,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0x20, 0xFF, 0, 0, 0, 0, 0, 0],
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('Pokémon Emerald species', () {
     test('keeps the first 251 National Pokédex IDs', () {
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(1), 1);
