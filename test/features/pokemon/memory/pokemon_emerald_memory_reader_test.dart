@@ -22,12 +22,12 @@ void main() {
       );
     });
 
-    test('rechaza el buffer temporal AAAAAAA', () {
+    test('acepta nombres legítimos con caracteres repetidos', () {
       expect(
         PokemonEmeraldMemoryReader.isPlausiblePlayerName(
           <int>[0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xFF],
         ),
-        isFalse,
+        isTrue,
       );
     });
 
