@@ -83,7 +83,7 @@ class PokemonGameProfile {
         version: PokemonGameVersion.sapphire,
         generation: PokemonGeneration.gen3,
         displayName: 'Pokémon Sapphire',
-        memoryMapVerified: false,
+        memoryMapVerified: true,
         addresses: null,
       );
     }
@@ -92,7 +92,7 @@ class PokemonGameProfile {
         version: PokemonGameVersion.ruby,
         generation: PokemonGeneration.gen3,
         displayName: 'Pokémon Ruby',
-        memoryMapVerified: false,
+        memoryMapVerified: true,
         addresses: null,
       );
     }

@@ -19,7 +19,9 @@ class PokemonControllerMemoryReader {
   PokemonMemorySnapshot? capture() {
     if (!controller.isAttached) return null;
 
-    if (profile.version == PokemonGameVersion.emerald) {
+    if (profile.version == PokemonGameVersion.emerald ||
+        profile.version == PokemonGameVersion.ruby ||
+        profile.version == PokemonGameVersion.sapphire) {
       return PokemonEmeraldMemoryReader(
         controller: controller,
         profile: profile,

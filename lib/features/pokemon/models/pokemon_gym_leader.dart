@@ -26,6 +26,9 @@ class GymLeaderAssetResolver {
             : null;
       case PokemonGameVersion.ruby:
       case PokemonGameVersion.sapphire:
+        return badgeIndex < _hoennRubySapphire.length
+            ? _hoennRubySapphire[badgeIndex]
+            : null;
       case PokemonGameVersion.emerald:
         return badgeIndex < _hoennGba.length ? _hoennGba[badgeIndex] : null;
       case PokemonGameVersion.fireRed:
@@ -44,6 +47,17 @@ class GymLeaderAssetResolver {
     GymLeaderInfo('Winona', 'assets/sprites/characters/gym_leaders/gba/Hoenn/winona_hoenn.png'),
     GymLeaderInfo('Tate y Liza', 'assets/sprites/characters/gym_leaders/gba/Hoenn/tate_liza_hoenn.png'),
     GymLeaderInfo('Juan', 'assets/sprites/characters/gym_leaders/gba/Hoenn/juan_hoenn.png'),
+  ];
+
+  static const List<GymLeaderInfo> _hoennRubySapphire = <GymLeaderInfo>[
+    GymLeaderInfo('Roxanne', 'assets/sprites/characters/gym_leaders/gba/Hoenn/roxanne_hoenn.png'),
+    GymLeaderInfo('Brawly', 'assets/sprites/characters/gym_leaders/gba/Hoenn/brawly_hoenn.png'),
+    GymLeaderInfo('Wattson', 'assets/sprites/characters/gym_leaders/gba/Hoenn/wattson_hoenn.png'),
+    GymLeaderInfo('Flannery', 'assets/sprites/characters/gym_leaders/gba/Hoenn/flannery_hoenn.png'),
+    GymLeaderInfo('Norman', 'assets/sprites/characters/gym_leaders/gba/Hoenn/norman_hoenn.png'),
+    GymLeaderInfo('Winona', 'assets/sprites/characters/gym_leaders/gba/Hoenn/winona_hoenn.png'),
+    GymLeaderInfo('Tate y Liza', 'assets/sprites/characters/gym_leaders/gba/Hoenn/tate_liza_hoenn.png'),
+    GymLeaderInfo('Wallace', 'assets/sprites/characters/gym_leaders/gba/Hoenn/wallace_hoenn.png'),
   ];
 
   static const List<GymLeaderInfo> _kantoGb = <GymLeaderInfo>[

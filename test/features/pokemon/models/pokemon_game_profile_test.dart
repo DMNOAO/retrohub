@@ -7,36 +7,42 @@ void main() {
       String identity,
       PokemonGameVersion version,
       String displayName,
+      bool memoryVerified,
     })>[
       (
         identity: 'Pokemon Ruby.gba',
         version: PokemonGameVersion.ruby,
         displayName: 'Pokémon Ruby',
+        memoryVerified: true,
       ),
       (
         identity: 'Pokémon Zafiro.gba',
         version: PokemonGameVersion.sapphire,
         displayName: 'Pokémon Sapphire',
+        memoryVerified: true,
       ),
       (
         identity: 'Pokemon Esmeralda.gba',
         version: PokemonGameVersion.emerald,
         displayName: 'Pokémon Emerald',
+        memoryVerified: false,
       ),
       (
         identity: 'Pokemon FireRed.gba',
         version: PokemonGameVersion.fireRed,
         displayName: 'Pokémon FireRed',
+        memoryVerified: false,
       ),
       (
         identity: 'Pokémon Verde Hoja.gba',
         version: PokemonGameVersion.leafGreen,
         displayName: 'Pokémon LeafGreen',
+        memoryVerified: false,
       ),
     ];
 
     for (final testCase in cases) {
-      test('reconoce ${testCase.identity} sin habilitar memoria', () {
+      test('reconoce ${testCase.identity} con el soporte esperado', () {
         final profile = PokemonGameProfile.fromGameIdentity(
           gameTitle: testCase.identity,
           romPath: 'roms/${testCase.identity}',
@@ -46,7 +52,7 @@ void main() {
         expect(profile.generation, PokemonGeneration.gen3);
         expect(profile.displayName, testCase.displayName);
         expect(profile.isGen3, isTrue);
-        expect(profile.memoryMapVerified, isFalse);
+        expect(profile.memoryMapVerified, testCase.memoryVerified);
         expect(profile.addresses, isNull);
       });
     }

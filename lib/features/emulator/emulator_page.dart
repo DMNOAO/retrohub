@@ -82,7 +82,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     );
     final bool supportsPokemonJournal =
         !CoreLoader.isGbaRom(game.romPath) ||
-        pokemonProfile.version == PokemonGameVersion.emerald;
+        pokemonProfile.version == PokemonGameVersion.emerald ||
+        pokemonProfile.version == PokemonGameVersion.ruby ||
+        pokemonProfile.version == PokemonGameVersion.sapphire;
 
     if (supportsPokemonJournal) {
       _pokemonJournalTracker = PokemonJournalTracker(

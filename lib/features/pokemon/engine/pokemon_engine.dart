@@ -29,12 +29,16 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
   @override
   bool get isSupported =>
       profile.memoryMapVerified ||
-      profile.version == PokemonGameVersion.emerald;
+      profile.version == PokemonGameVersion.emerald ||
+      profile.version == PokemonGameVersion.ruby ||
+      profile.version == PokemonGameVersion.sapphire;
 
   @override
   PokemonMemorySnapshot? capture() {
     if (!isSupported) return null;
-    if (profile.version == PokemonGameVersion.emerald) {
+    if (profile.version == PokemonGameVersion.emerald ||
+        profile.version == PokemonGameVersion.ruby ||
+        profile.version == PokemonGameVersion.sapphire) {
       return PokemonEmeraldMemoryReader.fromBridge(
         bridge: bridge,
         profile: profile,

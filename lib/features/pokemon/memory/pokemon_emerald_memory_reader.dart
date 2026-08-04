@@ -11,6 +11,12 @@ import '../../emulator/presentation/widget/libretro_game_view.dart';
 /// revisiones, por lo que se usa la dirección inglesa como ruta rápida y se
 /// recorre IWRAM como alternativa validada.
 final class PokemonEmeraldMemoryReader {
+  static const int _rubySapphireSaveBlock1Address = 0x02025734;
+  static const int _rubySapphireSaveBlock2Address = 0x02024EA4;
+  static const int _rubySapphireSaveBlock1Size = 0x3AC0;
+  static const int _rubySapphireSaveBlock2Size = 0x0890;
+  static const int _rubySapphireDexSeen2Offset = 0x0938;
+  static const int _rubySapphireDexSeen3Offset = 0x3A8C;
   static const int _englishSaveBlock1PointerAddress = 0x03005D8C;
   static const int _englishSaveBlock2PointerAddress = 0x03005D90;
 
@@ -61,7 +67,9 @@ final class PokemonEmeraldMemoryReader {
     final bool memoryAvailable =
         controller?.isAttached ?? (bridge?.isGameLoaded ?? false);
     if (!memoryAvailable ||
-        profile.version != PokemonGameVersion.emerald) {
+        profile.version != PokemonGameVersion.emerald &&
+        profile.version != PokemonGameVersion.ruby &&
+        profile.version != PokemonGameVersion.sapphire) {
       return null;
     }
 
@@ -84,8 +92,9 @@ final class PokemonEmeraldMemoryReader {
     final int mapNumber = _u8(saveBlock1 + 0x05);
     final int currentMapId = (mapGroup << 8) | mapNumber;
 
-    final int encryptionKey = _u32(saveBlock2 + 0xAC);
-    final int money = _u32(saveBlock1 + 0x490) ^ encryptionKey;
+    final int money = profile.version == PokemonGameVersion.emerald
+        ? _u32(saveBlock1 + 0x490) ^ _u32(saveBlock2 + 0xAC)
+        : _u32(saveBlock1 + 0x490);
     final List<PokemonPartyMember> party = _readParty(saveBlock1);
     final List<int> caughtPokemonIds = _readPokedexIds(
       saveBlock2 + _pokedexOwnedOffset,
@@ -96,10 +105,13 @@ final class PokemonEmeraldMemoryReader {
     final int badgesMask = _readBadgesMask(saveBlock1);
     final bool nationalDexUnlocked = isNationalDexUnlocked(
       nationalMagic: _u8(saveBlock2 + _nationalDexMagicOffset),
-      nationalDexVar: _u16(saveBlock1 + _nationalDexVarOffset),
-      nationalDexFlagSet: _readFlag(saveBlock1, _nationalDexFlag),
+      nationalDexVar: _u16(saveBlock1 + _activeNationalDexVarOffset),
+      nationalDexFlagSet: _readFlag(saveBlock1, _activeNationalDexFlag),
     );
-    final _EmeraldBattleState? battle = _readBattleState();
+    final _EmeraldBattleState? battle =
+        profile.version == PokemonGameVersion.emerald
+            ? _readBattleState()
+            : null;
     final List<int> defeatedTrainerIds = _readDefeatedTrainerIds(saveBlock1);
 
     return PokemonMemorySnapshot(
@@ -128,13 +140,15 @@ final class PokemonEmeraldMemoryReader {
   }
 
   List<int> _readDefeatedTrainerIds(int saveBlock1) {
+    final int flagsOffset = _activeFlagsOffset;
+    final int lastTrainerId = _activeLastTrainerId;
     final int firstByte = _trainerFlagStart >> 3;
-    final int lastByte = (_trainerFlagStart + _lastTrainerId) >> 3;
+    final int lastByte = (_trainerFlagStart + lastTrainerId) >> 3;
     final List<int> bytes = _read(
-      saveBlock1 + _flagsOffset + firstByte,
+      saveBlock1 + flagsOffset + firstByte,
       lastByte - firstByte + 1,
     );
-    return decodeDefeatedTrainerIds(bytes, maximumTrainerId: _lastTrainerId);
+    return decodeDefeatedTrainerIds(bytes, maximumTrainerId: lastTrainerId);
   }
 
   static List<int> decodeDefeatedTrainerIds(
@@ -190,7 +204,7 @@ final class PokemonEmeraldMemoryReader {
   }
 
   bool _readFlag(int saveBlock1, int flag) {
-    final value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+    final value = _u8(saveBlock1 + _activeFlagsOffset + (flag >> 3));
     return (value & (1 << (flag & 7))) != 0;
   }
 
@@ -208,8 +222,9 @@ final class PokemonEmeraldMemoryReader {
   int _readBadgesMask(int saveBlock1) {
     int result = 0;
     for (int badge = 0; badge < 8; badge++) {
-      final int flag = _firstBadgeFlag + badge;
-      final int value = _u8(saveBlock1 + _flagsOffset + (flag >> 3));
+      final int flag = _activeFirstBadgeFlag + badge;
+      final int value =
+          _u8(saveBlock1 + _activeFlagsOffset + (flag >> 3));
       if ((value & (1 << (flag & 7))) != 0) result |= 1 << badge;
     }
     return result;
@@ -347,6 +362,43 @@ final class PokemonEmeraldMemoryReader {
   ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {
+    if (profile.version == PokemonGameVersion.ruby ||
+        profile.version == PokemonGameVersion.sapphire) {
+      if (_validPair(
+        _rubySapphireSaveBlock1Address,
+        _rubySapphireSaveBlock2Address,
+      )) {
+        return const _EmeraldSaveBlocks(
+          saveBlock1: _rubySapphireSaveBlock1Address,
+          saveBlock2: _rubySapphireSaveBlock2Address,
+        );
+      }
+
+      // En Ruby/Sapphire ambos bloques son contiguos y SaveBlock1 comienza
+      // 0x890 bytes después de SaveBlock2. El barrido validado mantiene el
+      // lector operativo si una región o revisión desplaza los globals.
+      final List<int> ewram = _read(_ewramStart, _ewramEnd - _ewramStart);
+      if (ewram.length != _ewramEnd - _ewramStart) return null;
+      for (int saveBlock2 = _ewramStart;
+          saveBlock2 <=
+              _ewramEnd - 0x890 - _rubySapphireSaveBlock1Size;
+          saveBlock2 += 4) {
+        final int localOffset = saveBlock2 - _ewramStart;
+        if (!isPlausiblePlayerName(
+          ewram.sublist(localOffset, localOffset + 8),
+        )) {
+          continue;
+        }
+        final int saveBlock1 = saveBlock2 + 0x890;
+        if (_validPair(saveBlock1, saveBlock2)) {
+          return _EmeraldSaveBlocks(
+            saveBlock1: saveBlock1,
+            saveBlock2: saveBlock2,
+          );
+        }
+      }
+      return null;
+    }
     final int? englishSaveBlock1 =
         _readPointer(_englishSaveBlock1PointerAddress);
     final int? englishSaveBlock2 =
@@ -380,13 +432,46 @@ final class PokemonEmeraldMemoryReader {
   }
 
   bool _validPair(int? saveBlock1, int? saveBlock2) {
-    if (!_validBlock(saveBlock1, _saveBlock1Size) ||
-        !_validBlock(saveBlock2, _saveBlock2Size)) {
+    final bool rubySapphire =
+        profile.version == PokemonGameVersion.ruby ||
+        profile.version == PokemonGameVersion.sapphire;
+    final int saveBlock1Size =
+        rubySapphire ? _rubySapphireSaveBlock1Size : _saveBlock1Size;
+    final int saveBlock2Size =
+        rubySapphire ? _rubySapphireSaveBlock2Size : _saveBlock2Size;
+    if (!_validBlock(saveBlock1, saveBlock1Size) ||
+        !_validBlock(saveBlock2, saveBlock2Size)) {
       return false;
     }
 
     final List<int> name = _read(saveBlock2!, 8);
-    if (!_validPlayerName(name)) return false;
+    if (!isPlausiblePlayerName(name)) return false;
+
+    // Ruby/Sapphire mantiene tres copias sincronizadas de los Pokémon vistos:
+    // una en SaveBlock2 y dos en SaveBlock1. Un nombre de jugador también
+    // aparece en buffers auxiliares, pero esos buffers no satisfacen esta
+    // relación. Esta comprobación identifica el guardado real en ROMs cuyas
+    // direcciones cambian por idioma o revisión.
+    if (rubySapphire &&
+        !_hasConsistentRubySapphirePokedex(saveBlock1!, saveBlock2)) {
+      return false;
+    }
+
+    // Estos campos forman la cabecera de SaveBlock2 en todos los juegos
+    // principales de Gen III. Validarlos evita aceptar buffers temporales
+    // (por ejemplo, el nombre AAAAAAA de la pantalla de introducción) como
+    // si fueran el guardado real.
+    final int gender = _u8(saveBlock2 + 0x08);
+    final int trainerId = _u32(saveBlock2 + 0x0A);
+    final int buttonMode = _u8(saveBlock2 + 0x13);
+    final int options = _u16(saveBlock2 + 0x14);
+    if (gender > 1 ||
+        trainerId == 0 ||
+        trainerId == 0xFFFFFFFF ||
+        buttonMode > 2 ||
+        (options & 0xF000) != 0) {
+      return false;
+    }
 
     final int hours = _u16(saveBlock2 + 0x0E);
     final int minutes = _u8(saveBlock2 + 0x10);
@@ -409,23 +494,81 @@ final class PokemonEmeraldMemoryReader {
       return false;
     }
 
-    final int encryptionKey = _u32(saveBlock2 + 0xAC);
-    final int money = _u32(saveBlock1 + 0x490) ^ encryptionKey;
+    final int partyCount = _u8(saveBlock1 + _partyCountOffset);
+    if (partyCount > 6) return false;
+    if (partyCount > 0) {
+      final List<int> firstMember = _read(
+        saveBlock1 + _partyOffset,
+        _partyMemberSize,
+      );
+      if (_decodePartyMember(firstMember) == null) return false;
+    }
+
+    final int money = profile.version == PokemonGameVersion.emerald
+        ? _u32(saveBlock1 + 0x490) ^ _u32(saveBlock2 + 0xAC)
+        : _u32(saveBlock1 + 0x490);
     return money >= 0 && money <= 999999;
   }
 
-  bool _validPlayerName(List<int> bytes) {
+  int get _activeFlagsOffset =>
+      profile.version == PokemonGameVersion.emerald ? _flagsOffset : 0x1220;
+
+  int get _activeFirstBadgeFlag =>
+      profile.version == PokemonGameVersion.emerald ? _firstBadgeFlag : 0x807;
+
+  int get _activeLastTrainerId =>
+      profile.version == PokemonGameVersion.emerald ? _lastTrainerId : 693;
+
+  int get _activeNationalDexVarOffset =>
+      profile.version == PokemonGameVersion.emerald
+          ? _nationalDexVarOffset
+          : 0x13CC;
+
+  int get _activeNationalDexFlag =>
+      profile.version == PokemonGameVersion.emerald ? _nationalDexFlag : 0x836;
+
+  bool _hasConsistentRubySapphirePokedex(
+    int saveBlock1,
+    int saveBlock2,
+  ) {
+    final List<int> primarySeen = _read(
+      saveBlock2 + _pokedexSeenOffset,
+      _pokedexBytes,
+    );
+    final List<int> secondarySeen = _read(
+      saveBlock1 + _rubySapphireDexSeen2Offset,
+      _pokedexBytes,
+    );
+    final List<int> tertiarySeen = _read(
+      saveBlock1 + _rubySapphireDexSeen3Offset,
+      _pokedexBytes,
+    );
+    return equalBytes(primarySeen, secondarySeen) &&
+        equalBytes(primarySeen, tertiarySeen);
+  }
+
+  static bool equalBytes(List<int> left, List<int> right) {
+    if (left.isEmpty || left.length != right.length) return false;
+    for (int index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
+
+  static bool isPlausiblePlayerName(List<int> bytes) {
     if (bytes.length != 8) return false;
     final int terminator = bytes.indexOf(0xFF);
     if (terminator < 1 || terminator > 7) return false;
 
-    for (final int value in bytes.take(terminator)) {
+    final List<int> characters = bytes.take(terminator).toList();
+    for (final int value in characters) {
       final bool supported =
           value == 0x00 ||
           (value >= 0xA1 && value <= 0xB6) ||
           (value >= 0xBB && value <= 0xEE);
       if (!supported) return false;
     }
+
     return PokemonDecoder.decodeGen3Text(bytes).isNotEmpty;
   }
 

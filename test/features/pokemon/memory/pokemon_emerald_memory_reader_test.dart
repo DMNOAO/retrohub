@@ -3,6 +3,59 @@ import 'package:retrohub/features/pokemon/decoder/pokemon_decoder.dart';
 import 'package:retrohub/features/pokemon/memory/pokemon_emerald_memory_reader.dart';
 
 void main() {
+  group('Detección de bloques de guardado Gen III', () {
+    test('exige que las copias de Pokédex vistos coincidan', () {
+      final List<int> seen = List<int>.filled(52, 0);
+      final List<int> different = List<int>.from(seen)..[17] = 1;
+
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, List<int>.from(seen)),
+        isTrue,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, different),
+        isFalse,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, const <int>[]),
+        isFalse,
+      );
+    });
+
+    test('acepta nombres legítimos con caracteres repetidos', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xFF],
+        ),
+        isTrue,
+      );
+    });
+
+    test('acepta un nombre normal terminado en FF', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0xBE, 0xBB, 0xC7, 0xC3, 0xFF, 0x00, 0x00, 0x00],
+        ),
+        isTrue,
+      );
+    });
+
+    test('rechaza nombres sin terminador o con bytes inválidos', () {
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          List<int>.filled(8, 0xBB),
+        ),
+        isFalse,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
+          <int>[0x20, 0xFF, 0, 0, 0, 0, 0, 0],
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('Pokémon Emerald species', () {
     test('keeps the first 251 National Pokédex IDs', () {
       expect(PokemonEmeraldMemoryReader.emeraldNationalDexId(1), 1);

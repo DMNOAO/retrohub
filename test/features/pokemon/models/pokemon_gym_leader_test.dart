@@ -56,4 +56,20 @@ void main() {
       'assets/sprites/characters/gym_leaders/gbc/blue_kanto.png',
     );
   });
+
+  test('Ruby y Sapphire usan a Wallace como octavo líder', () {
+    for (final title in <String>['Pokemon Ruby', 'Pokemon Zafiro']) {
+      final profile = PokemonGameProfile.fromGameIdentity(
+        gameTitle: title,
+        romPath: '$title.gba',
+      );
+
+      final leader = GymLeaderAssetResolver.forBadge(profile, 7);
+      expect(leader?.name, 'Wallace');
+      expect(
+        leader?.spritePath,
+        'assets/sprites/characters/gym_leaders/gba/Hoenn/wallace_hoenn.png',
+      );
+    }
+  });
 }
