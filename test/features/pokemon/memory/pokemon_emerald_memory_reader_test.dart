@@ -4,6 +4,24 @@ import 'package:retrohub/features/pokemon/memory/pokemon_emerald_memory_reader.d
 
 void main() {
   group('Detección de bloques de guardado Gen III', () {
+    test('exige que las copias de Pokédex vistos coincidan', () {
+      final List<int> seen = List<int>.filled(52, 0);
+      final List<int> different = List<int>.from(seen)..[17] = 1;
+
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, List<int>.from(seen)),
+        isTrue,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, different),
+        isFalse,
+      );
+      expect(
+        PokemonEmeraldMemoryReader.equalBytes(seen, const <int>[]),
+        isFalse,
+      );
+    });
+
     test('rechaza el buffer temporal AAAAAAA', () {
       expect(
         PokemonEmeraldMemoryReader.isPlausiblePlayerName(
