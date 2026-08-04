@@ -14,7 +14,7 @@ final class PokemonEmeraldMemoryReader {
   static const int _rubySapphireSaveBlock1Address = 0x02025734;
   static const int _rubySapphireSaveBlock2Address = 0x02024EA4;
   static const int _rubySapphireSaveBlock1Size = 0x3AC0;
-  static const int _rubySapphireSaveBlock2Size = 0x0930;
+  static const int _rubySapphireSaveBlock2Size = 0x0890;
   static const int _rubySapphireDexSeen2Offset = 0x0938;
   static const int _rubySapphireDexSeen3Offset = 0x3A8C;
   static const int _englishSaveBlock1PointerAddress = 0x03005D8C;
