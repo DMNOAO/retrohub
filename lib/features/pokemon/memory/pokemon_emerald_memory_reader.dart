@@ -13,6 +13,10 @@ import '../../emulator/presentation/widget/libretro_game_view.dart';
 final class PokemonEmeraldMemoryReader {
   static const int _rubySapphireSaveBlock1Address = 0x02025734;
   static const int _rubySapphireSaveBlock2Address = 0x02024EA4;
+  static const int _rubySapphireSaveBlock1Size = 0x3AC0;
+  static const int _rubySapphireSaveBlock2Size = 0x0930;
+  static const int _rubySapphireDexSeen2Offset = 0x0938;
+  static const int _rubySapphireDexSeen3Offset = 0x3A8C;
   static const int _englishSaveBlock1PointerAddress = 0x03005D8C;
   static const int _englishSaveBlock2PointerAddress = 0x03005D90;
 
@@ -376,7 +380,8 @@ final class PokemonEmeraldMemoryReader {
       final List<int> ewram = _read(_ewramStart, _ewramEnd - _ewramStart);
       if (ewram.length != _ewramEnd - _ewramStart) return null;
       for (int saveBlock2 = _ewramStart;
-          saveBlock2 <= _ewramEnd - 0x890 - _saveBlock1Size;
+          saveBlock2 <=
+              _ewramEnd - 0x890 - _rubySapphireSaveBlock1Size;
           saveBlock2 += 4) {
         final int localOffset = saveBlock2 - _ewramStart;
         if (!isPlausiblePlayerName(
@@ -427,13 +432,30 @@ final class PokemonEmeraldMemoryReader {
   }
 
   bool _validPair(int? saveBlock1, int? saveBlock2) {
-    if (!_validBlock(saveBlock1, _saveBlock1Size) ||
-        !_validBlock(saveBlock2, _saveBlock2Size)) {
+    final bool rubySapphire =
+        profile.version == PokemonGameVersion.ruby ||
+        profile.version == PokemonGameVersion.sapphire;
+    final int saveBlock1Size =
+        rubySapphire ? _rubySapphireSaveBlock1Size : _saveBlock1Size;
+    final int saveBlock2Size =
+        rubySapphire ? _rubySapphireSaveBlock2Size : _saveBlock2Size;
+    if (!_validBlock(saveBlock1, saveBlock1Size) ||
+        !_validBlock(saveBlock2, saveBlock2Size)) {
       return false;
     }
 
     final List<int> name = _read(saveBlock2!, 8);
     if (!isPlausiblePlayerName(name)) return false;
+
+    // Ruby/Sapphire mantiene tres copias sincronizadas de los Pokémon vistos:
+    // una en SaveBlock2 y dos en SaveBlock1. Un nombre de jugador también
+    // aparece en buffers auxiliares, pero esos buffers no satisfacen esta
+    // relación. Esta comprobación identifica el guardado real en ROMs cuyas
+    // direcciones cambian por idioma o revisión.
+    if (rubySapphire &&
+        !_hasConsistentRubySapphirePokedex(saveBlock1!, saveBlock2)) {
+      return false;
+    }
 
     // Estos campos forman la cabecera de SaveBlock2 en todos los juegos
     // principales de Gen III. Validarlos evita aceptar buffers temporales
@@ -504,6 +526,34 @@ final class PokemonEmeraldMemoryReader {
 
   int get _activeNationalDexFlag =>
       profile.version == PokemonGameVersion.emerald ? _nationalDexFlag : 0x836;
+
+  bool _hasConsistentRubySapphirePokedex(
+    int saveBlock1,
+    int saveBlock2,
+  ) {
+    final List<int> primarySeen = _read(
+      saveBlock2 + _pokedexSeenOffset,
+      _pokedexBytes,
+    );
+    final List<int> secondarySeen = _read(
+      saveBlock1 + _rubySapphireDexSeen2Offset,
+      _pokedexBytes,
+    );
+    final List<int> tertiarySeen = _read(
+      saveBlock1 + _rubySapphireDexSeen3Offset,
+      _pokedexBytes,
+    );
+    return equalBytes(primarySeen, secondarySeen) &&
+        equalBytes(primarySeen, tertiarySeen);
+  }
+
+  static bool equalBytes(List<int> left, List<int> right) {
+    if (left.isEmpty || left.length != right.length) return false;
+    for (int index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
 
   static bool isPlausiblePlayerName(List<int> bytes) {
     if (bytes.length != 8) return false;
