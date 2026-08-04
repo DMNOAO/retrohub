@@ -569,13 +569,6 @@ final class PokemonEmeraldMemoryReader {
       if (!supported) return false;
     }
 
-    // Los buffers de introducción se inicializan repitiendo una letra y
-    // pueden parecer nombres válidos. Un nombre real no debe ser una cadena
-    // completa de siete caracteres idénticos.
-    if (characters.length == 7 &&
-        characters.every((value) => value == characters.first)) {
-      return false;
-    }
     return PokemonDecoder.decodeGen3Text(bytes).isNotEmpty;
   }
 
