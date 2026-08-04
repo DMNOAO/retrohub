@@ -379,7 +379,7 @@ final class PokemonEmeraldMemoryReader {
           saveBlock2 <= _ewramEnd - 0x890 - _saveBlock1Size;
           saveBlock2 += 4) {
         final int localOffset = saveBlock2 - _ewramStart;
-        if (!_validPlayerName(
+        if (!isPlausiblePlayerName(
           ewram.sublist(localOffset, localOffset + 8),
         )) {
           continue;
@@ -433,7 +433,23 @@ final class PokemonEmeraldMemoryReader {
     }
 
     final List<int> name = _read(saveBlock2!, 8);
-    if (!_validPlayerName(name)) return false;
+    if (!isPlausiblePlayerName(name)) return false;
+
+    // Estos campos forman la cabecera de SaveBlock2 en todos los juegos
+    // principales de Gen III. Validarlos evita aceptar buffers temporales
+    // (por ejemplo, el nombre AAAAAAA de la pantalla de introducción) como
+    // si fueran el guardado real.
+    final int gender = _u8(saveBlock2 + 0x08);
+    final int trainerId = _u32(saveBlock2 + 0x0A);
+    final int buttonMode = _u8(saveBlock2 + 0x13);
+    final int options = _u16(saveBlock2 + 0x14);
+    if (gender > 1 ||
+        trainerId == 0 ||
+        trainerId == 0xFFFFFFFF ||
+        buttonMode > 2 ||
+        (options & 0xF000) != 0) {
+      return false;
+    }
 
     final int hours = _u16(saveBlock2 + 0x0E);
     final int minutes = _u8(saveBlock2 + 0x10);
@@ -454,6 +470,16 @@ final class PokemonEmeraldMemoryReader {
         mapGroup > 63 ||
         mapNumber > 127) {
       return false;
+    }
+
+    final int partyCount = _u8(saveBlock1 + _partyCountOffset);
+    if (partyCount > 6) return false;
+    if (partyCount > 0) {
+      final List<int> firstMember = _read(
+        saveBlock1 + _partyOffset,
+        _partyMemberSize,
+      );
+      if (_decodePartyMember(firstMember) == null) return false;
     }
 
     final int money = profile.version == PokemonGameVersion.emerald
@@ -479,17 +505,26 @@ final class PokemonEmeraldMemoryReader {
   int get _activeNationalDexFlag =>
       profile.version == PokemonGameVersion.emerald ? _nationalDexFlag : 0x836;
 
-  bool _validPlayerName(List<int> bytes) {
+  static bool isPlausiblePlayerName(List<int> bytes) {
     if (bytes.length != 8) return false;
     final int terminator = bytes.indexOf(0xFF);
     if (terminator < 1 || terminator > 7) return false;
 
-    for (final int value in bytes.take(terminator)) {
+    final List<int> characters = bytes.take(terminator).toList();
+    for (final int value in characters) {
       final bool supported =
           value == 0x00 ||
           (value >= 0xA1 && value <= 0xB6) ||
           (value >= 0xBB && value <= 0xEE);
       if (!supported) return false;
+    }
+
+    // Los buffers de introducción se inicializan repitiendo una letra y
+    // pueden parecer nombres válidos. Un nombre real no debe ser una cadena
+    // completa de siete caracteres idénticos.
+    if (characters.length == 7 &&
+        characters.every((value) => value == characters.first)) {
+      return false;
     }
     return PokemonDecoder.decodeGen3Text(bytes).isNotEmpty;
   }
