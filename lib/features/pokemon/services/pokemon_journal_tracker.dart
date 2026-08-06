@@ -33,6 +33,7 @@ class PokemonJournalTracker {
   bool _persistentStateRestored = false;
   bool _gymLeaderEventsRepaired = false;
   bool _busy = false;
+  int? _lastAcceptedDiagnosticPlayTime;
 
   // Estado transitorio de combate (Fase 4.2/4.3): se recuerda contra qué
   // entrenador se está peleando mientras dura el combate, para poder
@@ -88,7 +89,20 @@ class PokemonJournalTracker {
   }
 
   Future<void> _poll() async {
-    if (_busy || !controller.isAttached) return;
+    if (_busy) {
+      RuntimeDiagnosticsLog.recordJournalDecision(
+        'Snapshot rejected',
+        'poll already in progress',
+      );
+      return;
+    }
+    if (!controller.isAttached) {
+      RuntimeDiagnosticsLog.recordJournalDecision(
+        'Snapshot rejected',
+        'controller detached',
+      );
+      return;
+    }
     _busy = true;
 
     try {
@@ -102,7 +116,21 @@ class PokemonJournalTracker {
         profile: profile,
       ).capture();
 
-      if (current == null || !_isPlausible(current)) return;
+      if (current == null) {
+        RuntimeDiagnosticsLog.recordJournalDecision(
+          'Snapshot rejected',
+          'memory reader returned null',
+        );
+        return;
+      }
+      final String? plausibilityError = _plausibilityError(current);
+      if (plausibilityError != null) {
+        RuntimeDiagnosticsLog.recordJournalDecision(
+          'Snapshot rejected',
+          plausibilityError,
+        );
+        return;
+      }
 
       await _ensureEmeraldGymLeaderEvents(current);
 
@@ -128,13 +156,28 @@ class PokemonJournalTracker {
           _accepted == null &&
           (profile.version == PokemonGameVersion.ruby ||
               profile.version == PokemonGameVersion.sapphire);
-      if (_candidateRepeats < 2 && !canAcceptFirstRubySapphireSnapshot) return;
+      if (_candidateRepeats < 2 && !canAcceptFirstRubySapphireSnapshot) {
+        RuntimeDiagnosticsLog.recordJournalDecision(
+          'Snapshot rejected',
+          'awaiting second stable sample',
+        );
+        return;
+      }
 
       final stable = _candidate!;
       final previous = _accepted;
 
       if (previous == null) {
+        RuntimeDiagnosticsLog.recordSnapshotComparison(
+          'Snapshot accepted | initial snapshot',
+        );
+        RuntimeDiagnosticsLog.recordJournalDecision(
+          'Snapshot accepted',
+          'initial stable snapshot',
+        );
         _accepted = stable;
+        _lastAcceptedDiagnosticPlayTime =
+            stable.gamePlayTimeMinutes ?? playTimeMinutes();
         await _saveSnapshot(stable);
         await _insertEvent(
           type: 'pokemon_progress_detected',
@@ -148,7 +191,32 @@ class PokemonJournalTracker {
 
       _accepted = stable;
 
+      final int currentDiagnosticPlayTime =
+          stable.gamePlayTimeMinutes ?? playTimeMinutes();
+      final int? previousPlayTime = _lastAcceptedDiagnosticPlayTime;
+      final List<String> changes = _snapshotChanges(
+        previous,
+        stable,
+        previousPlayTime: previousPlayTime,
+        currentPlayTime: currentDiagnosticPlayTime,
+      );
+      final bool playtimeBackwards = previousPlayTime != null &&
+          currentDiagnosticPlayTime < previousPlayTime;
+      _lastAcceptedDiagnosticPlayTime = currentDiagnosticPlayTime;
+      final String snapshotState = playtimeBackwards
+          ? 'Snapshot backwards'
+          : changes.isEmpty
+              ? 'Snapshot frozen'
+              : 'Snapshot accepted';
+      RuntimeDiagnosticsLog.recordSnapshotComparison(
+        '$snapshotState | ${changes.isEmpty ? 'same core state' : changes.join(', ')}',
+      );
+
       if (_sameCoreState(previous, stable)) {
+        RuntimeDiagnosticsLog.recordJournalDecision(
+          'Snapshot accepted',
+          'same core state; periodic persistence only',
+        );
         final last = _lastSnapshotSavedAt;
         if (last == null ||
             DateTime.now().difference(last) >= const Duration(minutes: 1)) {
@@ -157,6 +225,10 @@ class PokemonJournalTracker {
         return;
       }
 
+      RuntimeDiagnosticsLog.recordJournalDecision(
+        'Snapshot accepted',
+        changes.join(', '),
+      );
       await _recordChanges(previous, stable);
       await _saveSnapshot(stable);
     } catch (error, stackTrace) {
@@ -171,13 +243,51 @@ class PokemonJournalTracker {
     }
   }
 
-  bool _isPlausible(PokemonMemorySnapshot value) {
-    return value.money >= 0 &&
-        value.money <= 999999 &&
-        value.badgesMask >= 0 &&
-        value.badgesMask <= 0xFFFF &&
-        value.partySpeciesIds.length <= 6 &&
-        value.partySpeciesIds.every((id) => id >= 1 && id <= 386);
+  String? _plausibilityError(PokemonMemorySnapshot value) {
+    if (value.money < 0 || value.money > 999999) return 'invalid money';
+    if (value.badgesMask < 0 || value.badgesMask > 0xFFFF) {
+      return 'invalid badges';
+    }
+    if (value.partySpeciesIds.length > 6 ||
+        !value.partySpeciesIds.every((int id) => id >= 1 && id <= 386)) {
+      return 'invalid party';
+    }
+    return null;
+  }
+
+  List<String> _snapshotChanges(
+    PokemonMemorySnapshot previous,
+    PokemonMemorySnapshot current, {
+    required int? previousPlayTime,
+    required int currentPlayTime,
+  }) {
+    final List<String> changes = <String>[];
+    if (previous.currentMapId != current.currentMapId ||
+        previous.playerX != current.playerX ||
+        previous.playerY != current.playerY) {
+      changes.add('location changed');
+    }
+    if (!_sameParty(previous.party, current.party)) {
+      changes.add('party changed');
+    }
+    if (previous.money != current.money) changes.add('money changed');
+    if (previous.badgesMask != current.badgesMask) {
+      changes.add('badges changed');
+    }
+    if (previousPlayTime != currentPlayTime) {
+      changes.add(previousPlayTime != null && currentPlayTime < previousPlayTime
+          ? 'playtime backwards ($previousPlayTime -> $currentPlayTime)'
+          : 'playtime changed');
+    }
+    if (previous.otherTrainerClassId != current.otherTrainerClassId ||
+        previous.otherTrainerId != current.otherTrainerId) {
+      changes.add('trainer changed');
+    }
+    if (previous.battleState != current.battleState ||
+        previous.battleResultRaw != current.battleResultRaw) {
+      changes.add('battle state changed');
+    }
+    return changes;
   }
 
   bool _sameCoreState(PokemonMemorySnapshot a, PokemonMemorySnapshot b) {

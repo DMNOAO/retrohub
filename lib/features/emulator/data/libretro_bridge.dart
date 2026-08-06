@@ -47,6 +47,12 @@ typedef _RhFileOperationDart = int Function(Pointer<Utf8>);
 typedef _RhGetMemoryRegionSizeNative = Size Function(Uint32);
 typedef _RhGetMemoryRegionSizeDart = int Function(int);
 
+typedef _RhGetMemoryRegionPointerNative = UintPtr Function(Uint32);
+typedef _RhGetMemoryRegionPointerDart = int Function(int);
+
+typedef _RhIsMemoryRegionMappedNative = Int32 Function(Uint32);
+typedef _RhIsMemoryRegionMappedDart = int Function(int);
+
 typedef _RhReadMemoryByteNative = Int32 Function(Uint32, Size);
 typedef _RhReadMemoryByteDart = int Function(int, int);
 
@@ -83,6 +89,20 @@ abstract final class LibretroMemoryRegion {
   static const int rtc = 1;
   static const int systemRam = 2;
   static const int videoRam = 3;
+}
+
+class LibretroMemoryRegionDiagnostics {
+  final int memoryId;
+  final bool mapped;
+  final int pointer;
+  final int size;
+
+  const LibretroMemoryRegionDiagnostics({
+    required this.memoryId,
+    required this.mapped,
+    required this.pointer,
+    required this.size,
+  });
 }
 
 // ============================================================
@@ -173,6 +193,8 @@ class LibretroBridge {
   late final _RhFileOperationDart _loadState;
 
   late final _RhGetMemoryRegionSizeDart _getMemoryRegionSize;
+  late final _RhGetMemoryRegionPointerDart _getMemoryRegionPointer;
+  late final _RhIsMemoryRegionMappedDart _isMemoryRegionMapped;
   late final _RhReadMemoryByteDart _readMemoryByte;
   late final _RhReadMemoryBlockDart _readMemoryBlock;
   late final _RhIsMemoryAddressMappedDart _isMemoryAddressMapped;
@@ -334,6 +356,14 @@ class LibretroBridge {
     _readMemoryBlock = _lib.lookupFunction<
         _RhReadMemoryBlockNative,
         _RhReadMemoryBlockDart>('rh_read_memory_block');
+
+    _getMemoryRegionPointer = _lib.lookupFunction<
+        _RhGetMemoryRegionPointerNative,
+        _RhGetMemoryRegionPointerDart>('rh_get_memory_region_pointer');
+
+    _isMemoryRegionMapped = _lib.lookupFunction<
+        _RhIsMemoryRegionMappedNative,
+        _RhIsMemoryRegionMappedDart>('rh_is_memory_region_mapped');
 
     _isMemoryAddressMapped = _lib.lookupFunction<
         _RhIsMemoryAddressMappedNative,
@@ -700,6 +730,27 @@ class LibretroBridge {
       'systemRam': memoryRegionSize(LibretroMemoryRegion.systemRam),
       'videoRam': memoryRegionSize(LibretroMemoryRegion.videoRam),
     };
+  }
+
+  Map<String, LibretroMemoryRegionDiagnostics>
+      inspectMemoryRegionDiagnostics() {
+    const Map<String, int> regions = <String, int>{
+      'SAVE_RAM': LibretroMemoryRegion.saveRam,
+      'RTC': LibretroMemoryRegion.rtc,
+      'SYSTEM_RAM': LibretroMemoryRegion.systemRam,
+      'VIDEO_RAM': LibretroMemoryRegion.videoRam,
+    };
+    return regions.map((String name, int memoryId) {
+      return MapEntry<String, LibretroMemoryRegionDiagnostics>(
+        name,
+        LibretroMemoryRegionDiagnostics(
+          memoryId: memoryId,
+          mapped: _isMemoryRegionMapped(memoryId) == 1,
+          pointer: _getMemoryRegionPointer(memoryId),
+          size: memoryRegionSize(memoryId),
+        ),
+      );
+    });
   }
 
   // ============================================================

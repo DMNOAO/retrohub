@@ -3,6 +3,7 @@ import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
+import 'pokemon_controller_memory_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
 
 class PokemonMemoryReader {
@@ -14,13 +15,27 @@ class PokemonMemoryReader {
     required this.profile,
   });
 
-  PokemonMemorySnapshot? capture() => _capture(
-        (int offset, int length) => bridge.readMemoryBlock(
-          memoryId: LibretroMemoryRegion.systemRam,
-          offset: offset,
-          length: length,
-        ),
+  PokemonMemorySnapshot? capture() {
+    if (profile.isGen2) {
+      final int size = bridge.memoryRegionSize(LibretroMemoryRegion.rtc);
+      RuntimeDiagnosticsLog.recordRtc(
+        size <= 0
+            ? const <int>[]
+            : bridge.readMemoryBlock(
+                memoryId: LibretroMemoryRegion.rtc,
+                offset: 0,
+                length: size,
+              ),
       );
+    }
+    return _capture(
+      (int offset, int length) => bridge.readMemoryBlock(
+        memoryId: LibretroMemoryRegion.systemRam,
+        offset: offset,
+        length: length,
+      ),
+    );
+  }
 
   PokemonMemorySnapshot? _capture(
     List<int> Function(int offset, int length) read,
