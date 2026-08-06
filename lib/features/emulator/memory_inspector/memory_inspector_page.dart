@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../pokemon/memory/pokemon_controller_memory_reader.dart';
 import '../data/libretro_bridge.dart';
 import '../presentation/widget/libretro_game_view.dart';
 
@@ -729,6 +732,142 @@ class _MemoryInspectorPageState extends State<MemoryInspectorPage>
     }
   }
 
+  Future<void> _exportRuntimeDiagnostics() async {
+    try {
+      final Map<String, String> identity = widget.controller.runtimeIdentity();
+      final String romPath = identity['rom'] ?? '';
+      final String crc = await _crc32ForFile(romPath);
+      final Map<String, LibretroMemoryRegionDiagnostics> regions =
+          widget.controller.inspectMemoryRegionDiagnostics();
+      final RuntimeRtcDiagnostics? latestRtc =
+          RuntimeDiagnosticsLog.rtcSamples.isEmpty
+              ? null
+              : RuntimeDiagnosticsLog.rtcSamples.last;
+      final StringBuffer report = StringBuffer()
+        ..writeln('====================================')
+        ..writeln('RetroHub Runtime Diagnostics')
+        ..writeln('====================================')
+        ..writeln()
+        ..writeln('Core: ${identity['core'] ?? 'Unavailable'}')
+        ..writeln('ROM: ${identity['game'] ?? 'Unknown'}')
+        ..writeln('ROM path: ${romPath.isEmpty ? 'Unavailable' : romPath}')
+        ..writeln('CRC32: $crc')
+        ..writeln('Fecha: ${DateTime.now().toIso8601String()}')
+        ..writeln()
+        ..writeln('Memory Regions')
+        ..writeln('--------------');
+      for (final MapEntry<String, LibretroMemoryRegionDiagnostics> entry
+          in regions.entries) {
+        final LibretroMemoryRegionDiagnostics value = entry.value;
+        report.writeln(
+          '${entry.key}: mapped=${value.mapped} '
+          'pointer=0x${value.pointer.toRadixString(16).toUpperCase()} '
+          'size=${value.size}',
+        );
+      }
+      report
+        ..writeln('EWRAM: not exposed as a separate libretro memory region')
+        ..writeln('IWRAM: not exposed as a separate libretro memory region')
+        ..writeln()
+        ..writeln('RTC')
+        ..writeln('---');
+      if (latestRtc == null) {
+        report.writeln('No RTC samples captured.');
+      } else {
+        report
+          ..writeln('Raw bytes: ${latestRtc.rawHex}')
+          ..writeln('Day: ${latestRtc.day ?? 'unavailable'}')
+          ..writeln('Hour: ${latestRtc.hour ?? 'unavailable'}')
+          ..writeln('Minute: ${latestRtc.minute ?? 'unavailable'}')
+          ..writeln('Second: ${latestRtc.second ?? 'unavailable'}')
+          ..writeln('Estado RTC: ${latestRtc.state}');
+      }
+      report
+        ..writeln()
+        ..writeln('Snapshot')
+        ..writeln('--------')
+        ..writeln(
+          RuntimeDiagnosticsLog.snapshotComparisons.isEmpty
+              ? 'No snapshot comparisons captured.'
+              : RuntimeDiagnosticsLog.snapshotComparisons.last,
+        )
+        ..writeln()
+        ..writeln('Journal Decisions')
+        ..writeln('-----------------');
+      if (RuntimeDiagnosticsLog.journalDecisions.isEmpty) {
+        report.writeln('No journal decisions captured.');
+      } else {
+        RuntimeDiagnosticsLog.journalDecisions.forEach(report.writeln);
+      }
+      report
+        ..writeln()
+        ..writeln('Últimos snapshots')
+        ..writeln('-----------------');
+      if (RuntimeDiagnosticsLog.snapshotComparisons.isEmpty) {
+        report.writeln('No snapshots captured.');
+      } else {
+        RuntimeDiagnosticsLog.snapshotComparisons.forEach(report.writeln);
+      }
+      report
+        ..writeln()
+        ..writeln('Historial RTC')
+        ..writeln('------------');
+      if (RuntimeDiagnosticsLog.rtcSamples.isEmpty) {
+        report.writeln('No RTC samples captured.');
+      } else {
+        for (final RuntimeRtcDiagnostics sample
+            in RuntimeDiagnosticsLog.rtcSamples) {
+          report.writeln(
+            '${sample.sampledAt.toIso8601String()} | ${sample.state} | '
+            'day=${sample.day ?? '-'} ${sample.hour ?? '-'}:'
+            '${sample.minute ?? '-'}:${sample.second ?? '-'} | '
+            'raw=${sample.rawHex}',
+          );
+        }
+      }
+
+      final Directory directory = await getApplicationDocumentsDirectory();
+      final File output = File(
+        '${directory.path}${Platform.pathSeparator}'
+        'retrohub_runtime_diagnostics.txt',
+      );
+      await output.writeAsString(report.toString(), flush: true);
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = null;
+        _statusMessage = 'Diagnóstico exportado: ${output.path}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = null;
+        _errorMessage = 'No se pudo exportar el diagnóstico: $error';
+      });
+    }
+  }
+
+  Future<String> _crc32ForFile(String path) async {
+    if (path.isEmpty) return 'Unavailable';
+    final File file = File(path);
+    if (!await file.exists()) return 'Unavailable';
+    int crc = 0xFFFFFFFF;
+    await for (final List<int> chunk in file.openRead()) {
+      for (final int byte in chunk) {
+        crc ^= byte;
+        for (int bit = 0; bit < 8; bit++) {
+          crc = (crc & 1) != 0
+              ? (crc >> 1) ^ 0xEDB88320
+              : crc >> 1;
+        }
+      }
+    }
+    return (crc ^ 0xFFFFFFFF)
+        .toUnsigned(32)
+        .toRadixString(16)
+        .padLeft(8, '0')
+        .toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -743,6 +882,11 @@ class _MemoryInspectorPageState extends State<MemoryInspectorPage>
           ],
         ),
         actions: [
+          TextButton.icon(
+            onPressed: _exportRuntimeDiagnostics,
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('Export Runtime Diagnostics'),
+          ),
           IconButton(
             tooltip: _paused ? 'Reanudar lectura' : 'Pausar lectura',
             onPressed: () {
@@ -823,6 +967,34 @@ class _MemoryInspectorPageState extends State<MemoryInspectorPage>
     );
   }
 
+  Widget _buildRuntimeRegionSummary() {
+    final Map<String, LibretroMemoryRegionDiagnostics> regions =
+        widget.controller.inspectMemoryRegionDiagnostics();
+    if (regions.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: regions.entries.map((entry) {
+          final LibretroMemoryRegionDiagnostics value = entry.value;
+          return Chip(
+            avatar: Icon(
+              value.mapped ? Icons.check_circle : Icons.cancel,
+              size: 17,
+              color: value.mapped ? Colors.green : Colors.red,
+            ),
+            label: Text(
+              '${entry.key} | mapped=${value.mapped} | '
+              'ptr=0x${value.pointer.toRadixString(16).toUpperCase()} | '
+              '${value.size} bytes',
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildInspectorTab() {
     return Padding(
       padding: const EdgeInsets.all(18),
@@ -863,6 +1035,8 @@ class _MemoryInspectorPageState extends State<MemoryInspectorPage>
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _buildRuntimeRegionSummary(),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
