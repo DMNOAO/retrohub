@@ -193,12 +193,12 @@ class LibretroBridge {
   late final _RhFileOperationDart _loadState;
 
   late final _RhGetMemoryRegionSizeDart _getMemoryRegionSize;
-  late final _RhGetMemoryRegionPointerDart _getMemoryRegionPointer;
-  late final _RhIsMemoryRegionMappedDart _isMemoryRegionMapped;
+  _RhGetMemoryRegionPointerDart? _getMemoryRegionPointer;
+  _RhIsMemoryRegionMappedDart? _isMemoryRegionMapped;
   late final _RhReadMemoryByteDart _readMemoryByte;
   late final _RhReadMemoryBlockDart _readMemoryBlock;
-  late final _RhIsMemoryAddressMappedDart _isMemoryAddressMapped;
-  late final _RhReadMemoryAddressDart _readMemoryAddress;
+  _RhIsMemoryAddressMappedDart? _isMemoryAddressMapped;
+  _RhReadMemoryAddressDart? _readMemoryAddress;
 
   bool _coreLoaded = false;
   bool _gameLoaded = false;
@@ -357,21 +357,37 @@ class LibretroBridge {
         _RhReadMemoryBlockNative,
         _RhReadMemoryBlockDart>('rh_read_memory_block');
 
-    _getMemoryRegionPointer = _lib.lookupFunction<
-        _RhGetMemoryRegionPointerNative,
-        _RhGetMemoryRegionPointerDart>('rh_get_memory_region_pointer');
+    try {
+      _getMemoryRegionPointer = _lib.lookupFunction<
+          _RhGetMemoryRegionPointerNative,
+          _RhGetMemoryRegionPointerDart>('rh_get_memory_region_pointer');
+    } on ArgumentError {
+      _getMemoryRegionPointer = null;
+    }
 
-    _isMemoryRegionMapped = _lib.lookupFunction<
-        _RhIsMemoryRegionMappedNative,
-        _RhIsMemoryRegionMappedDart>('rh_is_memory_region_mapped');
+    try {
+      _isMemoryRegionMapped = _lib.lookupFunction<
+          _RhIsMemoryRegionMappedNative,
+          _RhIsMemoryRegionMappedDart>('rh_is_memory_region_mapped');
+    } on ArgumentError {
+      _isMemoryRegionMapped = null;
+    }
 
-    _isMemoryAddressMapped = _lib.lookupFunction<
-        _RhIsMemoryAddressMappedNative,
-        _RhIsMemoryAddressMappedDart>('rh_is_memory_address_mapped');
+    try {
+      _isMemoryAddressMapped = _lib.lookupFunction<
+          _RhIsMemoryAddressMappedNative,
+          _RhIsMemoryAddressMappedDart>('rh_is_memory_address_mapped');
+    } on ArgumentError {
+      _isMemoryAddressMapped = null;
+    }
 
-    _readMemoryAddress = _lib.lookupFunction<
-        _RhReadMemoryAddressNative,
-        _RhReadMemoryAddressDart>('rh_read_memory_address');
+    try {
+      _readMemoryAddress = _lib.lookupFunction<
+          _RhReadMemoryAddressNative,
+          _RhReadMemoryAddressDart>('rh_read_memory_address');
+    } on ArgumentError {
+      _readMemoryAddress = null;
+    }
   }
 
   // ============================================================
@@ -696,7 +712,8 @@ class LibretroBridge {
   bool isMemoryAddressMapped(int address) {
     _ensureNotDisposed();
     if (!_coreLoaded || !_gameLoaded || address < 0) return false;
-    return _isMemoryAddressMapped(address) == 1;
+    final _RhIsMemoryAddressMappedDart? operation = _isMemoryAddressMapped;
+    return operation != null && operation(address) == 1;
   }
 
   Uint8List readMemoryAddress({
@@ -711,7 +728,9 @@ class LibretroBridge {
 
     final Pointer<Uint8> destination = calloc<Uint8>(length);
     try {
-      final int bytesRead = _readMemoryAddress(
+      final _RhReadMemoryAddressDart? operation = _readMemoryAddress;
+      if (operation == null) return Uint8List(0);
+      final int bytesRead = operation(
         address,
         destination,
         length,
@@ -745,8 +764,8 @@ class LibretroBridge {
         name,
         LibretroMemoryRegionDiagnostics(
           memoryId: memoryId,
-          mapped: _isMemoryRegionMapped(memoryId) == 1,
-          pointer: _getMemoryRegionPointer(memoryId),
+          mapped: _isMemoryRegionMapped?.call(memoryId) == 1,
+          pointer: _getMemoryRegionPointer?.call(memoryId) ?? 0,
           size: memoryRegionSize(memoryId),
         ),
       );
