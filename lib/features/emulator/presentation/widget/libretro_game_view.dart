@@ -23,8 +23,11 @@ class LibretroGameController {
   Future<bool> Function()? _saveSram;
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
+  Map<String, LibretroMemoryRegionDiagnostics> Function()?
+      _inspectMemoryRegionDiagnostics;
   Uint8List Function(int memoryId, int offset, int length)? _readMemoryBlock;
   Uint8List Function(int address, int length)? _readMemoryAddress;
+  Map<String, String> Function()? _runtimeIdentity;
 
   bool get isAttached => _setButtonState != null;
 
@@ -57,12 +60,22 @@ class LibretroGameController {
     return _inspectMemoryRegions?.call() ?? const <String, int>{};
   }
 
+  Map<String, LibretroMemoryRegionDiagnostics>
+      inspectMemoryRegionDiagnostics() {
+    return _inspectMemoryRegionDiagnostics?.call() ??
+        const <String, LibretroMemoryRegionDiagnostics>{};
+  }
+
   Uint8List readMemoryBlock({required int memoryId, required int offset, required int length}) {
     return _readMemoryBlock?.call(memoryId, offset, length) ?? Uint8List(0);
   }
 
   Uint8List readMemoryAddress({required int address, required int length}) {
     return _readMemoryAddress?.call(address, length) ?? Uint8List(0);
+  }
+
+  Map<String, String> runtimeIdentity() {
+    return _runtimeIdentity?.call() ?? const <String, String>{};
   }
 
   void _attach({
@@ -73,8 +86,11 @@ class LibretroGameController {
     required Future<bool> Function() saveSram,
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
+    required Map<String, LibretroMemoryRegionDiagnostics> Function()
+        inspectMemoryRegionDiagnostics,
     required Uint8List Function(int memoryId, int offset, int length) readMemoryBlock,
     required Uint8List Function(int address, int length) readMemoryAddress,
+    required Map<String, String> Function() runtimeIdentity,
   }) {
     _setButtonState = setButtonState;
     _resetInput = resetInput;
@@ -83,8 +99,10 @@ class LibretroGameController {
     _saveSram = saveSram;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
     _inspectMemoryRegions = inspectMemoryRegions;
+    _inspectMemoryRegionDiagnostics = inspectMemoryRegionDiagnostics;
     _readMemoryBlock = readMemoryBlock;
     _readMemoryAddress = readMemoryAddress;
+    _runtimeIdentity = runtimeIdentity;
   }
 
   void _detach() {
@@ -95,8 +113,10 @@ class LibretroGameController {
     _saveSram = null;
     _currentPlayTimeMinutes = null;
     _inspectMemoryRegions = null;
+    _inspectMemoryRegionDiagnostics = null;
     _readMemoryBlock = null;
     _readMemoryAddress = null;
+    _runtimeIdentity = null;
   }
 }
 
@@ -204,8 +224,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveSram: _saveSram,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
       inspectMemoryRegions: _inspectMemoryRegions,
+      inspectMemoryRegionDiagnostics: _inspectMemoryRegionDiagnostics,
       readMemoryBlock: _readMemoryBlock,
       readMemoryAddress: _readMemoryAddress,
+      runtimeIdentity: _runtimeIdentity,
     );
   }
 
@@ -214,6 +236,20 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (_disposed || !_isRunning || bridge == null) return const <String, int>{};
     try { return bridge.inspectMemoryRegions(); }
     catch (error) { debugPrint('Error inspeccionando memoria: $error'); return const <String, int>{}; }
+  }
+
+  Map<String, LibretroMemoryRegionDiagnostics>
+      _inspectMemoryRegionDiagnostics() {
+    final bridge = _bridge;
+    if (_disposed || !_isRunning || bridge == null) {
+      return const <String, LibretroMemoryRegionDiagnostics>{};
+    }
+    try {
+      return bridge.inspectMemoryRegionDiagnostics();
+    } catch (error) {
+      debugPrint('Error inspeccionando regiones de memoria: $error');
+      return const <String, LibretroMemoryRegionDiagnostics>{};
+    }
   }
 
   Uint8List _readMemoryBlock(int memoryId, int offset, int length) {
@@ -235,6 +271,17 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       debugPrint('Error leyendo dirección GBA: $error');
       return Uint8List(0);
     }
+  }
+
+  Map<String, String> _runtimeIdentity() {
+    final bridge = _bridge;
+    return <String, String>{
+      'core': bridge == null
+          ? 'Unavailable'
+          : '${bridge.coreName()} ${bridge.coreVersion()}'.trim(),
+      'rom': widget.romPath,
+      'game': widget.gameTitle,
+    };
   }
 
   Future<void> _startEmulator() async {
