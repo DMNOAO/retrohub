@@ -1043,6 +1043,36 @@ size_t rh_get_memory_region_size(unsigned memory_id) {
 }
 
 RH_EXPORT
+uintptr_t rh_get_memory_region_pointer(unsigned memory_id) {
+    if (
+        !game_loaded ||
+        !retro_get_memory_data_fn
+    ) {
+        return 0;
+    }
+
+    return reinterpret_cast<uintptr_t>(
+        retro_get_memory_data_fn(memory_id)
+    );
+}
+
+RH_EXPORT
+int rh_is_memory_region_mapped(unsigned memory_id) {
+    if (
+        !game_loaded ||
+        !retro_get_memory_data_fn ||
+        !retro_get_memory_size_fn
+    ) {
+        return 0;
+    }
+
+    return retro_get_memory_data_fn(memory_id) != nullptr &&
+            retro_get_memory_size_fn(memory_id) > 0
+        ? 1
+        : 0;
+}
+
+RH_EXPORT
 int rh_read_memory_byte(
     unsigned memory_id,
     size_t offset
