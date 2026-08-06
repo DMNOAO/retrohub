@@ -257,12 +257,10 @@ class PokemonJournalTracker {
 
   List<String> _snapshotChanges(
     PokemonMemorySnapshot previous,
-    PokemonMemorySnapshot current,
-    {
+    PokemonMemorySnapshot current, {
     required int? previousPlayTime,
     required int currentPlayTime,
-  },
-  ) {
+  }) {
     final List<String> changes = <String>[];
     if (previous.currentMapId != current.currentMapId ||
         previous.playerX != current.playerX ||
