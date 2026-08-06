@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
@@ -6,6 +8,127 @@ import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
 import 'pokemon_emerald_memory_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
+
+class RuntimeRtcDiagnostics {
+  final DateTime sampledAt;
+  final List<int> rawBytes;
+  final int? day;
+  final int? hour;
+  final int? minute;
+  final int? second;
+  final String state;
+
+  const RuntimeRtcDiagnostics({
+    required this.sampledAt,
+    required this.rawBytes,
+    required this.day,
+    required this.hour,
+    required this.minute,
+    required this.second,
+    required this.state,
+  });
+
+  String get rawHex => rawBytes
+      .map((int value) => value.toRadixString(16).padLeft(2, '0'))
+      .join(' ')
+      .toUpperCase();
+}
+
+abstract final class RuntimeDiagnosticsLog {
+  static const int _maximumEntries = 120;
+  static final List<String> journalDecisions = <String>[];
+  static final List<String> snapshotComparisons = <String>[];
+  static final List<RuntimeRtcDiagnostics> rtcSamples =
+      <RuntimeRtcDiagnostics>[];
+  static int? _previousRtcSeconds;
+
+  static RuntimeRtcDiagnostics recordRtc(List<int> bytes) {
+    int? day;
+    int? hour;
+    int? minute;
+    int? second;
+    int? totalSeconds;
+
+    if (bytes.length >= 5) {
+      // RETRO_MEMORY_RTC no define un formato común. SameBoy expone los
+      // registros MBC3 en orden segundos/minutos/horas/día bajo/día alto.
+      // Si el core agrega una cabecera, los registros están al final.
+      final int start = bytes.length == 5 ? 0 : bytes.length - 5;
+      final int candidateSecond = bytes[start];
+      final int candidateMinute = bytes[start + 1];
+      final int candidateHour = bytes[start + 2];
+      if (candidateSecond < 60 &&
+          candidateMinute < 60 &&
+          candidateHour < 24) {
+        second = candidateSecond;
+        minute = candidateMinute;
+        hour = candidateHour;
+        day = bytes[start + 3] | ((bytes[start + 4] & 0x01) << 8);
+        totalSeconds = (((day * 24) + hour) * 60 + minute) * 60 + second;
+      }
+    }
+
+    String state = 'RTC unavailable';
+    if (totalSeconds != null) {
+      final int? previous = _previousRtcSeconds;
+      state = previous == null
+          ? 'RTC initial sample'
+          : totalSeconds < previous
+              ? 'RTC backwards'
+              : totalSeconds == previous
+                  ? 'RTC frozen'
+                  : 'RTC advancing';
+      _previousRtcSeconds = totalSeconds;
+    }
+
+    final RuntimeRtcDiagnostics sample = RuntimeRtcDiagnostics(
+      sampledAt: DateTime.now(),
+      rawBytes: List<int>.unmodifiable(bytes),
+      day: day,
+      hour: hour,
+      minute: minute,
+      second: second,
+      state: state,
+    );
+    rtcSamples.add(sample);
+    _trim(rtcSamples);
+    developer.log(
+      '${sample.state} | raw=${sample.rawHex} | '
+      'day=${sample.day} hour=${sample.hour} minute=${sample.minute} '
+      'second=${sample.second}',
+      name: 'RetroHub.RuntimeDiagnostics.RTC',
+    );
+    return sample;
+  }
+
+  static void recordJournalDecision(String decision, String reason) {
+    journalDecisions.add(
+      '${DateTime.now().toIso8601String()} | $decision | Reason: $reason',
+    );
+    _trim(journalDecisions);
+    developer.log(
+      '$decision | Reason: $reason',
+      name: 'RetroHub.RuntimeDiagnostics.Journal',
+    );
+  }
+
+  static void recordSnapshotComparison(String comparison) {
+    snapshotComparisons.add(
+      '${DateTime.now().toIso8601String()} | $comparison',
+    );
+    _trim(snapshotComparisons);
+    developer.log(
+      comparison,
+      name: 'RetroHub.RuntimeDiagnostics.Snapshot',
+    );
+  }
+
+  static void _trim(List<Object> entries) {
+    if (entries.length > _maximumEntries) {
+      entries.removeRange(0, entries.length - _maximumEntries);
+    }
+  }
+}
 
 class PokemonControllerMemoryReader {
   final LibretroGameController controller;
@@ -18,6 +141,8 @@ class PokemonControllerMemoryReader {
 
   PokemonMemorySnapshot? capture() {
     if (!controller.isAttached) return null;
+
+    _captureRtcDiagnostics();
 
     if (profile.version == PokemonGameVersion.emerald ||
         profile.version == PokemonGameVersion.ruby ||
@@ -35,6 +160,21 @@ class PokemonControllerMemoryReader {
         length: length,
       ),
     );
+  }
+
+  void _captureRtcDiagnostics() {
+    if (!profile.isGen2) return;
+    final int size = controller
+            .inspectMemoryRegions()['rtc'] ??
+        0;
+    final List<int> bytes = size <= 0
+        ? const <int>[]
+        : controller.readMemoryBlock(
+            memoryId: LibretroMemoryRegion.rtc,
+            offset: 0,
+            length: size,
+          );
+    RuntimeDiagnosticsLog.recordRtc(bytes);
   }
 
   PokemonMemorySnapshot? _capture(
