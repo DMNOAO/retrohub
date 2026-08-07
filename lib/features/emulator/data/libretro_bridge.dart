@@ -11,6 +11,9 @@ import 'package:ffi/ffi.dart';
 typedef _RhLoadCoreNative = Int32 Function(Pointer<Utf8>);
 typedef _RhLoadCoreDart = int Function(Pointer<Utf8>);
 
+typedef _RhSetDirectoryNative = Void Function(Pointer<Utf8>);
+typedef _RhSetDirectoryDart = void Function(Pointer<Utf8>);
+
 typedef _RhApiVersionNative = Int32 Function();
 typedef _RhApiVersionDart = int Function();
 
@@ -165,6 +168,8 @@ class LibretroBridge {
   late final DynamicLibrary _lib;
 
   late final _RhLoadCoreDart _loadCore;
+  late final _RhSetDirectoryDart _setSaveDirectory;
+  late final _RhSetDirectoryDart _setSystemDirectory;
   late final _RhApiVersionDart _apiVersion;
 
   late final _RhCoreTextDart _coreName;
@@ -191,6 +196,13 @@ class LibretroBridge {
   late final _RhFileOperationDart _loadSram;
   late final _RhFileOperationDart _saveState;
   late final _RhFileOperationDart _loadState;
+
+  // RTC: puede no existir en bridges compilados antes de esta
+  // versión, por eso se enlaza de forma tolerante (igual que las
+  // funciones de memoria opcionales de más abajo).
+  _RhFileOperationDart? _saveRtc;
+  _RhFileOperationDart? _loadRtc;
+  _RhApiVersionDart? _coreHasRtc;
 
   late final _RhGetMemoryRegionSizeDart _getMemoryRegionSize;
   _RhGetMemoryRegionPointerDart? _getMemoryRegionPointer;
@@ -264,6 +276,14 @@ class LibretroBridge {
     _loadCore = _lib.lookupFunction<
         _RhLoadCoreNative,
         _RhLoadCoreDart>('rh_load_core');
+
+    _setSaveDirectory = _lib.lookupFunction<
+        _RhSetDirectoryNative,
+        _RhSetDirectoryDart>('rh_set_save_directory');
+
+    _setSystemDirectory = _lib.lookupFunction<
+        _RhSetDirectoryNative,
+        _RhSetDirectoryDart>('rh_set_system_directory');
 
     _apiVersion = _lib.lookupFunction<
         _RhApiVersionNative,
@@ -345,6 +365,32 @@ class LibretroBridge {
         _RhFileOperationNative,
         _RhFileOperationDart>('rh_load_state');
 
+    try {
+      _saveRtc = _lib.lookupFunction<
+          _RhFileOperationNative,
+          _RhFileOperationDart>('rh_save_rtc');
+    } on ArgumentError {
+      _saveRtc = null;
+      print('RTC bridge no disponible (rh_save_rtc)');
+    }
+
+    try {
+      _loadRtc = _lib.lookupFunction<
+          _RhFileOperationNative,
+          _RhFileOperationDart>('rh_load_rtc');
+    } on ArgumentError {
+      _loadRtc = null;
+      print('RTC bridge no disponible (rh_load_rtc)');
+    }
+
+    try {
+      _coreHasRtc = _lib.lookupFunction<
+          _RhApiVersionNative,
+          _RhApiVersionDart>('rh_core_has_rtc');
+    } on ArgumentError {
+      _coreHasRtc = null;
+    }
+
     _getMemoryRegionSize = _lib.lookupFunction<
         _RhGetMemoryRegionSizeNative,
         _RhGetMemoryRegionSizeDart>('rh_get_memory_region_size');
@@ -425,6 +471,42 @@ class LibretroBridge {
       _coreLoaded = result == 1;
 
       return _coreLoaded;
+    } finally {
+      malloc.free(pathPointer);
+    }
+  }
+
+  void setSaveDirectory(String path) {
+    _ensureNotDisposed();
+
+    final normalizedPath = path.trim();
+
+    if (normalizedPath.isEmpty) {
+      return;
+    }
+
+    final Pointer<Utf8> pathPointer = normalizedPath.toNativeUtf8();
+
+    try {
+      _setSaveDirectory(pathPointer);
+    } finally {
+      malloc.free(pathPointer);
+    }
+  }
+
+  void setSystemDirectory(String path) {
+    _ensureNotDisposed();
+
+    final normalizedPath = path.trim();
+
+    if (normalizedPath.isEmpty) {
+      return;
+    }
+
+    final Pointer<Utf8> pathPointer = normalizedPath.toNativeUtf8();
+
+    try {
+      _setSystemDirectory(pathPointer);
     } finally {
       malloc.free(pathPointer);
     }
@@ -619,6 +701,64 @@ class LibretroBridge {
     return _runFileOperation(
       filePath: filePath,
       operation: _loadState,
+    );
+  }
+
+  /// Indica si el core actualmente cargado expone RTC
+  /// (RETRO_MEMORY_RTC > 0 bytes). Devuelve false tanto si el
+  /// juego no tiene RTC (p.ej. Red/Blue/Yellow) como si este
+  /// bridge nativo es una versión anterior sin soporte RTC.
+  bool coreHasRtc() {
+    _ensureNotDisposed();
+
+    final operation = _coreHasRtc;
+
+    if (!_coreLoaded || !_gameLoaded || operation == null) {
+      return false;
+    }
+
+    return operation() == 1;
+  }
+
+  /// Guarda el RTC (reloj interno de cartuchos MBC3, usado por
+  /// Pokémon Gold/Silver/Crystal) en [filePath], normalmente
+  /// "<partida>.rtc" junto al "<partida>.srm".
+  ///
+  /// Devuelve true si se guardó correctamente O si el core no
+  /// tiene RTC para este juego (no es un error). Devuelve false
+  /// solo si el bridge no soporta RTC o hubo un fallo real de
+  /// escritura.
+  bool saveRtc(String filePath) {
+    final operation = _saveRtc;
+
+    if (operation == null) {
+      print('RTC bridge no disponible: no se guardó $filePath');
+      return false;
+    }
+
+    return _runFileOperation(
+      filePath: filePath,
+      operation: operation,
+    );
+  }
+
+  /// Carga el RTC previamente guardado con [saveRtc]. Devuelve
+  /// true tanto si se cargó correctamente como si el archivo aún
+  /// no existe (primera partida) o el core no tiene RTC — ninguno
+  /// de esos casos es un error. Devuelve false solo si el bridge
+  /// no soporta RTC o el archivo existente está corrupto/con un
+  /// tamaño inesperado.
+  bool loadRtc(String filePath) {
+    final operation = _loadRtc;
+
+    if (operation == null) {
+      print('RTC bridge no disponible: no se cargó $filePath');
+      return false;
+    }
+
+    return _runFileOperation(
+      filePath: filePath,
+      operation: operation,
     );
   }
 

@@ -231,6 +231,20 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     );
   }
 
+  /// Deriva la ruta del archivo .rtc a partir de la ruta .srm de la
+  /// misma partida (p.ej. "Pokemon Crystal.srm" -> "Pokemon
+  /// Crystal.rtc"). Reemplaza únicamente el sufijo ".srm"; nunca
+  /// concatena.
+  String _rtcFilePathFor(String sramFilePath) {
+    const String sramSuffix = '.srm';
+
+    if (sramFilePath.toLowerCase().endsWith(sramSuffix)) {
+      return '${sramFilePath.substring(0, sramFilePath.length - sramSuffix.length)}.rtc';
+    }
+
+    return '$sramFilePath.rtc';
+  }
+
   Map<String, int> _inspectMemoryRegions() {
     final bridge = _bridge;
     if (_disposed || !_isRunning || bridge == null) return const <String, int>{};
@@ -319,6 +333,15 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         _statusMessage = 'Core cargado: $coreName $coreVersion';
       });
 
+      final persistencePaths = _persistencePaths;
+      if (persistencePaths != null) {
+        Directory(persistencePaths.sramDirectory)
+            .createSync(recursive: true);
+
+        bridge.setSaveDirectory(persistencePaths.sramDirectory);
+        bridge.setSystemDirectory(persistencePaths.sramDirectory);
+      }
+
       final gameLoaded = bridge.loadGame(widget.romPath);
 
       if (!gameLoaded) {
@@ -332,6 +355,18 @@ class _LibretroGameViewState extends State<LibretroGameView> {
           loaded
               ? 'SRAM cargada: ${paths.sramFile}'
               : 'No se pudo cargar SRAM: ${paths.sramFile}',
+        );
+      }
+
+      // RTC: siempre después de la SRAM y antes del primer frame,
+      // para que el core arranque ya con la hora restaurada en
+      // lugar de inicializar su propio reloj y luego pisarlo.
+      if (paths != null && bridge.coreHasRtc()) {
+        final String rtcPath = _rtcFilePathFor(paths.sramFile);
+        debugPrint('Cargando RTC...');
+        final bool rtcLoaded = bridge.loadRtc(rtcPath);
+        debugPrint(
+          rtcLoaded ? 'RTC cargado' : 'No se pudo cargar RTC: $rtcPath',
         );
       }
 
@@ -514,6 +549,12 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       if (saved) {
         debugPrint('SRAM guardada: ${paths.sramFile}');
+      }
+
+      if (bridge.coreHasRtc()) {
+        debugPrint('Guardando RTC...');
+        final bool rtcSaved = bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
+        debugPrint(rtcSaved ? 'RTC OK' : 'Error guardando RTC');
       }
 
       return saved;
@@ -732,6 +773,13 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       try {
         Directory(paths.sramDirectory).createSync(recursive: true);
         bridge.saveSram(paths.sramFile);
+
+        if (bridge.coreHasRtc()) {
+          debugPrint('Guardando RTC...');
+          final bool rtcSaved =
+              bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
+          debugPrint(rtcSaved ? 'RTC OK' : 'Error guardando RTC');
+        }
       } catch (error) {
         debugPrint('Error guardando SRAM al cerrar: $error');
       }

@@ -58,7 +58,7 @@ class _GameCoverCardState extends State<GameCoverCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                  Expanded(,
+                  Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -73,6 +73,7 @@ class _GameCoverCardState extends State<GameCoverCard> {
                             color: Colors.white38,
                           )
                         : Image.asset(
+                            widget.coverPath!,
                             width: double.infinity,
                             height: double.infinity,
                             fit: BoxFit.contain,
