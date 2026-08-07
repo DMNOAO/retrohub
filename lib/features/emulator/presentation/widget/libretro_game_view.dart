@@ -29,7 +29,23 @@ class LibretroGameController {
   Uint8List Function(int address, int length)? _readMemoryAddress;
   Map<String, String> Function()? _runtimeIdentity;
 
+  final ValueNotifier<int> _fallbackSpeedMultiplier = ValueNotifier<int>(1);
+  ValueNotifier<int>? _speedMultiplierNotifier;
+  VoidCallback? _cycleSpeed;
+
   bool get isAttached => _setButtonState != null;
+
+  /// Multiplicador de velocidad actual (x1, x2, x4, x8), reutilizando
+  /// exactamente el mismo estado que ya maneja internamente
+  /// [LibretroGameView]. Antes de que el controlador esté adjunto,
+  /// devuelve un valor por defecto de 1x.
+  ValueListenable<int> get speedMultiplier =>
+      _speedMultiplierNotifier ?? _fallbackSpeedMultiplier;
+
+  /// Avanza al siguiente multiplicador de velocidad (x1→x2→x4→x8→x1),
+  /// reutilizando el mismo `_cycleSpeed` ya implementado en
+  /// [LibretroGameView]. No introduce lógica de emulación nueva.
+  void cycleSpeed() => _cycleSpeed?.call();
 
   void pressButton(int buttonId) => _setButtonState?.call(buttonId, true);
 
@@ -91,6 +107,8 @@ class LibretroGameController {
     required Uint8List Function(int memoryId, int offset, int length) readMemoryBlock,
     required Uint8List Function(int address, int length) readMemoryAddress,
     required Map<String, String> Function() runtimeIdentity,
+    required ValueNotifier<int> speedMultiplierNotifier,
+    required VoidCallback cycleSpeed,
   }) {
     _setButtonState = setButtonState;
     _resetInput = resetInput;
@@ -103,6 +121,8 @@ class LibretroGameController {
     _readMemoryBlock = readMemoryBlock;
     _readMemoryAddress = readMemoryAddress;
     _runtimeIdentity = runtimeIdentity;
+    _speedMultiplierNotifier = speedMultiplierNotifier;
+    _cycleSpeed = cycleSpeed;
   }
 
   void _detach() {
@@ -117,6 +137,8 @@ class LibretroGameController {
     _readMemoryBlock = null;
     _readMemoryAddress = null;
     _runtimeIdentity = null;
+    _speedMultiplierNotifier = null;
+    _cycleSpeed = null;
   }
 }
 
@@ -180,7 +202,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   String _statusMessage = 'Preparando emulador...';
 
   int _framesRendered = 0;
-  int _speedMultiplier = 1;
+  final ValueNotifier<int> _speedMultiplierNotifier = ValueNotifier<int>(1);
   int _systemRamSize = 0;
 
   PokemonEngine? _pokemonEngine;
@@ -228,6 +250,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       readMemoryBlock: _readMemoryBlock,
       readMemoryAddress: _readMemoryAddress,
       runtimeIdentity: _runtimeIdentity,
+      speedMultiplierNotifier: _speedMultiplierNotifier,
+      cycleSpeed: _cycleSpeed,
     );
   }
 
@@ -437,7 +461,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
     final LibretroBridge bridge = _bridge!;
 
-    for (int index = 0; index < _speedMultiplier; index++) {
+    for (int index = 0; index < _speedMultiplierNotifier.value; index++) {
       if (!bridge.runOnce()) {
         return;
       }
@@ -457,21 +481,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       return;
     }
 
-    setState(() {
-      switch (_speedMultiplier) {
-        case 1:
-          _speedMultiplier = 2;
-          break;
-        case 2:
-          _speedMultiplier = 4;
-          break;
-        case 4:
-          _speedMultiplier = 8;
-          break;
-        default:
-          _speedMultiplier = 1;
-      }
-    });
+    switch (_speedMultiplierNotifier.value) {
+      case 1:
+        _speedMultiplierNotifier.value = 2;
+        break;
+      case 2:
+        _speedMultiplierNotifier.value = 4;
+        break;
+      case 4:
+        _speedMultiplierNotifier.value = 8;
+        break;
+      default:
+        _speedMultiplierNotifier.value = 1;
+    }
 
     _focusNode.requestFocus();
   }
@@ -823,6 +845,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _currentImage?.dispose();
     _currentImage = null;
     _focusNode.dispose();
+    _speedMultiplierNotifier.dispose();
     super.dispose();
   }
 
@@ -878,11 +901,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
               right: 12,
               child: _buildMemoryBadge(),
             ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: _buildSpeedButton(),
-          ),
         ],
       );
     }
@@ -962,63 +980,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   }
 
 
-  Widget _buildSpeedButton() {
-    return Tooltip(
-      message: 'Cambiar velocidad de emulación',
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: _cycleSpeed,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            constraints: const BoxConstraints(
-              minWidth: 62,
-              minHeight: 42,
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 9,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _speedMultiplier == 1
-                    ? Colors.white.withValues(alpha: 0.20)
-                    : Colors.amberAccent.withValues(alpha: 0.70),
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _speedMultiplier == 1
-                      ? Icons.speed_rounded
-                      : Icons.fast_forward_rounded,
-                  color: _speedMultiplier == 1
-                      ? Colors.white70
-                      : Colors.amberAccent,
-                  size: 19,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'x$_speedMultiplier',
-                  style: TextStyle(
-                    color: _speedMultiplier == 1
-                        ? Colors.white70
-                        : Colors.amberAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMemoryBadge() {
     final GameEngineStatus<PokemonMemorySnapshot>? status =

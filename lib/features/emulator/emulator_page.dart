@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'presentation/widget/retrohub_console_logo.dart';
+import 'presentation/widget/retrohub_quick_menu.dart';
+import 'presentation/widget/speed_button.dart';
 import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../../core/emulation/core_loader.dart';
@@ -359,6 +361,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final EmulationCore core = CoreLoader.coreForRom(game.romPath);
     final String? corePath = CoreLoader.findCorePath(game.romPath);
     final bool isGba = CoreLoader.isGbaRom(game.romPath);
+    final bool isGbc =
+        game.console.toLowerCase().contains('gbc') ||
+        game.console.toLowerCase().contains('game boy color');
     final _EmulatorVisualTheme visualTheme =
         _EmulatorVisualTheme.forGame(game);
 
@@ -379,55 +384,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           accent: visualTheme.accent,
           partySpeciesIds: _partySpeciesIds,
         ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              _handleMenuAction(context, value);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'save_state',
-                child: Text('Guardar estado'),
-              ),
-              PopupMenuItem(
-                value: 'load_state',
-                child: Text('Cargar estado'),
-              ),
-              PopupMenuItem(
-                value: 'screenshot',
-                child: Text('Tomar captura'),
-              ),
-              PopupMenuItem(
-                value: 'change_frame',
-                child: Text('Cambiar marco'),
-              ),
-              PopupMenuItem(
-                value: 'open_journal',
-                child: Text('Abrir bitácora'),
-              ),
-              PopupMenuItem(
-                value: 'open_stats',
-                child: Text('Ver estadísticas'),
-              ),
-              PopupMenuItem(
-                value: 'memory_inspector',
-                child: Text('Memory Inspector'),
-              ),
-              PopupMenuItem(
-                value: 'settings',
-                child: Text('Configuración'),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'exit',
-                child: Text('Salir del juego'),
-              ),
-            ],
-          ),
-        ],
+        
       ),
-      body: DecoratedBox(
+      body: Stack(
+        children: [
+          DecoratedBox(
         decoration: BoxDecoration(
           gradient: visualTheme.gradient,
         ),
@@ -529,7 +490,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  RetroHubConsoleLogo(
+                    console: isGba
+                        ? RetroHubConsoleType.gameBoyAdvance
+                        : isGbc
+                            ? RetroHubConsoleType.gameBoyColor
+                            : RetroHubConsoleType.gameBoy,
+                  ),
                   const SizedBox(height: 10),
+                  
                   _GameBoyControls(
                     compact: false,
                     controller: _gameController,
@@ -551,6 +522,23 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           },
           ),
         ),
+      ),
+          Positioned(
+            top: 8,
+            right: 14,
+            child: RetroHubQuickMenu(
+              onAction: (String value) => _handleMenuAction(context, value),
+            ),
+          ),
+          Positioned(
+            top: 62,
+            right: 14,
+            child: SpeedButton(
+              speedMultiplier: _gameController.speedMultiplier,
+              onTap: _gameController.cycleSpeed,
+            ),
+          ),
+        ],
       ),
       ),
     );
