@@ -83,7 +83,17 @@ class PokemonMemoryProfileResolver {
     if (species.length != 7 || species[count] != 0xFF) return false;
 
     for (int i = 0; i < count; i++) {
-      final int dex = PokemonDecoder.dexId(profile, species[i]);
+      final int speciesId = species[i];
+
+      // En Gen II, EGG (0xFD) es una entrada válida en partySpecies, pero
+      // no es una especie de la Pokédex. Además, el bloque partyMons del
+      // huevo no cumple las mismas invariantes que un Pokémon normal.
+      // La lista partySpecies + su terminador 0xFF ya valida este slot.
+      if (profile.isGen2 && speciesId == 0xFD) {
+        continue;
+      }
+
+      final int dex = PokemonDecoder.dexId(profile, speciesId);
       if (dex < 1 || dex > (profile.isGen2 ? 251 : 151)) return false;
 
       final List<int> mon = read(
@@ -91,7 +101,7 @@ class PokemonMemoryProfileResolver {
         addresses.partyStructLength,
       );
       if (mon.length != addresses.partyStructLength) return false;
-      if (mon.first != species[i]) return false;
+      if (mon.first != speciesId) return false;
 
       final int level = mon[addresses.partyLevelOffset];
       if (level < 1 || level > 100) return false;

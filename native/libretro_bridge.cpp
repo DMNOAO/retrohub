@@ -13,7 +13,9 @@
 #include <atomic>
 #include <fstream>
 #include <mutex>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 // ============================================================
@@ -220,8 +222,8 @@ static std::mutex memory_map_mutex;
 // Configuración
 // ============================================================
 
-static const char* system_directory = ".";
-static const char* save_directory = ".";
+static std::string system_directory = ".";
+static std::string save_directory = ".";
 
 static unsigned current_pixel_format =
     RETRO_PIXEL_FORMAT_0RGB1555;
@@ -318,7 +320,7 @@ static bool environment_cb(
             }
 
             *static_cast<const char**>(data) =
-                system_directory;
+                system_directory.c_str();
 
             return true;
 
@@ -328,7 +330,7 @@ static bool environment_cb(
             }
 
             *static_cast<const char**>(data) =
-                save_directory;
+                save_directory.c_str();
 
             return true;
 
@@ -620,6 +622,20 @@ int rh_get_button_state(int button_id) {
 RH_EXPORT
 void rh_reset_input() {
     reset_input_state();
+}
+
+RH_EXPORT
+void rh_set_save_directory(const char* path) {
+    if (path != nullptr && path[0] != '\0') {
+        save_directory = path;
+    }
+}
+
+RH_EXPORT
+void rh_set_system_directory(const char* path) {
+    if (path != nullptr && path[0] != '\0') {
+        system_directory = path;
+    }
 }
 
 RH_EXPORT
@@ -1401,6 +1417,208 @@ int rh_load_sram(const char* file_path) {
         );
 
     input.close();
+
+    return success ? 1 : 0;
+}
+
+// ============================================================
+// RTC (RETRO_MEMORY_RTC) — sigue exactamente el mismo mecanismo
+// que SAVE_RAM. Se guarda/restaura como archivo binario aparte
+// (por convención, "<nombre>.rtc" junto al "<nombre>.srm").
+//
+// A diferencia de rh_save_sram/rh_load_sram, que consideran un
+// fallo de memoria como error, aquí NO tener RTC (juegos sin
+// MBC3, p.ej. Red/Blue/Yellow) es un caso normal y se reporta
+// como éxito (1), no como error (0).
+// ============================================================
+
+RH_EXPORT
+int rh_core_has_rtc() {
+    if (
+        !game_loaded ||
+        !retro_get_memory_size_fn
+    ) {
+        return 0;
+    }
+
+    return retro_get_memory_size_fn(RETRO_MEMORY_RTC) > 0 ? 1 : 0;
+}
+
+RH_EXPORT
+int rh_save_rtc(const char* file_path) {
+    if (
+        !game_loaded ||
+        !retro_get_memory_data_fn ||
+        !retro_get_memory_size_fn ||
+        !file_path ||
+        file_path[0] == '\0'
+    ) {
+        return 0;
+    }
+
+    void* memory_data =
+        retro_get_memory_data_fn(
+            RETRO_MEMORY_RTC
+        );
+
+    const size_t memory_size =
+        retro_get_memory_size_fn(
+            RETRO_MEMORY_RTC
+        );
+
+    if (
+        !memory_data ||
+        memory_size == 0
+    ) {
+        // El core no expone RTC para este juego (p.ej. Red/Blue/
+        // Yellow). No es un error: simplemente no hay nada que
+        // guardar.
+        fprintf(
+            stderr,
+            "[RetroHub RTC] Core sin RTC, nada que guardar\n"
+        );
+
+        return 1;
+    }
+
+    std::ofstream output(
+        file_path,
+        std::ios::binary |
+        std::ios::trunc
+    );
+
+    if (!output.is_open()) {
+        fprintf(
+            stderr,
+            "[RetroHub RTC] No se pudo abrir para guardar: %s\n",
+            file_path
+        );
+
+        return 0;
+    }
+
+    output.write(
+        static_cast<const char*>(
+            memory_data
+        ),
+        static_cast<std::streamsize>(
+            memory_size
+        )
+    );
+
+    const bool success = output.good();
+
+    output.close();
+
+    fprintf(
+        stderr,
+        success
+            ? "[RetroHub RTC] RTC guardado (%zu bytes): %s\n"
+            : "[RetroHub RTC] Error guardando RTC: %s\n",
+        success ? memory_size : 0,
+        file_path
+    );
+
+    return success ? 1 : 0;
+}
+
+RH_EXPORT
+int rh_load_rtc(const char* file_path) {
+    if (
+        !game_loaded ||
+        !retro_get_memory_data_fn ||
+        !retro_get_memory_size_fn ||
+        !file_path ||
+        file_path[0] == '\0'
+    ) {
+        return 0;
+    }
+
+    void* memory_data =
+        retro_get_memory_data_fn(
+            RETRO_MEMORY_RTC
+        );
+
+    const size_t memory_size =
+        retro_get_memory_size_fn(
+            RETRO_MEMORY_RTC
+        );
+
+    if (
+        !memory_data ||
+        memory_size == 0
+    ) {
+        // Sin RTC en este core/juego: nada que cargar, no es error.
+        fprintf(
+            stderr,
+            "[RetroHub RTC] Core sin RTC, nada que cargar\n"
+        );
+
+        return 1;
+    }
+
+    std::ifstream input(
+        file_path,
+        std::ios::binary |
+        std::ios::ate
+    );
+
+    if (!input.is_open()) {
+        // Primera vez que se guarda esta partida: aún no existe
+        // el archivo .rtc. No es un error.
+        fprintf(
+            stderr,
+            "[RetroHub RTC] Archivo RTC no encontrado (primer uso): %s\n",
+            file_path
+        );
+
+        return 1;
+    }
+
+    const std::streamsize file_size =
+        input.tellg();
+
+    if (
+        file_size <= 0 ||
+        static_cast<size_t>(file_size) !=
+            memory_size
+    ) {
+        input.close();
+
+        fprintf(
+            stderr,
+            "[RetroHub RTC] Tamaño de archivo RTC inesperado: %s\n",
+            file_path
+        );
+
+        return 0;
+    }
+
+    input.seekg(
+        0,
+        std::ios::beg
+    );
+
+    const bool success =
+        static_cast<bool>(
+            input.read(
+                static_cast<char*>(
+                    memory_data
+                ),
+                file_size
+            )
+        );
+
+    input.close();
+
+    fprintf(
+        stderr,
+        success
+            ? "[RetroHub RTC] RTC cargado (%zu bytes): %s\n"
+            : "[RetroHub RTC] Error cargando RTC: %s\n",
+        success ? memory_size : 0,
+        file_path
+    );
 
     return success ? 1 : 0;
 }

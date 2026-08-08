@@ -67,7 +67,8 @@ class PokemonMemoryReader {
 
     for (int i = 0; i < count && i < species.length; i++) {
       final int id = species[i];
-      final int dex = PokemonDecoder.dexId(profile, id);
+      final bool isEgg = profile.isGen2 && id == 0xFD;
+      final int dex = isEgg ? 0 : PokemonDecoder.dexId(profile, id);
       final List<int> mon = read(
         a.partyMons + i * a.partyStructLength,
         a.partyStructLength,
@@ -75,7 +76,8 @@ class PokemonMemoryReader {
       if (mon.length != a.partyStructLength) continue;
 
       bool shiny = false;
-      if (profile.isGen2 &&
+      if (!isEgg &&
+          profile.isGen2 &&
           a.partyDvOffset != null &&
           mon.length > a.partyDvOffset! + 1) {
         shiny = PokemonDecoder.isGen2Shiny(
@@ -84,17 +86,18 @@ class PokemonMemoryReader {
         );
       }
 
-      final int level = a.partyLevelOffset < mon.length
-          ? mon[a.partyLevelOffset]
-          : 0;
+      final int level = isEgg
+          ? 0
+          : (a.partyLevelOffset < mon.length ? mon[a.partyLevelOffset] : 0);
 
       party.add(
         PokemonPartyMember(
           internalSpeciesId: id,
           pokedexId: dex,
-          name: PokemonDecoder.pokemonName(dex),
+          name: isEgg ? 'Huevo' : PokemonDecoder.pokemonName(dex),
           level: level,
           isShiny: shiny,
+          isEgg: isEgg,
         ),
       );
     }

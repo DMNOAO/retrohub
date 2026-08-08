@@ -34,59 +34,113 @@ final class RubySapphireTrainerResolver {
       );
     }
 
-    return EmeraldTrainerInfo(
-      'Entrenador #$id',
-      EmeraldTrainerKind.regular,
-    );
+    return EmeraldTrainerInfo('Entrenador #$id', EmeraldTrainerKind.regular);
   }
 
   static const Map<int, EmeraldTrainerInfo> _special =
       <int, EmeraldTrainerInfo>{
-    1: EmeraldTrainerInfo('Archie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/archie.png'),
-    30: EmeraldTrainerInfo('Matt', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/matt.png'),
-    31: EmeraldTrainerInfo('Matt', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/matt.png'),
-    32: EmeraldTrainerInfo('Shelly', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/shelly.png'),
-    33: EmeraldTrainerInfo('Shelly', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/shelly.png'),
-    34: EmeraldTrainerInfo('Archie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/archie.png'),
-    35: EmeraldTrainerInfo('Archie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/aqua/archie.png'),
-    261: EmeraldTrainerInfo('Sidney', EmeraldTrainerKind.eliteFour,
-        'assets/sprites/characters/elite_four/gba/Hoenn/sidney_hoenn.png'),
-    262: EmeraldTrainerInfo('Phoebe', EmeraldTrainerKind.eliteFour,
-        'assets/sprites/characters/elite_four/gba/Hoenn/phoebe_hoenn.png'),
-    263: EmeraldTrainerInfo('Glacia', EmeraldTrainerKind.eliteFour,
-        'assets/sprites/characters/elite_four/gba/Hoenn/glacia_hoenn.png'),
-    264: EmeraldTrainerInfo('Drake', EmeraldTrainerKind.eliteFour,
-        'assets/sprites/characters/elite_four/gba/Hoenn/drake_hoenn.png'),
-    265: EmeraldTrainerInfo('Roxanne', EmeraldTrainerKind.gymLeader),
-    266: EmeraldTrainerInfo('Brawly', EmeraldTrainerKind.gymLeader),
-    267: EmeraldTrainerInfo('Wattson', EmeraldTrainerKind.gymLeader),
-    268: EmeraldTrainerInfo('Flannery', EmeraldTrainerKind.gymLeader),
-    269: EmeraldTrainerInfo('Norman', EmeraldTrainerKind.gymLeader),
-    270: EmeraldTrainerInfo('Winona', EmeraldTrainerKind.gymLeader),
-    271: EmeraldTrainerInfo('Tate y Liza', EmeraldTrainerKind.gymLeader),
-    272: EmeraldTrainerInfo('Wallace', EmeraldTrainerKind.gymLeader),
-    335: EmeraldTrainerInfo('Steven', EmeraldTrainerKind.champion,
-        'assets/sprites/characters/champions/steven_hoenn.png'),
-    566: EmeraldTrainerInfo('Maxie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/maxie.png'),
-    596: EmeraldTrainerInfo('Tabitha', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/tabitha.png'),
-    597: EmeraldTrainerInfo('Tabitha', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/tabitha.png'),
-    599: EmeraldTrainerInfo('Courtney', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/courtney.png'),
-    600: EmeraldTrainerInfo('Courtney', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/courtney.png'),
-    601: EmeraldTrainerInfo('Maxie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/maxie.png'),
-    602: EmeraldTrainerInfo('Maxie', EmeraldTrainerKind.specialTrainer,
-        'assets/sprites/characters/villains/magma/maxie.png'),
-  };
+        1: EmeraldTrainerInfo(
+          'Archie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/archie.png',
+        ),
+        30: EmeraldTrainerInfo(
+          'Matt',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/matt.png',
+        ),
+        31: EmeraldTrainerInfo(
+          'Matt',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/matt.png',
+        ),
+        32: EmeraldTrainerInfo(
+          'Shelly',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/shelly.png',
+        ),
+        33: EmeraldTrainerInfo(
+          'Shelly',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/shelly.png',
+        ),
+        34: EmeraldTrainerInfo(
+          'Archie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/archie.png',
+        ),
+        35: EmeraldTrainerInfo(
+          'Archie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/aqua/archie.png',
+        ),
+        261: EmeraldTrainerInfo(
+          'Sidney',
+          EmeraldTrainerKind.eliteFour,
+          'assets/sprites/characters/elite_four/gba/Hoenn/sidney_hoenn.png',
+        ),
+        262: EmeraldTrainerInfo(
+          'Phoebe',
+          EmeraldTrainerKind.eliteFour,
+          'assets/sprites/characters/elite_four/gba/Hoenn/phoebe_hoenn.png',
+        ),
+        263: EmeraldTrainerInfo(
+          'Glacia',
+          EmeraldTrainerKind.eliteFour,
+          'assets/sprites/characters/elite_four/gba/Hoenn/glacia_hoenn.png',
+        ),
+        264: EmeraldTrainerInfo(
+          'Drake',
+          EmeraldTrainerKind.eliteFour,
+          'assets/sprites/characters/elite_four/gba/Hoenn/drake_hoenn.png',
+        ),
+        265: EmeraldTrainerInfo('Roxanne', EmeraldTrainerKind.gymLeader),
+        266: EmeraldTrainerInfo('Brawly', EmeraldTrainerKind.gymLeader),
+        267: EmeraldTrainerInfo('Wattson', EmeraldTrainerKind.gymLeader),
+        268: EmeraldTrainerInfo('Flannery', EmeraldTrainerKind.gymLeader),
+        269: EmeraldTrainerInfo('Norman', EmeraldTrainerKind.gymLeader),
+        270: EmeraldTrainerInfo('Winona', EmeraldTrainerKind.gymLeader),
+        271: EmeraldTrainerInfo('Tate y Liza', EmeraldTrainerKind.gymLeader),
+        272: EmeraldTrainerInfo('Wallace', EmeraldTrainerKind.gymLeader),
+        335: EmeraldTrainerInfo(
+          'Steven',
+          EmeraldTrainerKind.champion,
+          'assets/sprites/characters/champions/steven_hoenn.png',
+        ),
+        566: EmeraldTrainerInfo(
+          'Maxie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/maxie.png',
+        ),
+        596: EmeraldTrainerInfo(
+          'Tabitha',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/tabitha.png',
+        ),
+        597: EmeraldTrainerInfo(
+          'Tabitha',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/tabitha.png',
+        ),
+        599: EmeraldTrainerInfo(
+          'Courtney',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/courtney.png',
+        ),
+        600: EmeraldTrainerInfo(
+          'Courtney',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/courtney.png',
+        ),
+        601: EmeraldTrainerInfo(
+          'Maxie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/maxie.png',
+        ),
+        602: EmeraldTrainerInfo(
+          'Maxie',
+          EmeraldTrainerKind.specialTrainer,
+          'assets/sprites/characters/villains/magma/maxie.png',
+        ),
+      };
 }

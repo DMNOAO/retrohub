@@ -39,24 +39,19 @@ class PokemonChangeDetector {
       );
     }
 
-    final int newBadges =
-        current.badgesMask & ~previous.badgesMask;
+    final int newBadges = current.badgesMask & ~previous.badgesMask;
 
     if (newBadges != 0) {
       changes.add(
         PokemonDetectedChange(
           type: PokemonChangeType.badgeObtained,
           title: 'Nueva medalla',
-          description:
-              'Medallas obtenidas: ${current.badgeCount}',
+          description: 'Medallas obtenidas: ${current.badgeCount}',
         ),
       );
     }
 
-    if (!_sameList(
-      previous.partySpeciesIds,
-      current.partySpeciesIds,
-    )) {
+    if (!_sameList(previous.partySpeciesIds, current.partySpeciesIds)) {
       changes.add(
         PokemonDetectedChange(
           type: PokemonChangeType.partyChanged,
