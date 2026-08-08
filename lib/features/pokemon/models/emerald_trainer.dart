@@ -66,7 +66,6 @@ final class EmeraldTrainerResolver {
       final _EmeraldRegularTrainer? trainer = _regular[id];
       if (trainer != null) {
         return _resolveRegularTrainer(trainer);
-
       }
     }
 
@@ -115,8 +114,8 @@ final class EmeraldTrainerResolver {
     );
   }
 
-  static const List<_EmeraldRegularTrainer?> _regular =
-      <_EmeraldRegularTrainer?>[
+  static const List<_EmeraldRegularTrainer?>
+  _regular = <_EmeraldRegularTrainer?>[
     null,
     _EmeraldRegularTrainer("Sawyer", "Montañero", "hiker"),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
@@ -126,7 +125,11 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
-    _EmeraldRegularTrainer("Gabrielle", "Criador Pokémon", "pokemon_breeder_female"),
+    _EmeraldRegularTrainer(
+      "Gabrielle",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
     _EmeraldRegularTrainer("Marcel", "Entrenador Guay", "cooltrainer_male"),
     _EmeraldRegularTrainer("Alberto", "Ornitólogo", "bird_keeper"),
@@ -503,12 +506,36 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Isobel", "Triatleta", "triathlete_swimming_female"),
     _EmeraldRegularTrainer("Donny", "Triatleta", "triathlete_swimming_female"),
     _EmeraldRegularTrainer("Talia", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Katelyn", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Allison", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Katelyn", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Katelyn", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Katelyn", "Triatleta", "triathlete_swimming_female"),
-    _EmeraldRegularTrainer("Katelyn", "Triatleta", "triathlete_swimming_female"),
+    _EmeraldRegularTrainer(
+      "Katelyn",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Allison",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Katelyn",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Katelyn",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Katelyn",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Katelyn",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
     _EmeraldRegularTrainer("Nicolas", "Domadragones", "dragon_tamer"),
     _EmeraldRegularTrainer("Nicolas", "Domadragones", "dragon_tamer"),
     _EmeraldRegularTrainer("Nicolas", "Domadragones", "dragon_tamer"),
@@ -662,27 +689,71 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Isaac", "Criador Pokémon", "pokemon_breeder_male"),
     _EmeraldRegularTrainer("Isaac", "Criador Pokémon", "pokemon_breeder_male"),
     _EmeraldRegularTrainer("Isaac", "Criador Pokémon", "pokemon_breeder_male"),
-    _EmeraldRegularTrainer("Lydia", "Criador Pokémon", "pokemon_breeder_female"),
+    _EmeraldRegularTrainer(
+      "Lydia",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
     _EmeraldRegularTrainer("Halle", "Entrenador Guay", "cooltrainer_female"),
     _EmeraldRegularTrainer("Garrison", "Ruinamaníaco", "ruin_maniac"),
-    _EmeraldRegularTrainer("Lydia", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Lydia", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Lydia", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Lydia", "Criador Pokémon", "pokemon_breeder_female"),
+    _EmeraldRegularTrainer(
+      "Lydia",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Lydia",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Lydia",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Lydia",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
     _EmeraldRegularTrainer("Jackson", "Pokémon Ranger", "pokemon_ranger_male"),
     _EmeraldRegularTrainer("Lorenzo", "Pokémon Ranger", "pokemon_ranger_male"),
-    _EmeraldRegularTrainer("Sebastian", "Pokémon Ranger", "pokemon_ranger_male"),
+    _EmeraldRegularTrainer(
+      "Sebastian",
+      "Pokémon Ranger",
+      "pokemon_ranger_male",
+    ),
     _EmeraldRegularTrainer("Jackson", "Pokémon Ranger", "pokemon_ranger_male"),
     _EmeraldRegularTrainer("Jackson", "Pokémon Ranger", "pokemon_ranger_male"),
     _EmeraldRegularTrainer("Jackson", "Pokémon Ranger", "pokemon_ranger_male"),
     _EmeraldRegularTrainer("Jackson", "Pokémon Ranger", "pokemon_ranger_male"),
-    _EmeraldRegularTrainer("Catherine", "Pokémon Ranger", "pokemon_ranger_female"),
+    _EmeraldRegularTrainer(
+      "Catherine",
+      "Pokémon Ranger",
+      "pokemon_ranger_female",
+    ),
     _EmeraldRegularTrainer("Jenna", "Pokémon Ranger", "pokemon_ranger_female"),
     _EmeraldRegularTrainer("Sophia", "Pokémon Ranger", "pokemon_ranger_female"),
-    _EmeraldRegularTrainer("Catherine", "Pokémon Ranger", "pokemon_ranger_female"),
-    _EmeraldRegularTrainer("Catherine", "Pokémon Ranger", "pokemon_ranger_female"),
-    _EmeraldRegularTrainer("Catherine", "Pokémon Ranger", "pokemon_ranger_female"),
-    _EmeraldRegularTrainer("Catherine", "Pokémon Ranger", "pokemon_ranger_female"),
+    _EmeraldRegularTrainer(
+      "Catherine",
+      "Pokémon Ranger",
+      "pokemon_ranger_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Catherine",
+      "Pokémon Ranger",
+      "pokemon_ranger_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Catherine",
+      "Pokémon Ranger",
+      "pokemon_ranger_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Catherine",
+      "Pokémon Ranger",
+      "pokemon_ranger_female",
+    ),
     _EmeraldRegularTrainer("Julio", "Triatleta", "triathlete_cycling_male"),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_m"),
     _EmeraldRegularTrainer("Grunt", "Recluta Magma", "aqua_grunt_f"),
@@ -712,7 +783,11 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Brendan", "Rival", "brendan"),
     _EmeraldRegularTrainer("Brendan", "Rival", "brendan"),
     _EmeraldRegularTrainer("Paxton", "Experto", "expert_male"),
-    _EmeraldRegularTrainer("Isabella", "Triatleta", "triathlete_swimming_female"),
+    _EmeraldRegularTrainer(
+      "Isabella",
+      "Triatleta",
+      "triathlete_swimming_female",
+    ),
     _EmeraldRegularTrainer("Grunt", "Recluta Aqua", "aqua_grunt_f"),
     _EmeraldRegularTrainer("Tabitha", "Comandante Magma", "magma_admin"),
     _EmeraldRegularTrainer("Jonathan", "Entrenador Guay", "cooltrainer_male"),
@@ -924,7 +999,11 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Steven", "Rival", "steven"),
     _EmeraldRegularTrainer("Anabel", "Dama Torre", "salon_maiden_anabel"),
     _EmeraldRegularTrainer("Tucker", "As Cúpula", "dome_ace_tucker"),
-    _EmeraldRegularTrainer("Spenser", "Maestro Palacio", "palace_maven_spenser"),
+    _EmeraldRegularTrainer(
+      "Spenser",
+      "Maestro Palacio",
+      "palace_maven_spenser",
+    ),
     _EmeraldRegularTrainer("Greta", "Magnate Arena", "arena_tycoon_greta"),
     _EmeraldRegularTrainer("Noland", "Jefe Fábrica", "factory_head_noland"),
     _EmeraldRegularTrainer("Lucy", "Reina Sierpe", "pike_queen_lucy"),
@@ -957,10 +1036,26 @@ final class EmeraldTrainerResolver {
     _EmeraldRegularTrainer("Sawyer", "Montañero", "hiker"),
     _EmeraldRegularTrainer("Sawyer", "Montañero", "hiker"),
     _EmeraldRegularTrainer("Sawyer", "Montañero", "hiker"),
-    _EmeraldRegularTrainer("Gabrielle", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Gabrielle", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Gabrielle", "Criador Pokémon", "pokemon_breeder_female"),
-    _EmeraldRegularTrainer("Gabrielle", "Criador Pokémon", "pokemon_breeder_female"),
+    _EmeraldRegularTrainer(
+      "Gabrielle",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Gabrielle",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Gabrielle",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
+    _EmeraldRegularTrainer(
+      "Gabrielle",
+      "Criador Pokémon",
+      "pokemon_breeder_female",
+    ),
     _EmeraldRegularTrainer("Thalia", "Bella", "beauty"),
     _EmeraldRegularTrainer("Thalia", "Bella", "beauty"),
     _EmeraldRegularTrainer("Thalia", "Bella", "beauty"),
@@ -975,17 +1070,45 @@ final class EmeraldTrainerResolver {
   ];
 
   static const Set<int> _brendanIds = <int>{
-    520, 521, 522, 523, 524, 525, 526, 527, 528,
-    592, 593, 599, 661, 662, 663, 853,
+    520,
+    521,
+    522,
+    523,
+    524,
+    525,
+    526,
+    527,
+    528,
+    592,
+    593,
+    599,
+    661,
+    662,
+    663,
+    853,
   };
   static const Set<int> _mayIds = <int>{
-    529, 530, 531, 532, 533, 534, 535, 536, 537,
-    600, 664, 665, 666, 768, 769, 854,
+    529,
+    530,
+    531,
+    532,
+    533,
+    534,
+    535,
+    536,
+    537,
+    600,
+    664,
+    665,
+    666,
+    768,
+    769,
+    854,
   };
   static const Set<int> _wallyIds = <int>{519, 656, 657, 658, 659, 660};
 
-  static const Map<int, EmeraldTrainerInfo> _special =
-      <int, EmeraldTrainerInfo>{
+  static const Map<int, EmeraldTrainerInfo>
+  _special = <int, EmeraldTrainerInfo>{
     261: EmeraldTrainerInfo(
       'Sidney',
       EmeraldTrainerKind.eliteFour,

@@ -4,8 +4,7 @@ import '../../../models/pokemon_location.dart';
 ///
 /// Las claves usan `grupo << 8 | número` y siguen el orden de
 /// `data/maps/map_groups.json` de pret/pokeemerald.
-const Map<int, PokemonLocation> emeraldLocations =
-    <int, PokemonLocation>{
+const Map<int, PokemonLocation> emeraldLocations = <int, PokemonLocation>{
   0x0000: PokemonLocation('Ciudad Petalia', PokemonLocationKind.city),
   0x0001: PokemonLocation('Ciudad Portual', PokemonLocationKind.city),
   0x0002: PokemonLocation('Ciudad Malvalona', PokemonLocationKind.city),
@@ -63,10 +62,22 @@ const Map<int, PokemonLocation> emeraldLocations =
   0x0036: PokemonLocation('Bajo el agua (Ruta 129)', PokemonLocationKind.other),
   0x0037: PokemonLocation('Bajo el agua (Ruta 105)', PokemonLocationKind.other),
   0x0038: PokemonLocation('Bajo el agua (Ruta 125)', PokemonLocationKind.other),
-  0x0100: PokemonLocation('Casa de Bruno (planta baja)', PokemonLocationKind.other),
-  0x0101: PokemonLocation('Casa de Bruno (planta alta)', PokemonLocationKind.other),
-  0x0102: PokemonLocation('Casa de Aura (planta baja)', PokemonLocationKind.other),
-  0x0103: PokemonLocation('Casa de Aura (planta alta)', PokemonLocationKind.other),
+  0x0100: PokemonLocation(
+    'Casa de Bruno (planta baja)',
+    PokemonLocationKind.other,
+  ),
+  0x0101: PokemonLocation(
+    'Casa de Bruno (planta alta)',
+    PokemonLocationKind.other,
+  ),
+  0x0102: PokemonLocation(
+    'Casa de Aura (planta baja)',
+    PokemonLocationKind.other,
+  ),
+  0x0103: PokemonLocation(
+    'Casa de Aura (planta alta)',
+    PokemonLocationKind.other,
+  ),
   0x0104: PokemonLocation(
     'Laboratorio del Profesor Abedul',
     PokemonLocationKind.other,

@@ -14,6 +14,8 @@ import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
+import '../../link/dummy_link_transport.dart';
+import '../../link/link_manager.dart';
 
 class LibretroGameController {
   void Function(int buttonId, bool pressed)? _setButtonState;
@@ -33,7 +35,15 @@ class LibretroGameController {
   ValueNotifier<int>? _speedMultiplierNotifier;
   VoidCallback? _cycleSpeed;
 
+  LinkManager? _linkManager;
+
   bool get isAttached => _setButtonState != null;
+
+  /// Administrador de la sesión Link (arquitectura preparada para Cable
+  /// Link; todavía sin transporte real, ver [DummyLinkTransport]).
+  /// `null` mientras el controlador no esté adjunto a un
+  /// [LibretroGameView].
+  LinkManager? get linkManager => _linkManager;
 
   /// Multiplicador de velocidad actual (x1, x2, x4, x8), reutilizando
   /// exactamente el mismo estado que ya maneja internamente
@@ -109,6 +119,7 @@ class LibretroGameController {
     required Map<String, String> Function() runtimeIdentity,
     required ValueNotifier<int> speedMultiplierNotifier,
     required VoidCallback cycleSpeed,
+    required LinkManager linkManager,
   }) {
     _setButtonState = setButtonState;
     _resetInput = resetInput;
@@ -123,6 +134,7 @@ class LibretroGameController {
     _runtimeIdentity = runtimeIdentity;
     _speedMultiplierNotifier = speedMultiplierNotifier;
     _cycleSpeed = cycleSpeed;
+    _linkManager = linkManager;
   }
 
   void _detach() {
@@ -139,6 +151,7 @@ class LibretroGameController {
     _runtimeIdentity = null;
     _speedMultiplierNotifier = null;
     _cycleSpeed = null;
+    _linkManager = null;
   }
 }
 
@@ -205,6 +218,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   final ValueNotifier<int> _speedMultiplierNotifier = ValueNotifier<int>(1);
   int _systemRamSize = 0;
 
+  late final LinkManager _linkManager;
+
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
 
@@ -212,6 +227,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void initState() {
     super.initState();
     _sessionStartedAt = DateTime.now();
+    _linkManager = LinkManager(
+      transport: DummyLinkTransport(),
+    );
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
       romPath: widget.romPath,
@@ -252,6 +270,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       runtimeIdentity: _runtimeIdentity,
       speedMultiplierNotifier: _speedMultiplierNotifier,
       cycleSpeed: _cycleSpeed,
+      linkManager: _linkManager,
     );
   }
 
@@ -846,6 +865,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _currentImage = null;
     _focusNode.dispose();
     _speedMultiplierNotifier.dispose();
+    _linkManager.dispose();
     super.dispose();
   }
 

@@ -68,8 +68,8 @@ final class PokemonEmeraldMemoryReader {
         controller?.isAttached ?? (bridge?.isGameLoaded ?? false);
     if (!memoryAvailable ||
         profile.version != PokemonGameVersion.emerald &&
-        profile.version != PokemonGameVersion.ruby &&
-        profile.version != PokemonGameVersion.sapphire) {
+            profile.version != PokemonGameVersion.ruby &&
+            profile.version != PokemonGameVersion.sapphire) {
       return null;
     }
 
@@ -110,8 +110,8 @@ final class PokemonEmeraldMemoryReader {
     );
     final _EmeraldBattleState? battle =
         profile.version == PokemonGameVersion.emerald
-            ? _readBattleState()
-            : null;
+        ? _readBattleState()
+        : null;
     final List<int> defeatedTrainerIds = _readDefeatedTrainerIds(saveBlock1);
 
     return PokemonMemorySnapshot(
@@ -223,8 +223,7 @@ final class PokemonEmeraldMemoryReader {
     int result = 0;
     for (int badge = 0; badge < 8; badge++) {
       final int flag = _activeFirstBadgeFlag + badge;
-      final int value =
-          _u8(saveBlock1 + _activeFlagsOffset + (flag >> 3));
+      final int value = _u8(saveBlock1 + _activeFlagsOffset + (flag >> 3));
       if ((value & (1 << (flag & 7))) != 0) result |= 1 << badge;
     }
     return result;
@@ -264,7 +263,9 @@ final class PokemonEmeraldMemoryReader {
 
     int checksum = 0;
     for (int offset = 0; offset < decrypted.length; offset += 2) {
-      checksum = (checksum + _littleEndian(decrypted.sublist(offset, offset + 2))) & 0xFFFF;
+      checksum =
+          (checksum + _littleEndian(decrypted.sublist(offset, offset + 2))) &
+          0xFFFF;
     }
     final int storedChecksum = _littleEndian(bytes.sublist(28, 30));
     if (checksum != storedChecksum) return null;
@@ -276,8 +277,7 @@ final class PokemonEmeraldMemoryReader {
     final int pokedexId = emeraldNationalDexId(internalSpeciesId);
     if (pokedexId < 1 || pokedexId > 386) return null;
 
-    final String nickname =
-        PokemonDecoder.decodeGen3Text(bytes.sublist(8, 18));
+    final String nickname = PokemonDecoder.decodeGen3Text(bytes.sublist(8, 18));
     final int level = bytes[84];
     if (level < 1 || level > 100) return null;
 
@@ -315,18 +315,141 @@ final class PokemonEmeraldMemoryReader {
   // propio orden, no según la Pokédex Nacional. Índice 0 = SPECIES_TREECKO
   // (277), último índice = SPECIES_CHIMECHO (411).
   static const List<int> _hoennInternalToNational = <int>[
-    252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263,
-    264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
-    290, 291, 292, 276, 277, 285, 286, 327, 278, 279, 283, 284,
-    320, 321, 300, 301, 352, 343, 344, 299, 324, 302, 339, 340,
-    370, 341, 342, 349, 350, 318, 319, 328, 329, 330, 296, 297,
-    309, 310, 322, 323, 363, 364, 365, 331, 332, 361, 362, 337,
-    338, 298, 325, 326, 311, 312, 303, 307, 308, 333, 334, 360,
-    355, 356, 315, 287, 288, 289, 316, 317, 357, 293, 294, 295,
-    366, 367, 368, 359, 353, 354, 336, 335, 369, 304, 305, 306,
-    351, 313, 314, 345, 346, 347, 348, 280, 281, 282, 371, 372,
-    373, 374, 375, 376, 377, 378, 379, 382, 383, 384, 380, 381,
-    385, 386, 358,
+    252,
+    253,
+    254,
+    255,
+    256,
+    257,
+    258,
+    259,
+    260,
+    261,
+    262,
+    263,
+    264,
+    265,
+    266,
+    267,
+    268,
+    269,
+    270,
+    271,
+    272,
+    273,
+    274,
+    275,
+    290,
+    291,
+    292,
+    276,
+    277,
+    285,
+    286,
+    327,
+    278,
+    279,
+    283,
+    284,
+    320,
+    321,
+    300,
+    301,
+    352,
+    343,
+    344,
+    299,
+    324,
+    302,
+    339,
+    340,
+    370,
+    341,
+    342,
+    349,
+    350,
+    318,
+    319,
+    328,
+    329,
+    330,
+    296,
+    297,
+    309,
+    310,
+    322,
+    323,
+    363,
+    364,
+    365,
+    331,
+    332,
+    361,
+    362,
+    337,
+    338,
+    298,
+    325,
+    326,
+    311,
+    312,
+    303,
+    307,
+    308,
+    333,
+    334,
+    360,
+    355,
+    356,
+    315,
+    287,
+    288,
+    289,
+    316,
+    317,
+    357,
+    293,
+    294,
+    295,
+    366,
+    367,
+    368,
+    359,
+    353,
+    354,
+    336,
+    335,
+    369,
+    304,
+    305,
+    306,
+    351,
+    313,
+    314,
+    345,
+    346,
+    347,
+    348,
+    280,
+    281,
+    282,
+    371,
+    372,
+    373,
+    374,
+    375,
+    376,
+    377,
+    378,
+    379,
+    382,
+    383,
+    384,
+    380,
+    381,
+    385,
+    386,
+    358,
   ];
 
   /// Posición de la subestructura Growth dentro de los cuatro bloques
@@ -379,10 +502,11 @@ final class PokemonEmeraldMemoryReader {
       // lector operativo si una región o revisión desplaza los globals.
       final List<int> ewram = _read(_ewramStart, _ewramEnd - _ewramStart);
       if (ewram.length != _ewramEnd - _ewramStart) return null;
-      for (int saveBlock2 = _ewramStart;
-          saveBlock2 <=
-              _ewramEnd - 0x890 - _rubySapphireSaveBlock1Size;
-          saveBlock2 += 4) {
+      for (
+        int saveBlock2 = _ewramStart;
+        saveBlock2 <= _ewramEnd - 0x890 - _rubySapphireSaveBlock1Size;
+        saveBlock2 += 4
+      ) {
         final int localOffset = saveBlock2 - _ewramStart;
         if (!isPlausiblePlayerName(
           ewram.sublist(localOffset, localOffset + 8),
@@ -399,10 +523,12 @@ final class PokemonEmeraldMemoryReader {
       }
       return null;
     }
-    final int? englishSaveBlock1 =
-        _readPointer(_englishSaveBlock1PointerAddress);
-    final int? englishSaveBlock2 =
-        _readPointer(_englishSaveBlock2PointerAddress);
+    final int? englishSaveBlock1 = _readPointer(
+      _englishSaveBlock1PointerAddress,
+    );
+    final int? englishSaveBlock2 = _readPointer(
+      _englishSaveBlock2PointerAddress,
+    );
     if (_validPair(englishSaveBlock1, englishSaveBlock2)) {
       return _EmeraldSaveBlocks(
         saveBlock1: englishSaveBlock1!,
@@ -417,10 +543,10 @@ final class PokemonEmeraldMemoryReader {
     if (iwram.length != _iwramSize) return null;
 
     for (int offset = 0; offset <= iwram.length - 8; offset += 4) {
-      final int saveBlock1 =
-          _littleEndian(iwram.sublist(offset, offset + 4));
-      final int saveBlock2 =
-          _littleEndian(iwram.sublist(offset + 4, offset + 8));
+      final int saveBlock1 = _littleEndian(iwram.sublist(offset, offset + 4));
+      final int saveBlock2 = _littleEndian(
+        iwram.sublist(offset + 4, offset + 8),
+      );
       if (_validPair(saveBlock1, saveBlock2)) {
         return _EmeraldSaveBlocks(
           saveBlock1: saveBlock1,
@@ -435,10 +561,12 @@ final class PokemonEmeraldMemoryReader {
     final bool rubySapphire =
         profile.version == PokemonGameVersion.ruby ||
         profile.version == PokemonGameVersion.sapphire;
-    final int saveBlock1Size =
-        rubySapphire ? _rubySapphireSaveBlock1Size : _saveBlock1Size;
-    final int saveBlock2Size =
-        rubySapphire ? _rubySapphireSaveBlock2Size : _saveBlock2Size;
+    final int saveBlock1Size = rubySapphire
+        ? _rubySapphireSaveBlock1Size
+        : _saveBlock1Size;
+    final int saveBlock2Size = rubySapphire
+        ? _rubySapphireSaveBlock2Size
+        : _saveBlock2Size;
     if (!_validBlock(saveBlock1, saveBlock1Size) ||
         !_validBlock(saveBlock2, saveBlock2Size)) {
       return false;
@@ -521,16 +649,13 @@ final class PokemonEmeraldMemoryReader {
 
   int get _activeNationalDexVarOffset =>
       profile.version == PokemonGameVersion.emerald
-          ? _nationalDexVarOffset
-          : 0x13CC;
+      ? _nationalDexVarOffset
+      : 0x13CC;
 
   int get _activeNationalDexFlag =>
       profile.version == PokemonGameVersion.emerald ? _nationalDexFlag : 0x836;
 
-  bool _hasConsistentRubySapphirePokedex(
-    int saveBlock1,
-    int saveBlock2,
-  ) {
+  bool _hasConsistentRubySapphirePokedex(int saveBlock1, int saveBlock2) {
     final List<int> primarySeen = _read(
       saveBlock2 + _pokedexSeenOffset,
       _pokedexBytes,
@@ -591,10 +716,7 @@ final class PokemonEmeraldMemoryReader {
         length: length,
       );
     }
-    return bridge?.readMemoryAddress(
-          address: address,
-          length: length,
-        ) ??
+    return bridge?.readMemoryAddress(address: address, length: length) ??
         const <int>[];
   }
 

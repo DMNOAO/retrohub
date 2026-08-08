@@ -21,6 +21,8 @@ import 'data/save_state_service.dart';
 import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
 import 'save_states/save_states_page.dart';
+import 'link/link_state.dart';
+import 'link/link_manager.dart';
 
 class EmulatorPage extends ConsumerStatefulWidget {
   final Game game;
@@ -121,10 +123,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
       final ids = decoded
           .whereType<Map>()
-          .map((pokemon) => pokemon['id'])
-          .whereType<num>()
-          .map((id) => id.toInt())
-          .where((id) => id > 0)
+          .map((pokemon) {
+            final bool isEgg =
+                pokemon['isEgg'] == true || pokemon['isEgg']?.toString() == 'true';
+            if (isEgg) return 0;
+
+            final dynamic rawId = pokemon['id'];
+            if (rawId is num) return rawId.toInt();
+            return int.tryParse(rawId?.toString() ?? '');
+          })
+          .whereType<int>()
+          .where((id) => id >= 0)
           .take(6)
           .toList(growable: false);
 
@@ -538,6 +547,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
               onTap: _gameController.cycleSpeed,
             ),
           ),
+          Positioned(
+            top: 100,
+            right: 14,
+            child: _LinkStatusChip(
+              linkManager: _gameController.linkManager,
+            ),
+          ),
         ],
       ),
       ),
@@ -823,8 +839,14 @@ String _cleanGameTitle(String title) {
 }
 
 String _pokemonSpritePath(Game game, int speciesId) {
+  final profile = GameAssetProfile.fromGame(game);
+
+  if (speciesId == 0) {
+    return SpriteResolver.eggForGame(profile: profile);
+  }
+
   return SpriteResolver.pokemonForGame(
-    profile: GameAssetProfile.fromGame(game),
+    profile: profile,
     pokemonId: speciesId,
   );
 }
@@ -1656,5 +1678,78 @@ class _PressableControlState extends State<_PressableControl> {
         ),
       ),
     );
+  }
+}
+
+/// Indicador visual de solo lectura para el estado del Cable Link.
+///
+/// No tiene botones ni gestos: no inicia sesiones ni conexiones, solo
+/// refleja el [LinkState] actual de [LinkManager] (todavía respaldado por
+/// `DummyLinkTransport`, así que siempre mostrará "Desconectado" o
+/// "Error" hasta que exista un transporte real).
+class _LinkStatusChip extends StatelessWidget {
+  const _LinkStatusChip({required this.linkManager});
+
+  final LinkManager? linkManager;
+
+  @override
+  Widget build(BuildContext context) {
+    final LinkManager? manager = linkManager;
+    if (manager == null) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<LinkState>(
+      stream: manager.onStateChanged,
+      initialData: manager.state,
+      builder: (context, snapshot) {
+        final LinkState state = snapshot.data ?? LinkState.disconnected;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.60),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🔗', style: TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Text(
+                _labelFor(state),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _labelFor(LinkState state) {
+    switch (state) {
+      case LinkState.disconnected:
+        return 'Desconectado';
+      case LinkState.searching:
+        return 'Buscando';
+      case LinkState.hosting:
+        return 'Esperando';
+      case LinkState.connecting:
+        return 'Conectando';
+      case LinkState.connected:
+        return 'Conectado';
+      case LinkState.syncing:
+        return 'Sincronizando';
+      case LinkState.error:
+        return 'Sin conexión';
+    }
   }
 }

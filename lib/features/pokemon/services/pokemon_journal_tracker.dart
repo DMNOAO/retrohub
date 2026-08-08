@@ -248,8 +248,12 @@ class PokemonJournalTracker {
     if (value.badgesMask < 0 || value.badgesMask > 0xFFFF) {
       return 'invalid badges';
     }
-    if (value.partySpeciesIds.length > 6 ||
-        !value.partySpeciesIds.every((int id) => id >= 1 && id <= 386)) {
+    if (value.party.length > 6 ||
+        !value.party.every(
+          (pokemon) => pokemon.isEgg
+              ? value.profile.isGen2 && pokemon.pokedexId == 0
+              : pokemon.pokedexId >= 1 && pokemon.pokedexId <= 386,
+        )) {
       return 'invalid party';
     }
     return null;
@@ -318,6 +322,7 @@ class PokemonJournalTracker {
       final left = a[index];
       final right = b[index];
       if (left.pokedexId != right.pokedexId ||
+          left.isEgg != right.isEgg ||
           left.level != right.level ||
           left.currentHp != right.currentHp ||
           left.maximumHp != right.maximumHp ||

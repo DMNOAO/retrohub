@@ -164,6 +164,9 @@ class _ProgressJournal extends StatelessWidget {
   bool _boolValue(dynamic value) => value == true || value?.toString() == 'true';
 
   String? _pokemonSprite(GameAssetProfile profile, Map<String, dynamic>? pokemon) {
+    if (_boolValue(pokemon?['isEgg'])) {
+      return SpriteResolver.eggForGame(profile: profile);
+    }
     final id = _intValue(pokemon?['id']);
     if (id == null || id <= 0) return null;
     return SpriteResolver.pokemonForGame(
@@ -311,11 +314,12 @@ class _ProgressJournal extends StatelessWidget {
                   final String hp = currentHp != null && maximumHp != null
                       ? ' · PS $currentHp/$maximumHp'
                       : '';
+                  final bool isEgg = _boolValue(pokemon['isEgg']);
                   return SizedBox(
                     width: width,
                     child: _PokemonTile(
-                      name: pokemon['name']?.toString() ?? 'Pokémon',
-                      detail: 'Nivel ${pokemon['level'] ?? '—'}$hp',
+                      name: isEgg ? 'Huevo' : (pokemon['name']?.toString() ?? 'Pokémon'),
+                      detail: isEgg ? 'Pokémon por eclosionar' : 'Nivel ${pokemon['level'] ?? '—'}$hp',
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                     ),

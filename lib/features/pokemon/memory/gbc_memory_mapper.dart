@@ -14,10 +14,7 @@ abstract final class GbcMemoryMapper {
   static const int maximumBank = 7;
   static const int systemRamSize = 0x8000;
 
-  static int toSystemRamOffset({
-    required int bank,
-    required int cpuAddress,
-  }) {
+  static int toSystemRamOffset({required int bank, required int cpuAddress}) {
     if (bank < 0 || bank > maximumBank) {
       throw RangeError.range(bank, 0, maximumBank, 'bank');
     }
@@ -42,9 +39,7 @@ abstract final class GbcMemoryMapper {
   }
 
   static bool isValidSystemRamRange(int offset, int length) {
-    return offset >= 0 &&
-        length >= 0 &&
-        offset + length <= systemRamSize;
+    return offset >= 0 && length >= 0 && offset + length <= systemRamSize;
   }
 
   static int bankForOffset(int offset) {

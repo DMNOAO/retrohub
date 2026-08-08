@@ -133,8 +133,10 @@ class PokemonGameProfile {
         addresses: PokemonMemoryAddresses.yellow,
       );
     }
-    if (normalized.contains('red') || normalized.contains('rojo') ||
-        normalized.contains('blue') || normalized.contains('azul')) {
+    if (normalized.contains('red') ||
+        normalized.contains('rojo') ||
+        normalized.contains('blue') ||
+        normalized.contains('azul')) {
       return const PokemonGameProfile(
         version: PokemonGameVersion.redBlue,
         generation: PokemonGeneration.gen1,
