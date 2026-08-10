@@ -14,6 +14,10 @@ class SpriteResolver {
     return 'assets/sprites/pokemon/$spriteSet/$shinyPath$id.$extension';
   }
 
+  static String eggForGame({required GameAssetProfile profile}) {
+    return 'assets/sprites/pokemon/${profile.pokemonSpriteSet}/egg.png';
+  }
+
   static String pokemonForGame({
     required GameAssetProfile profile,
     required int pokemonId,

@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'presentation/widget/retrohub_console_logo.dart';
+import 'presentation/widget/retrohub_quick_menu.dart';
+import 'presentation/widget/speed_button.dart';
 import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../../core/emulation/core_loader.dart';
@@ -19,6 +21,8 @@ import 'data/save_state_service.dart';
 import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
 import 'save_states/save_states_page.dart';
+import 'link/link_state.dart';
+import 'link/link_manager.dart';
 
 class EmulatorPage extends ConsumerStatefulWidget {
   final Game game;
@@ -119,10 +123,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
       final ids = decoded
           .whereType<Map>()
-          .map((pokemon) => pokemon['id'])
-          .whereType<num>()
-          .map((id) => id.toInt())
-          .where((id) => id > 0)
+          .map((pokemon) {
+            final bool isEgg =
+                pokemon['isEgg'] == true || pokemon['isEgg']?.toString() == 'true';
+            if (isEgg) return 0;
+
+            final dynamic rawId = pokemon['id'];
+            if (rawId is num) return rawId.toInt();
+            return int.tryParse(rawId?.toString() ?? '');
+          })
+          .whereType<int>()
+          .where((id) => id >= 0)
           .take(6)
           .toList(growable: false);
 
@@ -359,6 +370,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final EmulationCore core = CoreLoader.coreForRom(game.romPath);
     final String? corePath = CoreLoader.findCorePath(game.romPath);
     final bool isGba = CoreLoader.isGbaRom(game.romPath);
+    final bool isGbc =
+        game.console.toLowerCase().contains('gbc') ||
+        game.console.toLowerCase().contains('game boy color');
     final _EmulatorVisualTheme visualTheme =
         _EmulatorVisualTheme.forGame(game);
 
@@ -379,55 +393,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           accent: visualTheme.accent,
           partySpeciesIds: _partySpeciesIds,
         ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              _handleMenuAction(context, value);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'save_state',
-                child: Text('Guardar estado'),
-              ),
-              PopupMenuItem(
-                value: 'load_state',
-                child: Text('Cargar estado'),
-              ),
-              PopupMenuItem(
-                value: 'screenshot',
-                child: Text('Tomar captura'),
-              ),
-              PopupMenuItem(
-                value: 'change_frame',
-                child: Text('Cambiar marco'),
-              ),
-              PopupMenuItem(
-                value: 'open_journal',
-                child: Text('Abrir bitácora'),
-              ),
-              PopupMenuItem(
-                value: 'open_stats',
-                child: Text('Ver estadísticas'),
-              ),
-              PopupMenuItem(
-                value: 'memory_inspector',
-                child: Text('Memory Inspector'),
-              ),
-              PopupMenuItem(
-                value: 'settings',
-                child: Text('Configuración'),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'exit',
-                child: Text('Salir del juego'),
-              ),
-            ],
-          ),
-        ],
+        
       ),
-      body: DecoratedBox(
+      body: Stack(
+        children: [
+          DecoratedBox(
         decoration: BoxDecoration(
           gradient: visualTheme.gradient,
         ),
@@ -529,7 +499,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  RetroHubConsoleLogo(
+                    console: isGba
+                        ? RetroHubConsoleType.gameBoyAdvance
+                        : isGbc
+                            ? RetroHubConsoleType.gameBoyColor
+                            : RetroHubConsoleType.gameBoy,
+                  ),
                   const SizedBox(height: 10),
+                  
                   _GameBoyControls(
                     compact: false,
                     controller: _gameController,
@@ -551,6 +531,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           },
           ),
         ),
+      ),
+          Positioned(
+            top: 8,
+            right: 14,
+            child: RetroHubQuickMenu(
+              onAction: (String value) => _handleMenuAction(context, value),
+            ),
+          ),
+          Positioned(
+            top: 62,
+            right: 14,
+            child: SpeedButton(
+              speedMultiplier: _gameController.speedMultiplier,
+              onTap: _gameController.cycleSpeed,
+            ),
+          ),
+          Positioned(
+            top: 100,
+            right: 14,
+            child: _LinkStatusChip(
+              linkManager: _gameController.linkManager,
+            ),
+          ),
+        ],
       ),
       ),
     );
@@ -835,8 +839,14 @@ String _cleanGameTitle(String title) {
 }
 
 String _pokemonSpritePath(Game game, int speciesId) {
+  final profile = GameAssetProfile.fromGame(game);
+
+  if (speciesId == 0) {
+    return SpriteResolver.eggForGame(profile: profile);
+  }
+
   return SpriteResolver.pokemonForGame(
-    profile: GameAssetProfile.fromGame(game),
+    profile: profile,
     pokemonId: speciesId,
   );
 }
@@ -1668,5 +1678,78 @@ class _PressableControlState extends State<_PressableControl> {
         ),
       ),
     );
+  }
+}
+
+/// Indicador visual de solo lectura para el estado del Cable Link.
+///
+/// No tiene botones ni gestos: no inicia sesiones ni conexiones, solo
+/// refleja el [LinkState] actual de [LinkManager] (todavía respaldado por
+/// `DummyLinkTransport`, así que siempre mostrará "Desconectado" o
+/// "Error" hasta que exista un transporte real).
+class _LinkStatusChip extends StatelessWidget {
+  const _LinkStatusChip({required this.linkManager});
+
+  final LinkManager? linkManager;
+
+  @override
+  Widget build(BuildContext context) {
+    final LinkManager? manager = linkManager;
+    if (manager == null) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<LinkState>(
+      stream: manager.onStateChanged,
+      initialData: manager.state,
+      builder: (context, snapshot) {
+        final LinkState state = snapshot.data ?? LinkState.disconnected;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.60),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🔗', style: TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Text(
+                _labelFor(state),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _labelFor(LinkState state) {
+    switch (state) {
+      case LinkState.disconnected:
+        return 'Desconectado';
+      case LinkState.searching:
+        return 'Buscando';
+      case LinkState.hosting:
+        return 'Esperando';
+      case LinkState.connecting:
+        return 'Conectando';
+      case LinkState.connected:
+        return 'Conectado';
+      case LinkState.syncing:
+        return 'Sincronizando';
+      case LinkState.error:
+        return 'Sin conexión';
+    }
   }
 }

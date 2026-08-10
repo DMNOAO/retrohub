@@ -14,6 +14,8 @@ import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
+import '../../link/dummy_link_transport.dart';
+import '../../link/link_manager.dart';
 
 class LibretroGameController {
   void Function(int buttonId, bool pressed)? _setButtonState;
@@ -29,7 +31,31 @@ class LibretroGameController {
   Uint8List Function(int address, int length)? _readMemoryAddress;
   Map<String, String> Function()? _runtimeIdentity;
 
+  final ValueNotifier<int> _fallbackSpeedMultiplier = ValueNotifier<int>(1);
+  ValueNotifier<int>? _speedMultiplierNotifier;
+  VoidCallback? _cycleSpeed;
+
+  LinkManager? _linkManager;
+
   bool get isAttached => _setButtonState != null;
+
+  /// Administrador de la sesión Link (arquitectura preparada para Cable
+  /// Link; todavía sin transporte real, ver [DummyLinkTransport]).
+  /// `null` mientras el controlador no esté adjunto a un
+  /// [LibretroGameView].
+  LinkManager? get linkManager => _linkManager;
+
+  /// Multiplicador de velocidad actual (x1, x2, x4, x8), reutilizando
+  /// exactamente el mismo estado que ya maneja internamente
+  /// [LibretroGameView]. Antes de que el controlador esté adjunto,
+  /// devuelve un valor por defecto de 1x.
+  ValueListenable<int> get speedMultiplier =>
+      _speedMultiplierNotifier ?? _fallbackSpeedMultiplier;
+
+  /// Avanza al siguiente multiplicador de velocidad (x1→x2→x4→x8→x1),
+  /// reutilizando el mismo `_cycleSpeed` ya implementado en
+  /// [LibretroGameView]. No introduce lógica de emulación nueva.
+  void cycleSpeed() => _cycleSpeed?.call();
 
   void pressButton(int buttonId) => _setButtonState?.call(buttonId, true);
 
@@ -91,6 +117,9 @@ class LibretroGameController {
     required Uint8List Function(int memoryId, int offset, int length) readMemoryBlock,
     required Uint8List Function(int address, int length) readMemoryAddress,
     required Map<String, String> Function() runtimeIdentity,
+    required ValueNotifier<int> speedMultiplierNotifier,
+    required VoidCallback cycleSpeed,
+    required LinkManager linkManager,
   }) {
     _setButtonState = setButtonState;
     _resetInput = resetInput;
@@ -103,6 +132,9 @@ class LibretroGameController {
     _readMemoryBlock = readMemoryBlock;
     _readMemoryAddress = readMemoryAddress;
     _runtimeIdentity = runtimeIdentity;
+    _speedMultiplierNotifier = speedMultiplierNotifier;
+    _cycleSpeed = cycleSpeed;
+    _linkManager = linkManager;
   }
 
   void _detach() {
@@ -117,6 +149,9 @@ class LibretroGameController {
     _readMemoryBlock = null;
     _readMemoryAddress = null;
     _runtimeIdentity = null;
+    _speedMultiplierNotifier = null;
+    _cycleSpeed = null;
+    _linkManager = null;
   }
 }
 
@@ -180,8 +215,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   String _statusMessage = 'Preparando emulador...';
 
   int _framesRendered = 0;
-  int _speedMultiplier = 1;
+  final ValueNotifier<int> _speedMultiplierNotifier = ValueNotifier<int>(1);
   int _systemRamSize = 0;
+
+  late final LinkManager _linkManager;
 
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
@@ -190,6 +227,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void initState() {
     super.initState();
     _sessionStartedAt = DateTime.now();
+    _linkManager = LinkManager(
+      transport: DummyLinkTransport(),
+    );
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
       romPath: widget.romPath,
@@ -228,7 +268,24 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       readMemoryBlock: _readMemoryBlock,
       readMemoryAddress: _readMemoryAddress,
       runtimeIdentity: _runtimeIdentity,
+      speedMultiplierNotifier: _speedMultiplierNotifier,
+      cycleSpeed: _cycleSpeed,
+      linkManager: _linkManager,
     );
+  }
+
+  /// Deriva la ruta del archivo .rtc a partir de la ruta .srm de la
+  /// misma partida (p.ej. "Pokemon Crystal.srm" -> "Pokemon
+  /// Crystal.rtc"). Reemplaza únicamente el sufijo ".srm"; nunca
+  /// concatena.
+  String _rtcFilePathFor(String sramFilePath) {
+    const String sramSuffix = '.srm';
+
+    if (sramFilePath.toLowerCase().endsWith(sramSuffix)) {
+      return '${sramFilePath.substring(0, sramFilePath.length - sramSuffix.length)}.rtc';
+    }
+
+    return '$sramFilePath.rtc';
   }
 
   Map<String, int> _inspectMemoryRegions() {
@@ -319,6 +376,15 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         _statusMessage = 'Core cargado: $coreName $coreVersion';
       });
 
+      final persistencePaths = _persistencePaths;
+      if (persistencePaths != null) {
+        Directory(persistencePaths.sramDirectory)
+            .createSync(recursive: true);
+
+        bridge.setSaveDirectory(persistencePaths.sramDirectory);
+        bridge.setSystemDirectory(persistencePaths.sramDirectory);
+      }
+
       final gameLoaded = bridge.loadGame(widget.romPath);
 
       if (!gameLoaded) {
@@ -332,6 +398,18 @@ class _LibretroGameViewState extends State<LibretroGameView> {
           loaded
               ? 'SRAM cargada: ${paths.sramFile}'
               : 'No se pudo cargar SRAM: ${paths.sramFile}',
+        );
+      }
+
+      // RTC: siempre después de la SRAM y antes del primer frame,
+      // para que el core arranque ya con la hora restaurada en
+      // lugar de inicializar su propio reloj y luego pisarlo.
+      if (paths != null && bridge.coreHasRtc()) {
+        final String rtcPath = _rtcFilePathFor(paths.sramFile);
+        debugPrint('Cargando RTC...');
+        final bool rtcLoaded = bridge.loadRtc(rtcPath);
+        debugPrint(
+          rtcLoaded ? 'RTC cargado' : 'No se pudo cargar RTC: $rtcPath',
         );
       }
 
@@ -402,7 +480,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
     final LibretroBridge bridge = _bridge!;
 
-    for (int index = 0; index < _speedMultiplier; index++) {
+    for (int index = 0; index < _speedMultiplierNotifier.value; index++) {
       if (!bridge.runOnce()) {
         return;
       }
@@ -422,21 +500,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       return;
     }
 
-    setState(() {
-      switch (_speedMultiplier) {
-        case 1:
-          _speedMultiplier = 2;
-          break;
-        case 2:
-          _speedMultiplier = 4;
-          break;
-        case 4:
-          _speedMultiplier = 8;
-          break;
-        default:
-          _speedMultiplier = 1;
-      }
-    });
+    switch (_speedMultiplierNotifier.value) {
+      case 1:
+        _speedMultiplierNotifier.value = 2;
+        break;
+      case 2:
+        _speedMultiplierNotifier.value = 4;
+        break;
+      case 4:
+        _speedMultiplierNotifier.value = 8;
+        break;
+      default:
+        _speedMultiplierNotifier.value = 1;
+    }
 
     _focusNode.requestFocus();
   }
@@ -514,6 +590,12 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       if (saved) {
         debugPrint('SRAM guardada: ${paths.sramFile}');
+      }
+
+      if (bridge.coreHasRtc()) {
+        debugPrint('Guardando RTC...');
+        final bool rtcSaved = bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
+        debugPrint(rtcSaved ? 'RTC OK' : 'Error guardando RTC');
       }
 
       return saved;
@@ -732,6 +814,13 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       try {
         Directory(paths.sramDirectory).createSync(recursive: true);
         bridge.saveSram(paths.sramFile);
+
+        if (bridge.coreHasRtc()) {
+          debugPrint('Guardando RTC...');
+          final bool rtcSaved =
+              bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
+          debugPrint(rtcSaved ? 'RTC OK' : 'Error guardando RTC');
+        }
       } catch (error) {
         debugPrint('Error guardando SRAM al cerrar: $error');
       }
@@ -775,6 +864,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _currentImage?.dispose();
     _currentImage = null;
     _focusNode.dispose();
+    _speedMultiplierNotifier.dispose();
+    _linkManager.dispose();
     super.dispose();
   }
 
@@ -830,11 +921,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
               right: 12,
               child: _buildMemoryBadge(),
             ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: _buildSpeedButton(),
-          ),
         ],
       );
     }
@@ -914,63 +1000,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   }
 
 
-  Widget _buildSpeedButton() {
-    return Tooltip(
-      message: 'Cambiar velocidad de emulación',
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: _cycleSpeed,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            constraints: const BoxConstraints(
-              minWidth: 62,
-              minHeight: 42,
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 9,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _speedMultiplier == 1
-                    ? Colors.white.withValues(alpha: 0.20)
-                    : Colors.amberAccent.withValues(alpha: 0.70),
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _speedMultiplier == 1
-                      ? Icons.speed_rounded
-                      : Icons.fast_forward_rounded,
-                  color: _speedMultiplier == 1
-                      ? Colors.white70
-                      : Colors.amberAccent,
-                  size: 19,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'x$_speedMultiplier',
-                  style: TextStyle(
-                    color: _speedMultiplier == 1
-                        ? Colors.white70
-                        : Colors.amberAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMemoryBadge() {
     final GameEngineStatus<PokemonMemorySnapshot>? status =
