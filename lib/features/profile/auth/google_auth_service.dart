@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
+import 'package:google_sign_in/google_sign_in.dart' as mobile;
+import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart'
+    as desktop;
 
 import 'retrohub_user.dart';
 
@@ -12,8 +14,8 @@ class GoogleAuthService {
     'RETROHUB_GOOGLE_CLIENT_SECRET',
   );
 
-  late final GoogleSignIn _googleSignIn = GoogleSignIn(
-    params: GoogleSignInParams(
+  late final desktop.GoogleSignIn _desktopGoogleSignIn = desktop.GoogleSignIn(
+    params: desktop.GoogleSignInParams(
       clientId: Platform.isWindows ? _webClientId : null,
       clientSecret: Platform.isWindows ? _clientSecret : null,
       redirectPort: 8000,
@@ -24,30 +26,76 @@ class GoogleAuthService {
     ),
   );
 
+  final mobile.GoogleSignIn _mobileGoogleSignIn = mobile.GoogleSignIn.instance;
+
+  late final Future<void> _mobileInitialization = _mobileGoogleSignIn.initialize(
+    serverClientId: _webClientId,
+  );
+
   Future<RetroHubUser?> restoreSession() async {
-    if (Platform.isWindows && _clientSecret.isEmpty) return null;
+    if (Platform.isWindows) {
+      if (_clientSecret.isEmpty) return null;
 
-    final credentials = Platform.isWindows
-        ? await _googleSignIn.silentSignIn()
-        : await _googleSignIn.lightweightSignIn();
+      final credentials = await _desktopGoogleSignIn.silentSignIn();
+      if (credentials == null) return null;
+      return _loadUser(credentials.accessToken);
+    }
 
-    if (credentials == null) return null;
-    return _loadUser(credentials.accessToken);
+    if (Platform.isAndroid) {
+      await _mobileInitialization;
+      final account =
+          await _mobileGoogleSignIn.attemptLightweightAuthentication();
+      if (account == null) return null;
+      return _userFromMobileAccount(account);
+    }
+
+    return null;
   }
 
   Future<RetroHubUser?> signIn() async {
-    if (Platform.isWindows && _clientSecret.isEmpty) {
-      throw StateError(
-        'Falta RETROHUB_GOOGLE_CLIENT_SECRET. Ejecuta RetroHub con --dart-define.',
-      );
+    if (Platform.isWindows) {
+      if (_clientSecret.isEmpty) {
+        throw StateError(
+          'Falta RETROHUB_GOOGLE_CLIENT_SECRET. Ejecuta RetroHub con --dart-define.',
+        );
+      }
+
+      final credentials = await _desktopGoogleSignIn.signIn();
+      if (credentials == null) return null;
+      return _loadUser(credentials.accessToken);
     }
 
-    final credentials = await _googleSignIn.signIn();
-    if (credentials == null) return null;
-    return _loadUser(credentials.accessToken);
+    if (Platform.isAndroid) {
+      await _mobileInitialization;
+      final account = await _mobileGoogleSignIn.authenticate();
+      return _userFromMobileAccount(account);
+    }
+
+    throw UnsupportedError(
+      'Google Sign-In todavía no está configurado para esta plataforma.',
+    );
   }
 
-  Future<void> signOut() => _googleSignIn.signOut();
+  Future<void> signOut() async {
+    if (Platform.isWindows) {
+      await _desktopGoogleSignIn.signOut();
+      return;
+    }
+
+    if (Platform.isAndroid) {
+      await _mobileInitialization;
+      await _mobileGoogleSignIn.signOut();
+    }
+  }
+
+  RetroHubUser _userFromMobileAccount(mobile.GoogleSignInAccount account) {
+    return RetroHubUser.fromGoogleJson({
+      'id': account.id,
+      'email': account.email,
+      'name': account.displayName ?? account.email,
+      'picture': account.photoUrl,
+    });
+  }
 
   Future<RetroHubUser> _loadUser(String accessToken) async {
     final client = HttpClient();
