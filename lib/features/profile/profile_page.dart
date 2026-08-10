@@ -1,11 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:crypto/crypto.dart' as crypto;
 
+import '../../core/emulation/core_loader.dart';
 import '../../core/utils/play_time_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import 'auth/auth_provider.dart';
 import 'auth/retrohub_user.dart';
+import 'cloud/cloud_save_local_service.dart';
+import 'cloud/google_drive_save_service.dart';
 
 class ProfileStats {
   final List<Game> games;
@@ -102,7 +108,7 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: 28),
               const _SectionTitle('RetroHub Cloud'),
               const SizedBox(height: 12),
-              _CloudCard(user: user),
+              _CloudCard(user: user, games: stats.games),
               const SizedBox(height: 28),
               const _SectionTitle('Tiempo por consola'),
               const SizedBox(height: 8),
@@ -245,53 +251,300 @@ class _GoogleSignInCard extends ConsumerWidget {
   }
 }
 
-class _CloudCard extends StatelessWidget {
+class _CloudCard extends ConsumerStatefulWidget {
   final RetroHubUser? user;
+  final List<Game> games;
 
-  const _CloudCard({required this.user});
+  const _CloudCard({
+    required this.user,
+    required this.games,
+  });
+
+  @override
+  ConsumerState<_CloudCard> createState() => _CloudCardState();
+}
+
+class _CloudCardState extends ConsumerState<_CloudCard> {
+  final CloudSaveLocalService _cloudSaveService = CloudSaveLocalService();
+
+  String? _selectedGameId;
+  bool _busy = false;
+  String? _lastBackupPath;
+
+  Future<String> _cloudGameId(Game game) async {
+    final romFile = File(game.romPath);
+    if (!await romFile.exists()) {
+      throw StateError('No se encontró la ROM local de ${game.title}.');
+    }
+
+    final digest = await crypto.sha1.bind(romFile.openRead()).first;
+    return digest.toString();
+  }
+
+  Game? get _selectedGame {
+    if (widget.games.isEmpty) return null;
+
+    final selectedId = _selectedGameId;
+    if (selectedId != null) {
+      for (final game in widget.games) {
+        if (game.id == selectedId) return game;
+      }
+    }
+
+    return widget.games.first;
+  }
+
+  Future<void> _uploadCloudBackup() async {
+    final game = _selectedGame;
+    if (game == null || _busy) return;
+
+    setState(() => _busy = true);
+    try {
+      final cloudGameId = await _cloudGameId(game);
+      final backup = await _cloudSaveService.createBackup(
+        gameId: game.id,
+        romPath: game.romPath,
+        gameTitle: game.title,
+        romHash: cloudGameId,
+      );
+      final drive = GoogleDriveSaveService(
+        authService: ref.read(googleAuthServiceProvider),
+      );
+      await drive.uploadBackup(backup, cloudGameId: cloudGameId);
+
+      if (!mounted) return;
+      setState(() => _lastBackupPath = backup.directory.path);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${game.title} guardado en Google Drive.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar en la nube: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _restoreCloudBackup() async {
+    final game = _selectedGame;
+    if (game == null || _busy) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restaurar partida'),
+        content: Text(
+          'Se restaurará la copia de ${game.title} desde Google Drive. '
+          'RetroHub guardará una copia local de tu partida actual antes de reemplazarla. '
+          'Hazlo con el juego cerrado.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final cloudGameId = await _cloudGameId(game);
+      final drive = GoogleDriveSaveService(
+        authService: ref.read(googleAuthServiceProvider),
+      );
+      final root = Directory(
+        '${CoreLoader.documentsDirectory.path}${Platform.pathSeparator}'
+        'RetroHub${Platform.pathSeparator}cloud_downloads',
+      );
+      final downloaded = await drive.downloadBackup(
+        gameId: cloudGameId,
+        destinationRoot: root,
+      );
+      if (downloaded == null) {
+        throw StateError('No existe un respaldo en Google Drive para este juego.');
+      }
+
+      final result = await _cloudSaveService.restoreBackup(
+        backupDirectory: downloaded,
+        gameId: game.id,
+        romPath: game.romPath,
+        romHash: cloudGameId,
+        preserveCurrentSave: true,
+      );
+
+      if (!mounted) return;
+      final previous = result.previousSaveBackup?.path;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            previous == null
+                ? '${game.title} restaurado desde Google Drive.'
+                : '${game.title} restaurado. Copia anterior: $previous',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo restaurar: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final connected = user != null;
+    final connected = widget.user != null;
+    final selectedGame = _selectedGame;
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(connected ? Icons.cloud_done_outlined : Icons.cloud_outlined, size: 34),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    connected ? 'Cuenta lista para RetroHub Cloud' : 'Sin sincronización',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  connected
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_outlined,
+                  size: 34,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connected
+                            ? 'Cuenta lista para RetroHub Cloud'
+                            : 'Sin sincronización',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        connected
+                            ? 'Guarda SRAM y RTC en el espacio privado de RetroHub en Google Drive y restaura la misma partida en otro dispositivo.'
+                            : 'Tus partidas continúan guardándose localmente. Conecta Google para preparar RetroHub Cloud.',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    connected
-                        ? 'Google está conectado. En la siguiente etapa habilitaremos respaldo y restauración de partidas entre dispositivos.'
-                        : 'Tus partidas continúan guardándose localmente. Conecta Google para preparar RetroHub Cloud.',
-                    style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+            if (connected) ...[
+              const SizedBox(height: 18),
+              if (widget.games.isEmpty)
+                const Text(
+                  'No hay juegos importados para respaldar.',
+                  style: TextStyle(color: Colors.white70),
+                )
+              else ...[
+                DropdownButtonFormField<String>(
+                  initialValue: selectedGame?.id,
+                  decoration: const InputDecoration(
+                    labelText: 'Partida',
+                    border: OutlineInputBorder(),
                   ),
+                  items: widget.games
+                      .map(
+                        (game) => DropdownMenuItem<String>(
+                          value: game.id,
+                          child: Text(
+                            '${game.title} · ${game.console}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _busy
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedGameId = value;
+                            _lastBackupPath = null;
+                          });
+                        },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : _uploadCloudBackup,
+                        icon: _busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.cloud_upload_outlined),
+                        label: const Text('Guardar en la nube'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _restoreCloudBackup,
+                        icon: const Icon(Icons.cloud_download_outlined),
+                        label: const Text('Restaurar'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_lastBackupPath != null) ...[
                   const SizedBox(height: 12),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.lock_outline, size: 16, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 6),
-                      const Expanded(
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
                         child: Text(
-                          'Los guardados locales todavía no se modifican ni se suben a la nube.',
-                          style: TextStyle(fontSize: 12),
+                          'Copia local preparada y subida correctamente.\n$_lastBackupPath',
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
                   ),
                 ],
-              ),
+              ],
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'RetroHub Cloud guarda SRAM y RTC. No sube ROMs ni save states.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
