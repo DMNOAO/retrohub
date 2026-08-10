@@ -64,7 +64,8 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
       }
       if (count == 0 || !mounted) return;
       final hsl = HSLColor.fromColor(Color.fromARGB(255, red ~/ count, green ~/ count, blue ~/ count));
-      final adjusted = hsl.withSaturation((hsl.saturation + .18).clamp(0.0, 1.0)).withLightness(.32).toColor();
+      final saturation = (hsl.saturation + .18).clamp(0.0, 1.0).toDouble();
+      final adjusted = hsl.withSaturation(saturation).withLightness(.32).toColor();
       if (mounted) setState(() => _dominant = adjusted);
     } catch (_) {} finally { image?.dispose(); codec?.dispose(); }
   }
