@@ -14,13 +14,7 @@ class DynamicGameBanner extends StatefulWidget {
   final VoidCallback onPlay;
   final double height;
 
-  const DynamicGameBanner({
-    super.key,
-    required this.game,
-    required this.coverPath,
-    required this.onPlay,
-    this.height = 180,
-  });
+  const DynamicGameBanner({super.key, required this.game, required this.coverPath, required this.onPlay, this.height = 180});
 
   @override
   State<DynamicGameBanner> createState() => _DynamicGameBannerState();
@@ -28,259 +22,100 @@ class DynamicGameBanner extends StatefulWidget {
 
 class _DynamicGameBannerState extends State<DynamicGameBanner> {
   static const Color _fallbackColor = Color(0xFF311B92);
-
   Color _dominant = _fallbackColor;
 
   @override
-  void initState() {
-    super.initState();
-    _loadDominantColor();
-  }
+  void initState() { super.initState(); _loadDominantColor(); }
 
   @override
   void didUpdateWidget(covariant DynamicGameBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.coverPath != widget.coverPath) {
-      _dominant = _fallbackColor;
-      _loadDominantColor();
-    }
+    if (oldWidget.coverPath != widget.coverPath) { _dominant = _fallbackColor; _loadDominantColor(); }
   }
 
   Future<Uint8List?> _readCoverBytes(String path) async {
     try {
-      final File file = File(path);
-
-      if (await file.exists()) {
-        return file.readAsBytes();
-      }
-
-      final ByteData data = await rootBundle.load(path);
-      return data.buffer.asUint8List(
-        data.offsetInBytes,
-        data.lengthInBytes,
-      );
-    } catch (_) {
-      return null;
-    }
+      final file = File(path);
+      if (await file.exists()) return file.readAsBytes();
+      final data = await rootBundle.load(path);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) { return null; }
   }
 
   Future<void> _loadDominantColor() async {
-    final String? path = widget.coverPath;
-
-    if (path == null || path.trim().isEmpty) {
-      return;
-    }
-
-    ui.Codec? codec;
-    ui.Image? image;
-
+    final path = widget.coverPath;
+    if (path == null || path.trim().isEmpty) return;
+    ui.Codec? codec; ui.Image? image;
     try {
-      final Uint8List? bytes = await _readCoverBytes(path);
-
-      if (bytes == null || bytes.isEmpty) {
-        return;
+      final bytes = await _readCoverBytes(path);
+      if (bytes == null || bytes.isEmpty) return;
+      codec = await ui.instantiateImageCodec(bytes, targetWidth: 24, targetHeight: 24);
+      final frame = await codec.getNextFrame(); image = frame.image;
+      final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (rgba == null) return;
+      final values = rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes);
+      int red = 0, green = 0, blue = 0, count = 0;
+      for (int i = 0; i + 3 < values.length; i += 4) {
+        if (values[i + 3] < 80) continue;
+        final r = values[i], g = values[i + 1], b = values[i + 2];
+        final brightness = (r + g + b) ~/ 3;
+        if (brightness < 18 || brightness > 242) continue;
+        red += r; green += g; blue += b; count++;
       }
-
-      codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: 24,
-        targetHeight: 24,
-      );
-
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      image = frame.image;
-
-      final ByteData? rgba = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
-
-      if (rgba == null) {
-        return;
-      }
-
-      final Uint8List values = rgba.buffer.asUint8List(
-        rgba.offsetInBytes,
-        rgba.lengthInBytes,
-      );
-
-      int red = 0;
-      int green = 0;
-      int blue = 0;
-      int count = 0;
-
-      for (int index = 0; index + 3 < values.length; index += 4) {
-        final int alpha = values[index + 3];
-
-        if (alpha < 80) {
-          continue;
-        }
-
-        final int r = values[index];
-        final int g = values[index + 1];
-        final int b = values[index + 2];
-        final int brightness = (r + g + b) ~/ 3;
-
-        if (brightness < 18 || brightness > 242) {
-          continue;
-        }
-
-        red += r;
-        green += g;
-        blue += b;
-        count++;
-      }
-
-      if (count == 0 || !mounted) {
-        return;
-      }
-
-      final Color averageColor = Color.fromARGB(
-        255,
-        red ~/ count,
-        green ~/ count,
-        blue ~/ count,
-      );
-
-      final HSLColor hsl = HSLColor.fromColor(averageColor);
-      final double saturation = (hsl.saturation + 0.18)
-          .clamp(0.0, 1.0)
-          .toDouble();
-
-      final Color adjustedColor = hsl
-          .withSaturation(saturation)
-          .withLightness(0.32)
-          .toColor();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _dominant = adjustedColor;
-      });
-    } catch (_) {
-      // Mantiene el violeta de RetroHub si la carátula no puede analizarse.
-    } finally {
-      image?.dispose();
-      codec?.dispose();
-    }
+      if (count == 0 || !mounted) return;
+      final hsl = HSLColor.fromColor(Color.fromARGB(255, red ~/ count, green ~/ count, blue ~/ count));
+      final adjusted = hsl.withSaturation((hsl.saturation + .18).clamp(0.0, 1.0)).withLightness(.32).toColor();
+      if (mounted) setState(() => _dominant = adjusted);
+    } catch (_) {} finally { image?.dispose(); codec?.dispose(); }
   }
 
   Widget _buildCover() {
-    final String? path = widget.coverPath;
-
-    if (path == null || path.trim().isEmpty) {
-      return const Icon(
-        Icons.videogame_asset,
-        size: 42,
-        color: Colors.white38,
-      );
-    }
-
-    final File file = File(path);
-
-    if (file.existsSync()) {
-      return Image.file(
-        file,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(
-          Icons.videogame_asset,
-          size: 42,
-          color: Colors.white38,
-        ),
-      );
-    }
-
-    return Image.asset(
-      path,
-      fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => const Icon(
-        Icons.videogame_asset,
-        size: 42,
-        color: Colors.white38,
-      ),
-    );
+    final path = widget.coverPath;
+    const fallback = Icon(Icons.videogame_asset, size: 42, color: Colors.white38);
+    if (path == null || path.trim().isEmpty) return fallback;
+    final file = File(path);
+    if (file.existsSync()) return Image.file(file, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
+    return Image.asset(path, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool compact = widget.height <= 150;
-
+    final compact = widget.height <= 150;
     return Container(
-      height: widget.height,
+      constraints: BoxConstraints(minHeight: widget.height),
       width: double.infinity,
       padding: EdgeInsets.all(compact ? 12 : 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: <Color>[
-            _dominant,
-            Color.lerp(_dominant, Colors.black, 0.72)!,
-            Colors.black,
-          ],
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), gradient: LinearGradient(colors: [_dominant, Color.lerp(_dominant, Colors.black, .72)!, Colors.black])),
+      child: Row(children: [
+        Container(
+          width: compact ? 82 : 100,
+          height: compact ? 116 : 140,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(color: Colors.black.withValues(alpha: .30), borderRadius: BorderRadius.circular(14)),
+          child: _buildCover(),
         ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: compact ? 82 : 100,
-            height: compact ? 116 : 140,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.30),
-              borderRadius: BorderRadius.circular(14),
+        SizedBox(width: compact ? 14 : 24),
+        Expanded(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Continúa tu aventura', style: TextStyle(color: Colors.white70, fontSize: compact ? 12 : 14)),
+            SizedBox(height: compact ? 2 : 6),
+            Text(widget.game.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 20 : 26, fontWeight: FontWeight.bold)),
+            SizedBox(height: compact ? 2 : 6),
+            Text('${widget.game.console} • ${PlayTimeFormatter.fromSeconds(widget.game.playTimeSeconds)} jugadas', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white70, fontSize: compact ? 12 : 14)),
+            SizedBox(height: compact ? 6 : 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 40),
+              child: FilledButton.icon(
+                onPressed: widget.onPlay,
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: const Text('Continuar', maxLines: 1, overflow: TextOverflow.fade),
+              ),
             ),
-            child: _buildCover(),
-          ),
-          SizedBox(width: compact ? 14 : 24),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Continúa tu aventura',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: compact ? 12 : 14,
-                  ),
-                ),
-                SizedBox(height: compact ? 2 : 6),
-                Text(
-                  widget.game.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: compact ? 20 : 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: compact ? 2 : 6),
-                Text(
-                  '${widget.game.console} • '
-                  '${PlayTimeFormatter.fromSeconds(widget.game.playTimeSeconds)} jugadas',
-                  maxLines: compact ? 1 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: compact ? 12 : 14,
-                  ),
-                ),
-                SizedBox(height: compact ? 4 : 10),
-                SizedBox(
-                  height: compact ? 36 : 40,
-                  child: FilledButton.icon(
-                    onPressed: widget.onPlay,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Continuar'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+          ],
+        )),
+      ]),
     );
   }
 }
