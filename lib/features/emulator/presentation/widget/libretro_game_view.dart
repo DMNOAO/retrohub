@@ -14,8 +14,8 @@ import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
-import '../../link/dummy_link_transport.dart';
 import '../../link/link_manager.dart';
+import '../../link/link_transport_factory.dart';
 
 class LibretroGameController {
   void Function(int buttonId, bool pressed)? _setButtonState;
@@ -228,7 +228,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     super.initState();
     _sessionStartedAt = DateTime.now();
     _linkManager = LinkManager(
-      transport: DummyLinkTransport(),
+      transport: createDefaultLinkTransport(),
     );
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
