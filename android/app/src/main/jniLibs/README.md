@@ -13,10 +13,10 @@ Los archivos finales deben quedar como:
 ```text
 android/app/src/main/jniLibs/arm64-v8a/libsameboy_libretro.so
 android/app/src/main/jniLibs/arm64-v8a/libmgba_libretro.so
-android/app/src/main/jniLibs/arm64-v8a/libsupafaust_libretro.so
+android/app/src/main/jniLibs/arm64-v8a/libsnes9x_libretro.so
 android/app/src/main/jniLibs/x86_64/libsameboy_libretro.so
 android/app/src/main/jniLibs/x86_64/libmgba_libretro.so
-android/app/src/main/jniLibs/x86_64/libsupafaust_libretro.so
+android/app/src/main/jniLibs/x86_64/libsnes9x_libretro.so
 ```
 
 Para preparar mGBA en Windows, ejecuta `prepare_windows_gba_core.ps1`. El archivo quedará en:

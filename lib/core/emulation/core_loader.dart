@@ -50,8 +50,8 @@ class CoreLoader {
 
   static const EmulationCore snes = EmulationCore(
     id: 'snes',
-    displayName: 'SNES (Supafaust / Snes9x)',
-    androidLibraryName: 'libsupafaust_libretro.so',
+    displayName: 'SNES (Snes9x)',
+    androidLibraryName: 'libsnes9x_libretro.so',
     windowsRelativePath: 'cores/snes9x/snes9x_libretro.dll',
   );
 
