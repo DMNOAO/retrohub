@@ -25,8 +25,8 @@ Para preparar mGBA en Windows, ejecuta `prepare_windows_gba_core.ps1`. El archiv
 cores/mgba/mgba_libretro.dll
 ```
 
-El core SNES de Windows se incluye en:
+En Windows se usa Snes9x y el core se incluye en:
 
 ```text
-cores/supafaust/supafaust_libretro.dll
+cores/snes9x/snes9x_libretro.dll
 ```

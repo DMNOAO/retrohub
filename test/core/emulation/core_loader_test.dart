@@ -9,8 +9,8 @@ void main() {
       expect(CoreLoader.isSnesRom('/roms/Pokemon.gba'), isFalse);
     });
 
-    test('selecciona Supafaust sólo para SNES', () {
-      expect(CoreLoader.coreForRom('game.sfc').id, 'supafaust');
+    test('selecciona el backend SNES sólo para ROMs SNES', () {
+      expect(CoreLoader.coreForRom('game.sfc').id, 'snes');
       expect(CoreLoader.coreForRom('game.gba').id, 'mgba');
       expect(CoreLoader.coreForRom('game.gbc').id, 'sameboy');
     });

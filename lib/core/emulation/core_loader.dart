@@ -48,11 +48,11 @@ class CoreLoader {
     windowsRelativePath: 'cores/mgba/mgba_libretro.dll',
   );
 
-  static const EmulationCore supafaust = EmulationCore(
-    id: 'supafaust',
-    displayName: 'Supafaust',
+  static const EmulationCore snes = EmulationCore(
+    id: 'snes',
+    displayName: 'SNES (Supafaust / Snes9x)',
     androidLibraryName: 'libsupafaust_libretro.so',
-    windowsRelativePath: 'cores/supafaust/supafaust_libretro.dll',
+    windowsRelativePath: 'cores/snes9x/snes9x_libretro.dll',
   );
 
   static const String _windowsBridgeFileName = 'libretro_bridge.dll';
@@ -74,7 +74,7 @@ class CoreLoader {
   }
 
   static EmulationCore coreForRom(String romPath) {
-    if (isSnesRom(romPath)) return supafaust;
+    if (isSnesRom(romPath)) return snes;
     if (isGbaRom(romPath)) return mGba;
     return sameBoy;
   }
