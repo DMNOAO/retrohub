@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'presentation/widget/retrohub_console_logo.dart';
@@ -65,9 +66,22 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   Game get game => widget.game;
 
+  bool get _isAndroidSnes =>
+      defaultTargetPlatform == TargetPlatform.android &&
+      CoreLoader.isSnesRom(game.romPath);
+
   @override
   void initState() {
     super.initState();
+
+    if (_isAndroidSnes) {
+      unawaited(
+        SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]),
+      );
+    }
 
     _sessionStartedAt = DateTime.now();
     _database = ref.read(databaseProvider);
@@ -343,6 +357,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final tracker = _pokemonJournalTracker;
     if (tracker != null) unawaited(tracker.stop());
     unawaited(_logSessionClosed());
+    if (_isAndroidSnes) {
+      unawaited(
+        SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+          DeviceOrientation.portraitUp,
+        ]),
+      );
+    }
     super.dispose();
   }
 

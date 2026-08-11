@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -1024,8 +1025,20 @@ int rh_load_game(const char* rom_path) {
     game.size = rom_buffer.size();
     game.meta = nullptr;
 
-    const bool loaded =
-        retro_load_game_fn(&game);
+    bool loaded = false;
+
+    // Some third-party cores throw a C++ exception for an unsupported or
+    // malformed ROM instead of returning false. Never allow that exception to
+    // cross the FFI boundary and terminate the entire Android process.
+    try {
+        loaded = retro_load_game_fn(&game);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "retro_load_game failed: %s\n", error.what());
+        loaded = false;
+    } catch (...) {
+        std::fprintf(stderr, "retro_load_game failed with an unknown exception\n");
+        loaded = false;
+    }
 
     if (!loaded) {
         rom_buffer.clear();
