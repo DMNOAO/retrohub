@@ -37,6 +37,7 @@ class EmulatorPage extends ConsumerStatefulWidget {
 
 class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   static const int _buttonB = 0;
+  static const int _buttonY = 1;
   static const int _buttonSelect = 2;
   static const int _buttonStart = 3;
   static const int _buttonUp = 4;
@@ -44,6 +45,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   static const int _buttonLeft = 6;
   static const int _buttonRight = 7;
   static const int _buttonA = 8;
+  static const int _buttonX = 9;
   static const int _buttonL = 10;
   static const int _buttonR = 11;
 
@@ -83,10 +85,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           romPath: game.romPath,
         );
     final bool supportsPokemonJournal =
-        !CoreLoader.isGbaRom(game.romPath) ||
-        pokemonProfile.version == PokemonGameVersion.emerald ||
-        pokemonProfile.version == PokemonGameVersion.ruby ||
-        pokemonProfile.version == PokemonGameVersion.sapphire;
+        CoreLoader.isGameBoyRom(game.romPath) ||
+        (CoreLoader.isGbaRom(game.romPath) &&
+            (pokemonProfile.version == PokemonGameVersion.emerald ||
+                pokemonProfile.version == PokemonGameVersion.ruby ||
+                pokemonProfile.version == PokemonGameVersion.sapphire));
 
     if (supportsPokemonJournal) {
       _pokemonJournalTracker = PokemonJournalTracker(
@@ -348,6 +351,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final EmulationCore core = CoreLoader.coreForRom(game.romPath);
     final String? corePath = CoreLoader.findCorePath(game.romPath);
     final bool isGba = CoreLoader.isGbaRom(game.romPath);
+    final bool isSnes = CoreLoader.isSnesRom(game.romPath);
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
@@ -432,14 +436,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 buttonRight: _buttonRight,
                                 buttonSelect: _buttonSelect,
                                 buttonL: _buttonL,
-                                showShoulder: isGba,
+                                showShoulder: isGba || isSnes,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Center(
                                 child: AspectRatio(
-                                  aspectRatio: isGba ? 3 / 2 : 10 / 9,
+                                  aspectRatio: isSnes
+                                      ? 4 / 3
+                                      : (isGba ? 3 / 2 : 10 / 9),
                                   child: gameView,
                                 ),
                               ),
@@ -451,9 +457,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 controller: _gameController,
                                 buttonA: _buttonA,
                                 buttonB: _buttonB,
+                                buttonX: _buttonX,
+                                buttonY: _buttonY,
                                 buttonStart: _buttonStart,
                                 buttonR: _buttonR,
-                                showShoulder: isGba,
+                                showShoulder: isGba || isSnes,
+                                isSnes: isSnes,
                               ),
                             ),
                           ],
@@ -468,7 +477,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                           Expanded(
                             child: Center(
                               child: AspectRatio(
-                                aspectRatio: isGba ? 3 / 2 : 10 / 9,
+                                aspectRatio: isSnes
+                                    ? 4 / 3
+                                    : (isGba ? 3 / 2 : 10 / 9),
                                 child: gameView,
                               ),
                             ),
@@ -476,7 +487,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                           const SizedBox(height: 8),
 
                           RetroHubConsoleLogo(
-                            console: isGba
+                            console: isSnes
+                                ? RetroHubConsoleType.superNintendo
+                                : isGba
                                 ? RetroHubConsoleType.gameBoyAdvance
                                 : isGbc
                                 ? RetroHubConsoleType.gameBoyColor
@@ -493,11 +506,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                             buttonRight: _buttonRight,
                             buttonA: _buttonA,
                             buttonB: _buttonB,
+                            buttonX: _buttonX,
+                            buttonY: _buttonY,
                             buttonSelect: _buttonSelect,
                             buttonStart: _buttonStart,
                             buttonL: _buttonL,
                             buttonR: _buttonR,
-                            showShoulder: isGba,
+                            showShoulder: isGba || isSnes,
+                            isSnes: isSnes,
                           ),
                         ],
                       ),
@@ -521,7 +537,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 onTap: _gameController.cycleSpeed,
               ),
             ),
-            Positioned(
+            if (CoreLoader.isGameBoyRom(game.romPath)) Positioned(
               top: 100,
               right: 14,
               child: _LinkStatusChip(linkManager: _gameController.linkManager),
@@ -891,6 +907,10 @@ class _EmulatorVisualTheme {
       primary = const Color(0xFF102A4A);
       secondary = const Color(0xFF174B70);
       accent = const Color(0xFF72D5FF);
+    } else if (identity.contains('snes')) {
+      primary = const Color(0xFF26243B);
+      secondary = const Color(0xFF514B72);
+      accent = const Color(0xFFC9C2F2);
     } else if (identity.contains('gba')) {
       primary = const Color(0xFF202842);
       secondary = const Color(0xFF35305F);
@@ -1050,17 +1070,23 @@ class _LandscapeRightControls extends StatelessWidget {
   final LibretroGameController controller;
   final int buttonA;
   final int buttonB;
+  final int buttonX;
+  final int buttonY;
   final int buttonStart;
   final int buttonR;
   final bool showShoulder;
+  final bool isSnes;
 
   const _LandscapeRightControls({
     required this.controller,
     required this.buttonA,
     required this.buttonB,
+    required this.buttonX,
+    required this.buttonY,
     required this.buttonStart,
     required this.buttonR,
     required this.showShoulder,
+    required this.isSnes,
   });
 
   @override
@@ -1084,27 +1110,37 @@ class _LandscapeRightControls extends StatelessWidget {
           controller: controller,
         ),
         const SizedBox(height: 22),
-        Transform.rotate(
-          angle: -0.20,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _GameBoyActionButton(
-                size: 58,
-                label: 'B',
-                buttonId: buttonB,
-                controller: controller,
-              ),
-              const SizedBox(width: 14),
-              _GameBoyActionButton(
-                size: 58,
-                label: 'A',
-                buttonId: buttonA,
-                controller: controller,
-              ),
-            ],
+        if (isSnes)
+          _SnesActionPad(
+            size: 42,
+            controller: controller,
+            buttonA: buttonA,
+            buttonB: buttonB,
+            buttonX: buttonX,
+            buttonY: buttonY,
+          )
+        else
+          Transform.rotate(
+            angle: -0.20,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _GameBoyActionButton(
+                  size: 58,
+                  label: 'B',
+                  buttonId: buttonB,
+                  controller: controller,
+                ),
+                const SizedBox(width: 14),
+                _GameBoyActionButton(
+                  size: 58,
+                  label: 'A',
+                  buttonId: buttonA,
+                  controller: controller,
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1119,11 +1155,14 @@ class _GameBoyControls extends StatelessWidget {
   final int buttonRight;
   final int buttonA;
   final int buttonB;
+  final int buttonX;
+  final int buttonY;
   final int buttonSelect;
   final int buttonStart;
   final int buttonL;
   final int buttonR;
   final bool showShoulder;
+  final bool isSnes;
 
   const _GameBoyControls({
     required this.compact,
@@ -1134,11 +1173,14 @@ class _GameBoyControls extends StatelessWidget {
     required this.buttonRight,
     required this.buttonA,
     required this.buttonB,
+    required this.buttonX,
+    required this.buttonY,
     required this.buttonSelect,
     required this.buttonStart,
     required this.buttonL,
     required this.buttonR,
     required this.showShoulder,
+    required this.isSnes,
   });
 
   @override
@@ -1157,27 +1199,36 @@ class _GameBoyControls extends StatelessWidget {
       buttonRight: buttonRight,
     );
 
-    final Widget actions = Transform.rotate(
-      angle: -0.20,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _GameBoyActionButton(
-            size: actionSize,
-            label: 'B',
-            buttonId: buttonB,
+    final Widget actions = isSnes
+        ? _SnesActionPad(
+            size: compact ? 38 : 45,
             controller: controller,
-          ),
-          SizedBox(width: compact ? 12 : 16),
-          _GameBoyActionButton(
-            size: actionSize,
-            label: 'A',
-            buttonId: buttonA,
-            controller: controller,
-          ),
-        ],
-      ),
-    );
+            buttonA: buttonA,
+            buttonB: buttonB,
+            buttonX: buttonX,
+            buttonY: buttonY,
+          )
+        : Transform.rotate(
+            angle: -0.20,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _GameBoyActionButton(
+                  size: actionSize,
+                  label: 'B',
+                  buttonId: buttonB,
+                  controller: controller,
+                ),
+                SizedBox(width: compact ? 12 : 16),
+                _GameBoyActionButton(
+                  size: actionSize,
+                  label: 'A',
+                  buttonId: buttonA,
+                  controller: controller,
+                ),
+              ],
+            ),
+          );
 
     final Widget systemButtons = Row(
       mainAxisSize: MainAxisSize.min,
@@ -1233,6 +1284,54 @@ class _GameBoyControls extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [dPad, actions],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SnesActionPad extends StatelessWidget {
+  final double size;
+  final LibretroGameController controller;
+  final int buttonA;
+  final int buttonB;
+  final int buttonX;
+  final int buttonY;
+
+  const _SnesActionPad({
+    required this.size,
+    required this.controller,
+    required this.buttonA,
+    required this.buttonB,
+    required this.buttonX,
+    required this.buttonY,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size * 2.55,
+      height: size * 2.15,
+      child: Stack(
+        children: [
+          Positioned(
+            left: size * .78,
+            child: _GameBoyActionButton(size: size, label: 'X', buttonId: buttonX, controller: controller, color: const Color(0xFF4D75C8)),
+          ),
+          Positioned(
+            top: size * .58,
+            child: _GameBoyActionButton(size: size, label: 'Y', buttonId: buttonY, controller: controller, color: const Color(0xFF58A66C)),
+          ),
+          Positioned(
+            top: size * .58,
+            right: 0,
+            child: _GameBoyActionButton(size: size, label: 'A', buttonId: buttonA, controller: controller, color: const Color(0xFFC84D58)),
+          ),
+          Positioned(
+            left: size * .78,
+            bottom: 0,
+            child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: const Color(0xFFD3B84A)),
           ),
         ],
       ),
@@ -1413,12 +1512,14 @@ class _GameBoyActionButton extends StatelessWidget {
   final String label;
   final int buttonId;
   final LibretroGameController controller;
+  final Color color;
 
   const _GameBoyActionButton({
     required this.size,
     required this.label,
     required this.buttonId,
     required this.controller,
+    this.color = const Color(0xFF8B3E67),
   });
 
   @override
@@ -1433,8 +1534,11 @@ class _GameBoyActionButton extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: const Color(0xFF8B3E67),
-          border: Border.all(color: const Color(0xFFB86F95), width: 2),
+          color: color,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.32),
+            width: 2,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.42),

@@ -48,6 +48,13 @@ class CoreLoader {
     windowsRelativePath: 'cores/mgba/mgba_libretro.dll',
   );
 
+  static const EmulationCore supafaust = EmulationCore(
+    id: 'supafaust',
+    displayName: 'Supafaust',
+    androidLibraryName: 'libsupafaust_libretro.so',
+    windowsRelativePath: 'cores/supafaust/supafaust_libretro.dll',
+  );
+
   static const String _windowsBridgeFileName = 'libretro_bridge.dll';
   static const String _androidBridgeName = 'libretro_bridge.so';
 
@@ -56,8 +63,20 @@ class CoreLoader {
     return normalized.endsWith('.gba');
   }
 
+  static bool isSnesRom(String romPath) {
+    final String normalized = romPath.trim().toLowerCase();
+    return normalized.endsWith('.smc') || normalized.endsWith('.sfc');
+  }
+
+  static bool isGameBoyRom(String romPath) {
+    final String normalized = romPath.trim().toLowerCase();
+    return normalized.endsWith('.gb') || normalized.endsWith('.gbc');
+  }
+
   static EmulationCore coreForRom(String romPath) {
-    return isGbaRom(romPath) ? mGba : sameBoy;
+    if (isSnesRom(romPath)) return supafaust;
+    if (isGbaRom(romPath)) return mGba;
+    return sameBoy;
   }
 
   static List<String> _coreCandidatePaths(EmulationCore core) {
