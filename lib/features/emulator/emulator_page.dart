@@ -1310,26 +1310,29 @@ class _SnesActionPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final double buttonStep = size * (isAndroid ? .94 : .78);
+
     return SizedBox(
-      width: size * 2.55,
-      height: size * 2.15,
+      width: (buttonStep * 2) + size,
+      height: (buttonStep * 2) + size,
       child: Stack(
         children: [
           Positioned(
-            left: size * .78,
+            left: buttonStep,
             child: _GameBoyActionButton(size: size, label: 'X', buttonId: buttonX, controller: controller, color: const Color(0xFF4D75C8)),
           ),
           Positioned(
-            top: size * .58,
+            top: buttonStep,
             child: _GameBoyActionButton(size: size, label: 'Y', buttonId: buttonY, controller: controller, color: const Color(0xFF58A66C)),
           ),
           Positioned(
-            top: size * .58,
+            top: buttonStep,
             right: 0,
             child: _GameBoyActionButton(size: size, label: 'A', buttonId: buttonA, controller: controller, color: const Color(0xFFC84D58)),
           ),
           Positioned(
-            left: size * .78,
+            left: buttonStep,
             bottom: 0,
             child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: const Color(0xFFD3B84A)),
           ),
