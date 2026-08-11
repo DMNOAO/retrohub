@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'presentation/widget/retrohub_console_logo.dart';
 import 'presentation/widget/retrohub_quick_menu.dart';
 import 'presentation/widget/speed_button.dart';
@@ -23,14 +24,12 @@ import 'memory_inspector/memory_inspector_page.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
+import 'link/bluetooth/bluetooth_discovery.dart';
 
 class EmulatorPage extends ConsumerStatefulWidget {
   final Game game;
 
-  const EmulatorPage({
-    super.key,
-    required this.game,
-  });
+  const EmulatorPage({super.key, required this.game});
 
   @override
   ConsumerState<EmulatorPage> createState() => _EmulatorPageState();
@@ -48,8 +47,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   static const int _buttonL = 10;
   static const int _buttonR = 11;
 
-  final LibretroGameController _gameController =
-      LibretroGameController();
+  final LibretroGameController _gameController = LibretroGameController();
   final GlobalKey _gameViewKey = GlobalKey(debugLabel: 'libretro-game-view');
 
   late final AppDatabase _database;
@@ -81,9 +79,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
     final PokemonGameProfile pokemonProfile =
         PokemonGameProfile.fromGameIdentity(
-      gameTitle: game.title,
-      romPath: game.romPath,
-    );
+          gameTitle: game.title,
+          romPath: game.romPath,
+        );
     final bool supportsPokemonJournal =
         !CoreLoader.isGbaRom(game.romPath) ||
         pokemonProfile.version == PokemonGameVersion.emerald ||
@@ -125,7 +123,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           .whereType<Map>()
           .map((pokemon) {
             final bool isEgg =
-                pokemon['isEgg'] == true || pokemon['isEgg']?.toString() == 'true';
+                pokemon['isEgg'] == true ||
+                pokemon['isEgg']?.toString() == 'true';
             if (isEgg) return 0;
 
             final dynamic rawId = pokemon['id'];
@@ -154,15 +153,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   }
 
   int get _currentPlayTimeMinutes {
-    final int controllerMinutes =
-        _gameController.currentPlayTimeMinutes;
+    final int controllerMinutes = _gameController.currentPlayTimeMinutes;
 
     if (controllerMinutes > 0) {
       return controllerMinutes;
     }
 
-    final int sessionMinutes =
-        DateTime.now().difference(_sessionStartedAt).inMinutes;
+    final int sessionMinutes = DateTime.now()
+        .difference(_sessionStartedAt)
+        .inMinutes;
 
     return (game.playTimeSeconds ~/ 60) + sessionMinutes;
   }
@@ -189,28 +188,20 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
     await _journalEventService.logGameClosed(
       playTimeMinutes: _currentPlayTimeMinutes,
-      sessionDurationMinutes:
-          DateTime.now().difference(_sessionStartedAt).inMinutes,
+      sessionDurationMinutes: DateTime.now()
+          .difference(_sessionStartedAt)
+          .inMinutes,
     );
   }
 
-  Future<void> _handleMenuAction(
-    BuildContext context,
-    String value,
-  ) async {
+  Future<void> _handleMenuAction(BuildContext context, String value) async {
     switch (value) {
       case 'save_state':
-        await _openSaveStates(
-          context,
-          mode: SaveStatesMode.save,
-        );
+        await _openSaveStates(context, mode: SaveStatesMode.save);
         break;
 
       case 'load_state':
-        await _openSaveStates(
-          context,
-          mode: SaveStatesMode.load,
-        );
+        await _openSaveStates(context, mode: SaveStatesMode.load);
         break;
       case 'screenshot':
         await _journalEventService.logScreenshot(
@@ -222,18 +213,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         _showActionMessage(context, 'Captura registrada en la bitácora');
         break;
       case 'change_frame':
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => FramesPage(game: game),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => FramesPage(game: game)));
         break;
       case 'open_journal':
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => JournalPage(game: game),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => JournalPage(game: game)));
         break;
       case 'open_stats':
         _showActionMessage(context, 'Abrir estadísticas');
@@ -246,17 +233,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
-            builder: (_) => MemoryInspectorPage(
-              controller: _gameController,
-            ),
+            builder: (_) => MemoryInspectorPage(controller: _gameController),
           ),
         );
         break;
       case 'settings':
-        _showActionMessage(
-          context,
-          'Configuración del emulador',
-        );
+        _showActionMessage(context, 'Configuración del emulador');
         break;
       case 'exit':
         await _requestExit(context);
@@ -329,8 +311,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
             return saved;
           },
           onLoad: (int slot) async {
-            final bool loaded =
-                await _gameController.loadState(slot);
+            final bool loaded = await _gameController.loadState(slot);
 
             if (loaded) {
               await _journalEventService.logLoadState(
@@ -346,13 +327,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     );
   }
 
-  void _showActionMessage(
-    BuildContext context,
-    String message,
-  ) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  void _showActionMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -373,8 +351,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
-    final _EmulatorVisualTheme visualTheme =
-        _EmulatorVisualTheme.forGame(game);
+    final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
 
     return PopScope(
       canPop: _isClosing,
@@ -384,178 +361,173 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
       child: Scaffold(
         backgroundColor: visualTheme.background,
         appBar: AppBar(
-        toolbarHeight: 58,
-        backgroundColor: visualTheme.appBar,
-        foregroundColor: Colors.white,
-        titleSpacing: 4,
-        title: _EmulatorHeader(
-          game: game,
-          accent: visualTheme.accent,
-          partySpeciesIds: _partySpeciesIds,
+          toolbarHeight: 58,
+          backgroundColor: visualTheme.appBar,
+          foregroundColor: Colors.white,
+          titleSpacing: 4,
+          title: _EmulatorHeader(
+            game: game,
+            accent: visualTheme.accent,
+            partySpeciesIds: _partySpeciesIds,
+          ),
         ),
-        
-      ),
-      body: Stack(
-        children: [
-          DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: visualTheme.gradient,
-        ),
-        child: SafeArea(
-          top: false,
-          child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            final bool landscape =
-                constraints.maxWidth > constraints.maxHeight;
-            final double padding = landscape ? 8 : 14;
+        body: Stack(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(gradient: visualTheme.gradient),
+              child: SafeArea(
+                top: false,
+                child: LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final bool landscape =
+                        constraints.maxWidth > constraints.maxHeight;
+                    final double padding = landscape ? 8 : 14;
 
-            final Widget gameView = Container(
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: corePath != null
-                      ? visualTheme.accent
-                      : Theme.of(context).colorScheme.error,
-                  width: 3,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: corePath != null
-                      ? LibretroGameView(
-                        key: _gameViewKey,
-                        gameId: game.id,
-                        gameTitle: game.title,
-                        corePath: corePath,
-                        romPath: game.romPath,
-                        initialPlayTimeMinutes:
-                            game.playTimeSeconds ~/ 60,
-                        controller: _gameController,
-                      )
-                    : _CoreNotFoundView(
-                        romPath: game.romPath,
-                        core: core,
-                      ),
-              ),
-            );
-
-            if (landscape) {
-              return Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: padding,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 138,
-                      child: _LandscapeLeftControls(
-                        controller: _gameController,
-                        buttonUp: _buttonUp,
-                        buttonDown: _buttonDown,
-                        buttonLeft: _buttonLeft,
-                        buttonRight: _buttonRight,
-                        buttonSelect: _buttonSelect,
-                        buttonL: _buttonL,
-                        showShoulder: isGba,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Center(
-                        child: AspectRatio(
-                          aspectRatio: isGba ? 3 / 2 : 10 / 9,
-                          child: gameView,
+                    final Widget gameView = Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: corePath != null
+                              ? visualTheme.accent
+                              : Theme.of(context).colorScheme.error,
+                          width: 3,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 166,
-                      child: _LandscapeRightControls(
-                        controller: _gameController,
-                        buttonA: _buttonA,
-                        buttonB: _buttonB,
-                        buttonStart: _buttonStart,
-                        buttonR: _buttonR,
-                        showShoulder: isGba,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: corePath != null
+                            ? LibretroGameView(
+                                key: _gameViewKey,
+                                gameId: game.id,
+                                gameTitle: game.title,
+                                corePath: corePath,
+                                romPath: game.romPath,
+                                initialPlayTimeMinutes:
+                                    game.playTimeSeconds ~/ 60,
+                                controller: _gameController,
+                              )
+                            : _CoreNotFoundView(
+                                romPath: game.romPath,
+                                core: core,
+                              ),
                       ),
-                    ),
-                  ],
+                    );
+
+                    if (landscape) {
+                      return Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: padding,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 138,
+                              child: _LandscapeLeftControls(
+                                controller: _gameController,
+                                buttonUp: _buttonUp,
+                                buttonDown: _buttonDown,
+                                buttonLeft: _buttonLeft,
+                                buttonRight: _buttonRight,
+                                buttonSelect: _buttonSelect,
+                                buttonL: _buttonL,
+                                showShoulder: isGba,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Center(
+                                child: AspectRatio(
+                                  aspectRatio: isGba ? 3 / 2 : 10 / 9,
+                                  child: gameView,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 166,
+                              child: _LandscapeRightControls(
+                                controller: _gameController,
+                                buttonA: _buttonA,
+                                buttonB: _buttonB,
+                                buttonStart: _buttonStart,
+                                buttonR: _buttonR,
+                                showShoulder: isGba,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: EdgeInsets.all(padding),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: AspectRatio(
+                                aspectRatio: isGba ? 3 / 2 : 10 / 9,
+                                child: gameView,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          RetroHubConsoleLogo(
+                            console: isGba
+                                ? RetroHubConsoleType.gameBoyAdvance
+                                : isGbc
+                                ? RetroHubConsoleType.gameBoyColor
+                                : RetroHubConsoleType.gameBoy,
+                          ),
+                          const SizedBox(height: 10),
+
+                          _GameBoyControls(
+                            compact: false,
+                            controller: _gameController,
+                            buttonUp: _buttonUp,
+                            buttonDown: _buttonDown,
+                            buttonLeft: _buttonLeft,
+                            buttonRight: _buttonRight,
+                            buttonA: _buttonA,
+                            buttonB: _buttonB,
+                            buttonSelect: _buttonSelect,
+                            buttonStart: _buttonStart,
+                            buttonL: _buttonL,
+                            buttonR: _buttonR,
+                            showShoulder: isGba,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-              );
-            }
-
-            return Padding(
-              padding: EdgeInsets.all(padding),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: AspectRatio(
-                        aspectRatio: isGba ? 3 / 2 : 10 / 9,
-                        child: gameView,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  RetroHubConsoleLogo(
-                    console: isGba
-                        ? RetroHubConsoleType.gameBoyAdvance
-                        : isGbc
-                            ? RetroHubConsoleType.gameBoyColor
-                            : RetroHubConsoleType.gameBoy,
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  _GameBoyControls(
-                    compact: false,
-                    controller: _gameController,
-                    buttonUp: _buttonUp,
-                    buttonDown: _buttonDown,
-                    buttonLeft: _buttonLeft,
-                    buttonRight: _buttonRight,
-                    buttonA: _buttonA,
-                    buttonB: _buttonB,
-                    buttonSelect: _buttonSelect,
-                    buttonStart: _buttonStart,
-                    buttonL: _buttonL,
-                    buttonR: _buttonR,
-                    showShoulder: isGba,
-                  ),
-                ],
               ),
-            );
-          },
-          ),
+            ),
+            Positioned(
+              top: 8,
+              right: 14,
+              child: RetroHubQuickMenu(
+                onAction: (String value) => _handleMenuAction(context, value),
+              ),
+            ),
+            Positioned(
+              top: 62,
+              right: 14,
+              child: SpeedButton(
+                speedMultiplier: _gameController.speedMultiplier,
+                onTap: _gameController.cycleSpeed,
+              ),
+            ),
+            Positioned(
+              top: 100,
+              right: 14,
+              child: _LinkStatusChip(linkManager: _gameController.linkManager),
+            ),
+          ],
         ),
-      ),
-          Positioned(
-            top: 8,
-            right: 14,
-            child: RetroHubQuickMenu(
-              onAction: (String value) => _handleMenuAction(context, value),
-            ),
-          ),
-          Positioned(
-            top: 62,
-            right: 14,
-            child: SpeedButton(
-              speedMultiplier: _gameController.speedMultiplier,
-              onTap: _gameController.cycleSpeed,
-            ),
-          ),
-          Positioned(
-            top: 100,
-            right: 14,
-            child: _LinkStatusChip(
-              linkManager: _gameController.linkManager,
-            ),
-          ),
-        ],
-      ),
       ),
     );
   }
@@ -591,10 +563,7 @@ class _EmulatorHeader extends StatelessWidget {
             _cleanGameTitle(game.title),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
         ),
         if (partySpeciesIds.isNotEmpty) ...[
@@ -630,21 +599,23 @@ class _PartySprites extends StatelessWidget {
         .toList(growable: false);
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: visibleIds.map((speciesId) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 2),
-          child: _PokemonAvatar(
-            spritePath: _pokemonSpritePath(game, speciesId),
-            accent: accent,
-            size: 30,
-            fallback: const Icon(
-              Icons.catching_pokemon,
-              size: 18,
-              color: Colors.white70,
-            ),
-          ),
-        );
-      }).toList(growable: false),
+      children: visibleIds
+          .map((speciesId) {
+            return Padding(
+              padding: const EdgeInsets.only(left: 2),
+              child: _PokemonAvatar(
+                spritePath: _pokemonSpritePath(game, speciesId),
+                accent: accent,
+                size: 30,
+                fallback: const Icon(
+                  Icons.catching_pokemon,
+                  size: 18,
+                  color: Colors.white70,
+                ),
+              ),
+            );
+          })
+          .toList(growable: false),
     );
   }
 }
@@ -831,9 +802,11 @@ String _cleanGameTitle(String title) {
 
   return cleaned
       .split(' ')
-      .map((word) => word.isEmpty
-          ? word
-          : '${word[0].toUpperCase()}${word.substring(1)}')
+      .map(
+        (word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}',
+      )
       .join(' ')
       .replaceAll(RegExp(r'^Pokemon\b', caseSensitive: false), 'Pokémon');
 }
@@ -845,10 +818,7 @@ String _pokemonSpritePath(Game game, int speciesId) {
     return SpriteResolver.eggForGame(profile: profile);
   }
 
-  return SpriteResolver.pokemonForGame(
-    profile: profile,
-    pokemonId: speciesId,
-  );
+  return SpriteResolver.pokemonForGame(profile: profile, pokemonId: speciesId);
 }
 
 class _EmulatorVisualTheme {
@@ -865,8 +835,7 @@ class _EmulatorVisualTheme {
   });
 
   factory _EmulatorVisualTheme.forGame(Game game) {
-    final String identity =
-        '${game.title} ${game.console}'.toLowerCase();
+    final String identity = '${game.title} ${game.console}'.toLowerCase();
 
     Color primary;
     Color secondary;
@@ -884,13 +853,11 @@ class _EmulatorVisualTheme {
       primary = const Color(0xFF123D2A);
       secondary = const Color(0xFF277044);
       accent = const Color(0xFF78E58F);
-    } else if (identity.contains('emerald') ||
-        identity.contains('esmeralda')) {
+    } else if (identity.contains('emerald') || identity.contains('esmeralda')) {
       primary = const Color(0xFF0E382D);
       secondary = const Color(0xFF176A4B);
       accent = const Color(0xFF66E6A4);
-    } else if (identity.contains('sapphire') ||
-        identity.contains('zafiro')) {
+    } else if (identity.contains('sapphire') || identity.contains('zafiro')) {
       primary = const Color(0xFF102A4A);
       secondary = const Color(0xFF175A88);
       accent = const Color(0xFF6ED4FF);
@@ -912,8 +879,7 @@ class _EmulatorVisualTheme {
       primary = const Color(0xFF202938);
       secondary = const Color(0xFF465264);
       accent = const Color(0xFFD7E4F2);
-    } else if (identity.contains('yellow') ||
-        identity.contains('amarillo')) {
+    } else if (identity.contains('yellow') || identity.contains('amarillo')) {
       primary = const Color(0xFF3D3210);
       secondary = const Color(0xFF6A4A18);
       accent = const Color(0xFFFFE66D);
@@ -962,10 +928,7 @@ class _CoreNotFoundView extends StatelessWidget {
   final String romPath;
   final EmulationCore core;
 
-  const _CoreNotFoundView({
-    required this.romPath,
-    required this.core,
-  });
+  const _CoreNotFoundView({required this.romPath, required this.core});
 
   @override
   Widget build(BuildContext context) {
@@ -1027,7 +990,6 @@ class _CoreNotFoundView extends StatelessWidget {
     );
   }
 }
-
 
 class _LandscapeLeftControls extends StatelessWidget {
   final LibretroGameController controller;
@@ -1262,20 +1224,14 @@ class _GameBoyControls extends StatelessWidget {
       height: showShoulder ? 224 : 184,
       child: Column(
         children: [
-          if (showShoulder) ...[
-            shoulderButtons,
-            const SizedBox(height: 10),
-          ],
+          if (showShoulder) ...[shoulderButtons, const SizedBox(height: 10)],
           systemButtons,
           const SizedBox(height: 10),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                dPad,
-                actions,
-              ],
+              children: [dPad, actions],
             ),
           ),
         ],
@@ -1433,9 +1389,7 @@ class _GameBoyDPadKey extends StatelessWidget {
             bottomLeft: Radius.circular(bottomLeft ? 10 : 0),
             bottomRight: Radius.circular(bottomRight ? 10 : 0),
           ),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.07),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.38),
@@ -1480,10 +1434,7 @@ class _GameBoyActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: const Color(0xFF8B3E67),
-          border: Border.all(
-            color: const Color(0xFFB86F95),
-            width: 2,
-          ),
+          border: Border.all(color: const Color(0xFFB86F95), width: 2),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.42),
@@ -1534,9 +1485,7 @@ class _GameBoyShoulderButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF47464D),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.14),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
@@ -1588,9 +1537,7 @@ class _GameBoySystemButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF66636B),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.12),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.36),
@@ -1681,12 +1628,10 @@ class _PressableControlState extends State<_PressableControl> {
   }
 }
 
-/// Indicador visual de solo lectura para el estado del Cable Link.
+/// Control del Cable Link Bluetooth.
 ///
-/// No tiene botones ni gestos: no inicia sesiones ni conexiones, solo
-/// refleja el [LinkState] actual de [LinkManager] (todavía respaldado por
-/// `DummyLinkTransport`, así que siempre mostrará "Desconectado" o
-/// "Error" hasta que exista un transporte real).
+/// Muestra el estado actual y permite crear, buscar o cerrar
+/// una sesión Link directamente desde el emulador.
 class _LinkStatusChip extends StatelessWidget {
   const _LinkStatusChip({required this.linkManager});
 
@@ -1695,6 +1640,7 @@ class _LinkStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final LinkManager? manager = linkManager;
+
     if (manager == null) {
       return const SizedBox.shrink();
     }
@@ -1705,39 +1651,329 @@ class _LinkStatusChip extends StatelessWidget {
       builder: (context, snapshot) {
         final LinkState state = snapshot.data ?? LinkState.disconnected;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.60),
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.18),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🔗', style: TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              Text(
-                _labelFor(state),
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
+            onTap: () => _handleTap(context, manager, state),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.60),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cable, size: 13, color: Colors.white70),
+                  const SizedBox(width: 4),
+                  Text(
+                    _labelFor(state),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
     );
   }
 
+  Future<void> _handleTap(
+    BuildContext context,
+    LinkManager manager,
+    LinkState state,
+  ) async {
+    switch (state) {
+      case LinkState.connected:
+      case LinkState.syncing:
+      case LinkState.hosting:
+      case LinkState.connecting:
+      case LinkState.searching:
+        await _showActiveSessionDialog(context, manager);
+        return;
+
+      case LinkState.disconnected:
+      case LinkState.error:
+        await _showConnectionDialog(context, manager);
+        return;
+    }
+  }
+
+  Future<void> _showConnectionDialog(
+    BuildContext context,
+    LinkManager manager,
+  ) async {
+    final String? action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF181818),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ListTile(
+                  leading: Icon(Icons.cable, color: Colors.white),
+                  title: Text(
+                    'Cable Link',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Conecta dos dispositivos por Bluetooth',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+                const Divider(color: Colors.white12),
+                ListTile(
+                  leading: const Icon(
+                    Icons.wifi_tethering,
+                    color: Colors.white70,
+                  ),
+                  title: const Text(
+                    'Crear sesión',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Este dispositivo esperará al otro jugador',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext, 'host');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.search, color: Colors.white70),
+                  title: const Text(
+                    'Buscar sesión',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Busca otro dispositivo RetroHub',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext, 'join');
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!context.mounted || action == null) {
+      return;
+    }
+
+    if (action == 'host') {
+      await _createSession(context, manager);
+    } else if (action == 'join') {
+      await _searchSession(context, manager);
+    }
+  }
+
+  Future<void> _createSession(BuildContext context, LinkManager manager) async {
+    const BluetoothDiscovery discovery = BluetoothDiscovery();
+
+    try {
+      if (!await discovery.isEnabled()) {
+        final bool enabled = await discovery.requestEnable();
+
+        if (!enabled) {
+          return;
+        }
+      }
+
+      // Evitamos requestDiscoverable(): el plugin puede provocar un crash
+      // al regresar de la Activity de Android en algunos dispositivos.
+      await manager.host(localName: 'RetroHub');
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear la sesión: $error')),
+      );
+    }
+  }
+
+  Future<void> _searchSession(BuildContext context, LinkManager manager) async {
+    const BluetoothDiscovery discovery = BluetoothDiscovery();
+
+    try {
+      if (!await discovery.isEnabled()) {
+        final bool enabled = await discovery.requestEnable();
+
+        if (!enabled || !context.mounted) {
+          return;
+        }
+      }
+
+      final List<BluetoothDevice> bonded = await discovery
+          .bondedRetroHubDevices();
+
+      if (!context.mounted) {
+        return;
+      }
+
+      final BluetoothDevice?
+      selected = await showModalBottomSheet<BluetoothDevice>(
+        context: context,
+        backgroundColor: const Color(0xFF181818),
+        builder: (sheetContext) {
+          if (bonded.isEmpty) {
+            return const SafeArea(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No hay dispositivos Bluetooth emparejados.',
+                  style: TextStyle(color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ListTile(
+                  leading: Icon(Icons.bluetooth_searching, color: Colors.white),
+                  title: Text(
+                    'Buscar sesión',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Selecciona el teléfono que creó la sesión',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+                const Divider(color: Colors.white12),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: bonded.length,
+                    itemBuilder: (context, index) {
+                      final BluetoothDevice device = bonded[index];
+
+                      final String name = device.name?.trim().isNotEmpty == true
+                          ? device.name!
+                          : 'Dispositivo Bluetooth';
+
+                      return ListTile(
+                        leading: const Icon(
+                          Icons.phone_android,
+                          color: Colors.white70,
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          device.address,
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                        onTap: () {
+                          Navigator.pop(sheetContext, device);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (selected == null) {
+        return;
+      }
+
+      await manager.join(localName: 'RetroHub', target: selected.address);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo conectar: $error')));
+    }
+  }
+
+  Future<void> _showActiveSessionDialog(
+    BuildContext context,
+    LinkManager manager,
+  ) async {
+    final bool? disconnect = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: const Color(0xFF181818),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.cable, color: Colors.greenAccent),
+                  title: Text(
+                    _labelFor(manager.state),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Cable Link Bluetooth',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+                const Divider(color: Colors.white12),
+                ListTile(
+                  leading: const Icon(Icons.link_off, color: Colors.redAccent),
+                  title: const Text(
+                    'Desconectar',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext, true);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (disconnect == true) {
+      await manager.close();
+    }
+  }
+
   String _labelFor(LinkState state) {
     switch (state) {
       case LinkState.disconnected:
-        return 'Desconectado';
+        return 'Cable Link';
       case LinkState.searching:
         return 'Buscando';
       case LinkState.hosting:
