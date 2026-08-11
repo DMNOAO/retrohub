@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
+import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
@@ -179,6 +180,7 @@ class LibretroGameView extends StatefulWidget {
 
 class _LibretroGameViewState extends State<LibretroGameView> {
   static const int _buttonB = 0;
+  static const int _buttonY = 1;
   static const int _buttonSelect = 2;
   static const int _buttonStart = 3;
   static const int _buttonUp = 4;
@@ -186,6 +188,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   static const int _buttonLeft = 6;
   static const int _buttonRight = 7;
   static const int _buttonA = 8;
+  static const int _buttonX = 9;
   static const int _buttonL = 10;
   static const int _buttonR = 11;
 
@@ -196,6 +199,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   final Set<int> _pressedButtons = <int>{};
 
   LibretroBridge? _bridge;
+  LibretroAudioPlayer? _audioPlayer;
   Timer? _emulationTimer;
   Timer? _sramTimer;
   Timer? _memoryDebugTimer;
@@ -391,6 +395,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw Exception('$coreName no pudo cargar la ROM:\n${widget.romPath}');
       }
 
+      final audioPlayer = LibretroAudioPlayer();
+      _audioPlayer = audioPlayer;
+      await audioPlayer.start(bridge);
+
       final paths = _persistencePaths;
       if (paths != null && File(paths.sramFile).existsSync()) {
         final bool loaded = bridge.loadSram(paths.sramFile);
@@ -486,6 +494,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       }
     }
 
+    _audioPlayer?.pump(bridge);
+
     final LibretroFrame? frame = bridge.readFrame();
 
     if (frame == null) {
@@ -513,6 +523,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       default:
         _speedMultiplierNotifier.value = 1;
     }
+
+    _audioPlayer?.setPaused(_speedMultiplierNotifier.value != 1);
 
     _focusNode.requestFocus();
   }
@@ -739,6 +751,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (key == LogicalKeyboardKey.arrowRight) return _buttonRight;
     if (key == LogicalKeyboardKey.keyZ) return _buttonA;
     if (key == LogicalKeyboardKey.keyX) return _buttonB;
+    if (key == LogicalKeyboardKey.keyC) return _buttonX;
+    if (key == LogicalKeyboardKey.keyV) return _buttonY;
 
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
@@ -806,6 +820,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _memoryDebugTimer = null;
 
     _releaseAllButtons();
+
+    final audioPlayer = _audioPlayer;
+    _audioPlayer = null;
+    unawaited(audioPlayer?.dispose() ?? Future<void>.value());
 
     final bridge = _bridge;
     final paths = _persistencePaths;
