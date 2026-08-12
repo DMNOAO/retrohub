@@ -91,6 +91,15 @@ typedef _RhGetAudioSampleRateDart = int Function();
 typedef _RhReadAudioSamplesNative = Size Function(Pointer<Int16>, Size);
 typedef _RhReadAudioSamplesDart = int Function(Pointer<Int16>, int);
 
+// Cable Link (rh_link_*): rh_link_supported/enable/connected
+// comparten la misma forma que _RhApiVersionNative/Dart
+// (Int32 Function()) y rh_link_disable la de _RhVoidNative/Dart —
+// se reutilizan esos typedefs. Solo hacen falta dos nuevos, para
+// enviar/recibir bytes.
+typedef _RhLinkTransferNative = Int32 Function(Pointer<Uint8>, Size);
+typedef _RhLinkTransferDart = int Function(Pointer<Uint8>, int);
+
+
 abstract final class LibretroMemoryRegion {
   static const int saveRam = 0;
   static const int rtc = 1;
@@ -218,6 +227,17 @@ class LibretroBridge {
   late final _RhGetAudioSampleRateDart _getAudioSampleRate;
   late final _RhReadAudioSamplesDart _readAudioSamples;
   late final _RhVoidDart _clearAudio;
+
+  // Cable Link (rh_link_*): puede no existir si el bridge nativo es
+  // una versión anterior a este PR, o si el core cargado no es el
+  // fork RetroHub de SameBoy con soporte Link. En ambos casos se
+  // enlaza de forma tolerante, igual que RTC más arriba.
+  _RhApiVersionDart? _linkSupported;
+  _RhApiVersionDart? _linkEnable;
+  _RhVoidDart? _linkDisable;
+  _RhApiVersionDart? _linkConnected;
+  _RhLinkTransferDart? _linkSend;
+  _RhLinkTransferDart? _linkReceive;
 
   bool _coreLoaded = false;
   bool _gameLoaded = false;
@@ -450,6 +470,53 @@ class LibretroBridge {
           _RhReadMemoryAddressDart>('rh_read_memory_address');
     } on ArgumentError {
       _readMemoryAddress = null;
+    }
+    try {
+      _linkSupported = _lib.lookupFunction<
+          _RhApiVersionNative,
+          _RhApiVersionDart>('rh_link_supported');
+    } on ArgumentError {
+      _linkSupported = null;
+    }
+
+    try {
+      _linkEnable = _lib.lookupFunction<
+          _RhApiVersionNative,
+          _RhApiVersionDart>('rh_link_enable');
+    } on ArgumentError {
+      _linkEnable = null;
+    }
+
+    try {
+      _linkDisable = _lib.lookupFunction<
+          _RhVoidNative,
+          _RhVoidDart>('rh_link_disable');
+    } on ArgumentError {
+      _linkDisable = null;
+    }
+
+    try {
+      _linkConnected = _lib.lookupFunction<
+          _RhApiVersionNative,
+          _RhApiVersionDart>('rh_link_connected');
+    } on ArgumentError {
+      _linkConnected = null;
+    }
+
+    try {
+      _linkSend = _lib.lookupFunction<
+          _RhLinkTransferNative,
+          _RhLinkTransferDart>('rh_link_send');
+    } on ArgumentError {
+      _linkSend = null;
+    }
+
+    try {
+      _linkReceive = _lib.lookupFunction<
+          _RhLinkTransferNative,
+          _RhLinkTransferDart>('rh_link_receive');
+    } on ArgumentError {
+      _linkReceive = null;
     }
   }
 
@@ -802,6 +869,110 @@ class LibretroBridge {
       filePath: filePath,
       operation: operation,
     );
+  }
+
+  // ============================================================
+  // Cable Link (rh_link_*)
+  //
+  // Solo funciona si el core cargado es el fork RetroHub de
+  // SameBoy con soporte Link (ver
+  // native/sameboy_fork/RH_LINK_PATCH.md). En cualquier otro core,
+  // o en un bridge nativo compilado antes de este PR, todos estos
+  // métodos se degradan a "no soportado" sin lanzar excepciones.
+  // ============================================================
+
+  /// `true` si el core cargado expone la API `rh_link_*` (es decir,
+  /// es el fork de SameBoy con soporte Link Cable) Y este bridge
+  /// nativo fue compilado con este PR.
+  bool get linkSupported {
+    _ensureNotDisposed();
+
+    final operation = _linkSupported;
+    if (!_coreLoaded || operation == null) {
+      return false;
+    }
+
+    return operation() == 1;
+  }
+
+  /// Activa el puente del puerto serie dentro del core. Requiere
+  /// que ya haya un juego cargado y que [linkSupported] sea true.
+  bool enableLink() {
+    _ensureNotDisposed();
+
+    final operation = _linkEnable;
+    if (!_coreLoaded || !_gameLoaded || operation == null) {
+      return false;
+    }
+
+    return operation() == 1;
+  }
+
+  /// Desactiva el puente del puerto serie. Seguro de llamar aunque
+  /// nunca se haya activado.
+  void disableLink() {
+    _ensureNotDisposed();
+    _linkDisable?.call();
+  }
+
+  /// `true` si el puente del puerto serie está activo en este
+  /// momento (ver [enableLink]).
+  bool get linkConnected {
+    _ensureNotDisposed();
+
+    final operation = _linkConnected;
+    if (operation == null) {
+      return false;
+    }
+
+    return operation() == 1;
+  }
+
+  /// Entrega [bytes] al core para que los inyecte, bit a bit, en el
+  /// puerto serie emulado — normalmente bytes que acaban de llegar
+  /// por Bluetooth desde el otro dispositivo. Devuelve false si el
+  /// link no está soportado/activo o si la cola interna del core
+  /// está llena (en ese caso, reintentar más tarde).
+  bool linkSend(Uint8List bytes) {
+    _ensureNotDisposed();
+
+    final operation = _linkSend;
+    if (operation == null || bytes.isEmpty) {
+      return false;
+    }
+
+    final Pointer<Uint8> source = calloc<Uint8>(bytes.length);
+    try {
+      source.asTypedList(bytes.length).setAll(0, bytes);
+      return operation(source, bytes.length) == 1;
+    } finally {
+      calloc.free(source);
+    }
+  }
+
+  /// Extrae los bytes que el core ya armó a partir de lo que el
+  /// Game Boy local mandó por el puerto serie desde la última
+  /// llamada — para reenviarlos por Bluetooth al otro dispositivo.
+  /// Devuelve una lista vacía si no hay nada nuevo o el link no
+  /// está soportado/activo.
+  Uint8List linkReceive({int maxLength = 256}) {
+    _ensureNotDisposed();
+
+    final operation = _linkReceive;
+    if (operation == null || maxLength <= 0) {
+      return Uint8List(0);
+    }
+
+    final Pointer<Uint8> destination = calloc<Uint8>(maxLength);
+    try {
+      final int bytesRead = operation(destination, maxLength);
+      if (bytesRead <= 0) {
+        return Uint8List(0);
+      }
+      return Uint8List.fromList(destination.asTypedList(bytesRead));
+    } finally {
+      calloc.free(destination);
+    }
   }
 
   bool _runFileOperation({

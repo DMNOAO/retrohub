@@ -62,6 +62,21 @@ typedef void (*retro_set_input_state_t)(
     int16_t (*)(unsigned, unsigned, unsigned, unsigned)
 );
 
+// Cable Link (rh_link_*) — símbolos OPCIONALES. Solo existen en
+// cores compilados desde el fork RetroHub de SameBoy (ver
+// native/sameboy_fork/RH_LINK_PATCH.md). En cualquier otro core
+// (mGBA, un SameBoy sin forkear) simplemente no se encuentran al
+// hacer dlsym, y todo lo de abajo se degrada a "no soportado" sin
+// fallar.
+// ============================================================
+
+typedef bool (*rh_link_enable_t)(void);
+typedef void (*rh_link_disable_t)(void);
+typedef bool (*rh_link_connected_t)(void);
+typedef bool (*rh_link_send_t)(const uint8_t*, size_t);
+typedef int (*rh_link_receive_t)(uint8_t*, size_t);
+
+
 // ============================================================
 // Estructuras Libretro
 // ============================================================
@@ -224,6 +239,14 @@ static retro_set_audio_sample_batch_t retro_set_audio_sample_batch_fn =
 static retro_set_input_poll_t retro_set_input_poll_fn = nullptr;
 static retro_set_input_state_t retro_set_input_state_fn = nullptr;
 static retro_get_system_av_info_t retro_get_system_av_info_fn = nullptr;
+
+// Opcionales: solo presentes si el core es el fork RetroHub de
+// SameBoy con soporte Link Cable (ver typedefs más arriba).
+static rh_link_enable_t rh_link_enable_fn = nullptr;
+static rh_link_disable_t rh_link_disable_fn = nullptr;
+static rh_link_connected_t rh_link_connected_fn = nullptr;
+static rh_link_send_t rh_link_send_fn = nullptr;
+static rh_link_receive_t rh_link_receive_fn = nullptr;
 
 static bool core_initialized = false;
 static bool game_loaded = false;
@@ -613,6 +636,12 @@ static void clear_function_pointers() {
     retro_set_audio_sample_batch_fn = nullptr;
     retro_set_input_poll_fn = nullptr;
     retro_set_input_state_fn = nullptr;
+
+    rh_link_enable_fn = nullptr;
+    rh_link_disable_fn = nullptr;
+    rh_link_connected_fn = nullptr;
+    rh_link_send_fn = nullptr;
+    rh_link_receive_fn = nullptr;
 }
 
 static void reset_frame_state() {
@@ -846,6 +875,35 @@ int rh_load_core(const char* core_path) {
                 core,
                 "retro_set_input_state"
             )
+        );
+
+    // Opcionales: no todos los cores los exportan (solo el fork
+    // RetroHub de SameBoy). Un dlsym que no encuentra el símbolo
+    // devuelve nullptr sin fallar, así que no hace falta try/catch
+    // como en el lado Dart.
+    rh_link_enable_fn =
+        reinterpret_cast<rh_link_enable_t>(
+            rh_find_symbol(core, "rh_link_enable")
+        );
+
+    rh_link_disable_fn =
+        reinterpret_cast<rh_link_disable_t>(
+            rh_find_symbol(core, "rh_link_disable")
+        );
+
+    rh_link_connected_fn =
+        reinterpret_cast<rh_link_connected_t>(
+            rh_find_symbol(core, "rh_link_connected")
+        );
+
+    rh_link_send_fn =
+        reinterpret_cast<rh_link_send_t>(
+            rh_find_symbol(core, "rh_link_send")
+        );
+
+    rh_link_receive_fn =
+        reinterpret_cast<rh_link_receive_t>(
+            rh_find_symbol(core, "rh_link_receive")
         );
 
     const bool all_functions_loaded =
@@ -1904,4 +1962,84 @@ void rh_unload() {
 
     reset_input_state();
     reset_frame_state();
+}
+
+// ============================================================
+// Cable Link (rh_link_*) — puente tolerante hacia los símbolos
+// opcionales rh_link_* del core (solo presentes en el fork
+// RetroHub de SameBoy, ver native/sameboy_fork/RH_LINK_PATCH.md).
+//
+// Estas funciones SIEMPRE existen en libretro_bridge.so (las
+// exportamos nosotros), así que el lado Dart puede enlazarlas sin
+// try/catch. La tolerancia real está acá adentro: si el core
+// cargado no es el fork con soporte Link (mGBA, un SameBoy sin
+// forkear, etc.), los punteros rh_link_*_fn quedan en nullptr y
+// estas funciones devuelven "no soportado" sin fallar.
+// ============================================================
+
+RH_EXPORT
+int rh_link_supported() {
+    return (
+        rh_link_enable_fn &&
+        rh_link_disable_fn &&
+        rh_link_connected_fn &&
+        rh_link_send_fn &&
+        rh_link_receive_fn
+    ) ? 1 : 0;
+}
+
+RH_EXPORT
+int rh_link_enable() {
+    if (
+        !game_loaded ||
+        !rh_link_enable_fn
+    ) {
+        return 0;
+    }
+
+    return rh_link_enable_fn() ? 1 : 0;
+}
+
+RH_EXPORT
+void rh_link_disable() {
+    if (!rh_link_disable_fn) {
+        return;
+    }
+
+    rh_link_disable_fn();
+}
+
+RH_EXPORT
+int rh_link_connected() {
+    if (!rh_link_connected_fn) {
+        return 0;
+    }
+
+    return rh_link_connected_fn() ? 1 : 0;
+}
+
+RH_EXPORT
+int rh_link_send(const uint8_t* data, size_t length) {
+    if (
+        !rh_link_send_fn ||
+        !data ||
+        length == 0
+    ) {
+        return 0;
+    }
+
+    return rh_link_send_fn(data, length) ? 1 : 0;
+}
+
+RH_EXPORT
+int rh_link_receive(uint8_t* buffer, size_t max_length) {
+    if (
+        !rh_link_receive_fn ||
+        !buffer ||
+        max_length == 0
+    ) {
+        return 0;
+    }
+
+    return rh_link_receive_fn(buffer, max_length);
 }

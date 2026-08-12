@@ -16,6 +16,7 @@ import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
 import '../../link/link_manager.dart';
+import '../../link/link_state.dart';
 import '../../link/link_transport_factory.dart';
 
 class LibretroGameController {
@@ -27,7 +28,7 @@ class LibretroGameController {
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
   Map<String, LibretroMemoryRegionDiagnostics> Function()?
-      _inspectMemoryRegionDiagnostics;
+  _inspectMemoryRegionDiagnostics;
   Uint8List Function(int memoryId, int offset, int length)? _readMemoryBlock;
   Uint8List Function(int address, int length)? _readMemoryAddress;
   Map<String, String> Function()? _runtimeIdentity;
@@ -64,10 +65,7 @@ class LibretroGameController {
 
   void resetInput() => _resetInput?.call();
 
-  Future<bool> saveState({
-    required int slot,
-    required String title,
-  }) async {
+  Future<bool> saveState({required int slot, required String title}) async {
     return await _saveState?.call(slot, title) ?? false;
   }
 
@@ -88,12 +86,16 @@ class LibretroGameController {
   }
 
   Map<String, LibretroMemoryRegionDiagnostics>
-      inspectMemoryRegionDiagnostics() {
+  inspectMemoryRegionDiagnostics() {
     return _inspectMemoryRegionDiagnostics?.call() ??
         const <String, LibretroMemoryRegionDiagnostics>{};
   }
 
-  Uint8List readMemoryBlock({required int memoryId, required int offset, required int length}) {
+  Uint8List readMemoryBlock({
+    required int memoryId,
+    required int offset,
+    required int length,
+  }) {
     return _readMemoryBlock?.call(memoryId, offset, length) ?? Uint8List(0);
   }
 
@@ -114,8 +116,9 @@ class LibretroGameController {
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
     required Map<String, LibretroMemoryRegionDiagnostics> Function()
-        inspectMemoryRegionDiagnostics,
-    required Uint8List Function(int memoryId, int offset, int length) readMemoryBlock,
+    inspectMemoryRegionDiagnostics,
+    required Uint8List Function(int memoryId, int offset, int length)
+    readMemoryBlock,
     required Uint8List Function(int address, int length) readMemoryAddress,
     required Map<String, String> Function() runtimeIdentity,
     required ValueNotifier<int> speedMultiplierNotifier,
@@ -224,6 +227,11 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
   late final LinkManager _linkManager;
 
+  bool _linkBridgeEnabled = false;
+  late final StreamSubscription<LinkState> _linkStateSubscription;
+  late final StreamSubscription<Uint8List> _linkPacketSubscription;
+  final List<Uint8List> _pendingLinkPackets = <Uint8List>[];
+
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
 
@@ -231,8 +239,12 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void initState() {
     super.initState();
     _sessionStartedAt = DateTime.now();
-    _linkManager = LinkManager(
-      transport: createDefaultLinkTransport(),
+    _linkManager = LinkManager(transport: createDefaultLinkTransport());
+    _linkStateSubscription = _linkManager.onStateChanged.listen(
+      _handleLinkStateChanged,
+    );
+    _linkPacketSubscription = _linkManager.onPacket.listen(
+      _handleLinkPacketFromBluetooth,
     );
     _saveStateService = SaveStateService(
       gameId: widget.gameId,
@@ -294,13 +306,18 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
   Map<String, int> _inspectMemoryRegions() {
     final bridge = _bridge;
-    if (_disposed || !_isRunning || bridge == null) return const <String, int>{};
-    try { return bridge.inspectMemoryRegions(); }
-    catch (error) { debugPrint('Error inspeccionando memoria: $error'); return const <String, int>{}; }
+    if (_disposed || !_isRunning || bridge == null)
+      return const <String, int>{};
+    try {
+      return bridge.inspectMemoryRegions();
+    } catch (error) {
+      debugPrint('Error inspeccionando memoria: $error');
+      return const <String, int>{};
+    }
   }
 
   Map<String, LibretroMemoryRegionDiagnostics>
-      _inspectMemoryRegionDiagnostics() {
+  _inspectMemoryRegionDiagnostics() {
     final bridge = _bridge;
     if (_disposed || !_isRunning || bridge == null) {
       return const <String, LibretroMemoryRegionDiagnostics>{};
@@ -315,14 +332,28 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
   Uint8List _readMemoryBlock(int memoryId, int offset, int length) {
     final bridge = _bridge;
-    if (_disposed || !_isRunning || bridge == null || _persistenceOperationInProgress) return Uint8List(0);
-    try { return bridge.readMemoryBlock(memoryId: memoryId, offset: offset, length: length); }
-    catch (error) { debugPrint('Error leyendo memoria: $error'); return Uint8List(0); }
+    if (_disposed ||
+        !_isRunning ||
+        bridge == null ||
+        _persistenceOperationInProgress)
+      return Uint8List(0);
+    try {
+      return bridge.readMemoryBlock(
+        memoryId: memoryId,
+        offset: offset,
+        length: length,
+      );
+    } catch (error) {
+      debugPrint('Error leyendo memoria: $error');
+      return Uint8List(0);
+    }
   }
 
   Uint8List _readMemoryAddress(int address, int length) {
     final bridge = _bridge;
-    if (_disposed || !_isRunning || bridge == null ||
+    if (_disposed ||
+        !_isRunning ||
+        bridge == null ||
         _persistenceOperationInProgress) {
       return Uint8List(0);
     }
@@ -382,8 +413,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       final persistencePaths = _persistencePaths;
       if (persistencePaths != null) {
-        Directory(persistencePaths.sramDirectory)
-            .createSync(recursive: true);
+        Directory(persistencePaths.sramDirectory).createSync(recursive: true);
 
         bridge.setSaveDirectory(persistencePaths.sramDirectory);
         bridge.setSystemDirectory(persistencePaths.sramDirectory);
@@ -395,9 +425,20 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw Exception('$coreName no pudo cargar la ROM:\n${widget.romPath}');
       }
 
-      final audioPlayer = LibretroAudioPlayer();
-      _audioPlayer = audioPlayer;
-      await audioPlayer.start(bridge);
+      // El pipeline PCM/SoLoud se usa exclusivamente para SNES.
+      // GB/GBC (SameBoy) y GBA (mGBA) mantienen su comportamiento previo.
+      final String normalizedCoreName = coreName.toLowerCase();
+      final bool usesSoLoudAudio =
+          normalizedCoreName.contains('snes9x') ||
+          normalizedCoreName.contains('snes');
+
+      if (usesSoLoudAudio) {
+        final audioPlayer = LibretroAudioPlayer();
+        _audioPlayer = audioPlayer;
+        await audioPlayer.start(bridge);
+      } else {
+        _audioPlayer = null;
+      }
 
       final paths = _persistencePaths;
       if (paths != null && File(paths.sramFile).existsSync()) {
@@ -440,6 +481,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         _statusMessage = 'Juego ejecutándose';
       });
 
+      _handleLinkStateChanged(_linkManager.state);
       _focusNode.requestFocus();
 
       _emulationTimer = Timer.periodic(
@@ -447,12 +489,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         (_) => _emulationTick(),
       );
 
-      _sramTimer = Timer.periodic(
-        const Duration(seconds: 10),
-        (_) {
-          _saveSram();
-        },
-      );
+      _sramTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        _saveSram();
+      });
 
       _memoryDebugTimer = Timer.periodic(
         const Duration(seconds: 1),
@@ -482,31 +521,71 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         !_isRunning ||
         _isDecodingFrame ||
         _persistenceOperationInProgress ||
-        _bridge == null) {
+        _bridge == null)
       return;
-    }
 
     final LibretroBridge bridge = _bridge!;
+    final int runs = _linkBridgeEnabled ? 1 : _speedMultiplierNotifier.value;
 
-    for (int index = 0; index < _speedMultiplierNotifier.value; index++) {
-      if (!bridge.runOnce()) {
-        return;
-      }
+    for (int index = 0; index < runs; index++) {
+      if (!bridge.runOnce()) return;
+      _pumpLinkCable(bridge);
     }
 
     _audioPlayer?.pump(bridge);
-
     final LibretroFrame? frame = bridge.readFrame();
+    if (frame != null) _decodeFrame(frame);
+  }
 
-    if (frame == null) {
-      return;
+  void _handleLinkStateChanged(LinkState state) {
+    final bridge = _bridge;
+    if (bridge == null || !bridge.linkSupported) return;
+    final active = state == LinkState.connected || state == LinkState.syncing;
+
+    if (active && !_linkBridgeEnabled) {
+      _linkBridgeEnabled = bridge.enableLink();
+      if (_linkBridgeEnabled) {
+        _speedMultiplierNotifier.value = 1;
+        _audioPlayer?.setPaused(false);
+      }
+      debugPrint('[RetroHub Link] enableLink() -> $_linkBridgeEnabled');
+    } else if (!active && _linkBridgeEnabled) {
+      bridge.disableLink();
+      _linkBridgeEnabled = false;
+      _pendingLinkPackets.clear();
+    } else if (!active) {
+      _pendingLinkPackets.clear();
+    }
+  }
+
+  void _handleLinkPacketFromBluetooth(Uint8List bytes) {
+    if (!_linkBridgeEnabled || bytes.isEmpty) return;
+    _pendingLinkPackets.add(Uint8List.fromList(bytes));
+    debugPrint(
+      '[RetroHub Link] BT -> CORE queued: ${bytes.length} bytes (pending=${_pendingLinkPackets.length})',
+    );
+  }
+
+  void _pumpLinkCable(LibretroBridge bridge) {
+    if (!_linkBridgeEnabled) return;
+
+    while (_pendingLinkPackets.isNotEmpty) {
+      final incoming = _pendingLinkPackets.first;
+      if (!bridge.linkSend(incoming)) break;
+      _pendingLinkPackets.removeAt(0);
+      debugPrint(
+        '[RetroHub Link] BT -> CORE: ${incoming.length} bytes (pending=${_pendingLinkPackets.length})',
+      );
     }
 
-    _decodeFrame(frame);
+    final outgoing = bridge.linkReceive();
+    if (outgoing.isEmpty) return;
+    debugPrint('[RetroHub Link] CORE -> BT: ${outgoing.length} bytes');
+    _linkManager.sendPacket(outgoing);
   }
 
   void _cycleSpeed() {
-    if (!mounted || _disposed) {
+    if (!mounted || _disposed || _linkBridgeEnabled) {
       return;
     }
 
@@ -560,7 +639,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     );
   }
 
-
   void _refreshPokemonDiagnostic() {
     final PokemonEngine? engine = _pokemonEngine;
 
@@ -571,8 +649,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       return;
     }
 
-    final GameEngineStatus<PokemonMemorySnapshot> status =
-        engine.readStatus();
+    final GameEngineStatus<PokemonMemorySnapshot> status = engine.readStatus();
 
     if (!mounted || _disposed) return;
 
@@ -619,10 +696,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     }
   }
 
-  Future<bool> _saveState(
-    int slot,
-    String title,
-  ) async {
+  Future<bool> _saveState(int slot, String title) async {
     final bridge = _bridge;
     final service = _saveStateService;
 
@@ -722,8 +796,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   }
 
   int _currentPlayTimeMinutes() {
-    final int sessionMinutes =
-        DateTime.now().difference(_sessionStartedAt).inMinutes;
+    final int sessionMinutes = DateTime.now()
+        .difference(_sessionStartedAt)
+        .inMinutes;
 
     return widget.initialPlayTimeMinutes + sessionMinutes;
   }
@@ -835,8 +910,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
         if (bridge.coreHasRtc()) {
           debugPrint('Guardando RTC...');
-          final bool rtcSaved =
-              bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
+          final bool rtcSaved = bridge.saveRtc(_rtcFilePathFor(paths.sramFile));
           debugPrint(rtcSaved ? 'RTC OK' : 'Error guardando RTC');
         }
       } catch (error) {
@@ -883,6 +957,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _currentImage = null;
     _focusNode.dispose();
     _speedMultiplierNotifier.dispose();
+    _linkStateSubscription.cancel();
+    _linkPacketSubscription.cancel();
     _linkManager.dispose();
     super.dispose();
   }
@@ -928,17 +1004,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
             ),
           ),
           if (kDebugMode && !Platform.isAndroid)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: _buildStatusBadge(),
-            ),
+            Positioned(top: 12, left: 12, child: _buildStatusBadge()),
           if (kDebugMode && !Platform.isAndroid)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: _buildMemoryBadge(),
-            ),
+            Positioned(top: 12, right: 12, child: _buildMemoryBadge()),
         ],
       );
     }
@@ -1017,17 +1085,12 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     );
   }
 
-
-
   Widget _buildMemoryBadge() {
-    final GameEngineStatus<PokemonMemorySnapshot>? status =
-        _pokemonStatus;
+    final GameEngineStatus<PokemonMemorySnapshot>? status = _pokemonStatus;
     final PokemonMemorySnapshot? snapshot = status?.snapshot;
     final bool decoderReady = status?.isReady ?? false;
 
-    final String title = decoderReady
-        ? 'POKÉMON ENGINE'
-        : 'MEMORY ENGINE';
+    final String title = decoderReady ? 'POKÉMON ENGINE' : 'MEMORY ENGINE';
 
     final Color accent = decoderReady
         ? Colors.greenAccent
@@ -1080,7 +1143,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    decoderReady ? Icons.memory_rounded : Icons.developer_board_rounded,
+                    decoderReady
+                        ? Icons.memory_rounded
+                        : Icons.developer_board_rounded,
                     color: accent,
                     size: 15,
                   ),
@@ -1120,15 +1185,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 6,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Text(
           'Frames: $_framesRendered',
           style: const TextStyle(
