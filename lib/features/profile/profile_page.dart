@@ -8,6 +8,8 @@ import '../../core/emulation/core_loader.dart';
 import '../../core/utils/play_time_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
+import '../../shared/theme/app_appearance.dart';
+import '../../shared/theme/appearance_provider.dart';
 import 'auth/auth_provider.dart';
 import 'auth/retrohub_user.dart';
 import 'cloud/cloud_save_local_service.dart';
@@ -71,6 +73,10 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: 24),
               _GoogleSignInCard(auth: auth, user: user),
               const SizedBox(height: 28),
+              const _SectionTitle('Apariencia'),
+              const SizedBox(height: 12),
+              const _AppearanceCard(),
+              const SizedBox(height: 28),
               const _SectionTitle('Estadísticas'),
               const SizedBox(height: 12),
               Wrap(
@@ -131,6 +137,168 @@ class ProfilePage extends ConsumerWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _AppearanceCard extends ConsumerWidget {
+  const _AppearanceCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(appearanceProvider).value ?? AppAppearance.crystal;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tema de la aplicación',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Elige una paleta inspirada en una edición de Pokémon.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 680
+                    ? 4
+                    : constraints.maxWidth >= 430
+                        ? 3
+                        : 2;
+                const spacing = 10.0;
+                final width =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: AppAppearance.values.map((appearance) {
+                    return SizedBox(
+                      width: width,
+                      child: _AppearanceOption(
+                        appearance: appearance,
+                        selected: selected == appearance,
+                        onTap: () => ref
+                            .read(appearanceProvider.notifier)
+                            .select(appearance),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AppearanceOption extends StatelessWidget {
+  final AppAppearance appearance;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AppearanceOption({
+    required this.appearance,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Tema ${appearance.label}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: appearance.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? appearance.primary : Colors.white12,
+              width: selected ? 2.5 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: appearance.primary.withValues(alpha: 0.22),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 52,
+                child: appearance.spriteAsset != null
+                    ? Image.asset(
+                        appearance.spriteAsset!,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.none,
+                      )
+                    : Icon(
+                        appearance.fallbackIcon,
+                        color: appearance.primary,
+                        size: 38,
+                      ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                appearance.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _PaletteDot(color: appearance.primary),
+                  const SizedBox(width: 5),
+                  _PaletteDot(color: appearance.secondary),
+                  const SizedBox(width: 5),
+                  _PaletteDot(color: appearance.background),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaletteDot extends StatelessWidget {
+  final Color color;
+
+  const _PaletteDot({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 13,
+      height: 13,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white30),
       ),
     );
   }

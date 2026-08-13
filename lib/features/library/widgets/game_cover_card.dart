@@ -23,6 +23,8 @@ class _GameCoverCardState extends State<GameCoverCard> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -39,20 +41,20 @@ class _GameCoverCardState extends State<GameCoverCard> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: _hovered
-                    ? const Color(0xFF8B5CF6)
+                    ? colors.primary
                     : Colors.white.withOpacity(0.08),
                 width: _hovered ? 2 : 1,
               ),
               boxShadow: _hovered
                   ? [
                       BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.35),
+                        color: colors.primary.withOpacity(0.35),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
                     ]
                   : [],
-              color: const Color(0xFF15151F),
+              color: colors.surface,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

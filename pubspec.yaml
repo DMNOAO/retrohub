@@ -72,6 +72,9 @@ flutter:
     - assets/sprites/pokemon/gba/fire_red_leaf_green/shiny/
     - assets/sprites/pokemon/gba/ruby_sapphire/
     - assets/sprites/pokemon/gba/ruby_sapphire/shiny/
+
+    - assets/sprites/pokemon/nds/black_white/
+
     - assets/sprites/badges/Kanto/
     - assets/sprites/badges/Johto/
     - assets/sprites/badges/Hoenn/
