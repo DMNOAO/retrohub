@@ -14,21 +14,30 @@ class AppTheme {
     required Color primary,
     required Color secondary,
   }) {
-    final scheme = ColorScheme.dark(
+    final brightness = ThemeData.estimateBrightnessForColor(surface);
+    final onSurface = _foregroundFor(surface);
+    final onBackground = _foregroundFor(background);
+    final border = onSurface.withValues(alpha: 0.55);
+    final scheme = ColorScheme(
+      brightness: brightness,
       primary: primary,
+      onPrimary: _foregroundFor(primary),
       secondary: secondary,
+      onSecondary: _foregroundFor(secondary),
       surface: surface,
+      onSurface: onSurface,
       error: const Color(0xFFFF6B7A),
+      onError: Colors.white,
     );
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       scaffoldBackgroundColor: background,
       colorScheme: scheme,
       appBarTheme: AppBarTheme(
         backgroundColor: background,
-        foregroundColor: textPrimary,
+        foregroundColor: onBackground,
         elevation: 0,
         centerTitle: false,
       ),
@@ -37,12 +46,16 @@ class AppTheme {
         indicatorColor: primary.withValues(alpha: 0.25),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? primary : textSecondary,
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : onSurface.withValues(alpha: 0.72),
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            color: states.contains(WidgetState.selected) ? primary : textSecondary,
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : onSurface.withValues(alpha: 0.72),
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -53,7 +66,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: primary.withValues(alpha: 0.12)),
+          side: BorderSide(color: border),
         ),
       ),
       dividerColor: primary.withValues(alpha: 0.18),

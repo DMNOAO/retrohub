@@ -42,7 +42,7 @@ class _GameCoverCardState extends State<GameCoverCard> {
               border: Border.all(
                 color: _hovered
                     ? colors.primary
-                    : Colors.white.withOpacity(0.08),
+                    : colors.onSurface.withValues(alpha: 0.35),
                 width: _hovered ? 2 : 1,
               ),
               boxShadow: _hovered
@@ -67,10 +67,10 @@ class _GameCoverCardState extends State<GameCoverCard> {
                     child: widget.coverPath == null
                         ? Container(
                             color: Colors.black26,
-                            child: const Icon(
+                            child: Icon(
                               Icons.videogame_asset,
                               size: 48,
-                              color: Colors.white38,
+                              color: colors.onSurface.withValues(alpha: 0.38),
                             ),
                           )
                         : Image.asset(
@@ -88,8 +88,8 @@ class _GameCoverCardState extends State<GameCoverCard> {
                         widget.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -97,7 +97,7 @@ class _GameCoverCardState extends State<GameCoverCard> {
                       Text(
                         widget.console,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
+                          color: colors.onSurface.withValues(alpha: 0.55),
                           fontSize: 12,
                         ),
                       ),

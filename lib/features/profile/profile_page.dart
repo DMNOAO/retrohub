@@ -160,9 +160,11 @@ class _AppearanceCard extends ConsumerWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 5),
-            const Text(
+            Text(
               'Elige una paleta inspirada en una edición de Pokémon.',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             LayoutBuilder(
@@ -214,6 +216,13 @@ class _AppearanceOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tileForeground =
+        ThemeData.estimateBrightnessForColor(appearance.surface) ==
+                Brightness.dark
+            ? Colors.white
+            : Colors.black;
+    final tileBorder = tileForeground.withValues(alpha: 0.75);
+
     return Semantics(
       button: true,
       selected: selected,
@@ -228,7 +237,7 @@ class _AppearanceOption extends StatelessWidget {
             color: appearance.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? appearance.primary : Colors.white12,
+              color: selected ? appearance.primary : tileBorder,
               width: selected ? 2.5 : 1,
             ),
             boxShadow: selected
@@ -262,7 +271,7 @@ class _AppearanceOption extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: tileForeground,
                   fontWeight: selected ? FontWeight.bold : FontWeight.w600,
                 ),
               ),
@@ -298,7 +307,11 @@ class _PaletteDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white30),
+        border: Border.all(
+          color: ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+              ? Colors.white54
+              : Colors.black54,
+        ),
       ),
     );
   }
@@ -329,7 +342,9 @@ class _ProfileHeader extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           user?.email ?? 'Tu perfil de juego',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -387,7 +402,9 @@ class _GoogleSignInCard extends ConsumerWidget {
                   ? 'Inicia sesión para preparar la sincronización de tus partidas entre dispositivos.'
                   : 'Tu cuenta de Google está conectada a este perfil de RetroHub.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -608,7 +625,9 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
                         connected
                             ? 'Guarda SRAM y RTC en el espacio privado de RetroHub en Google Drive y restaura la misma partida en otro dispositivo.'
                             : 'Tus partidas continúan guardándose localmente. Conecta Google para preparar RetroHub Cloud.',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -618,9 +637,11 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
             if (connected) ...[
               const SizedBox(height: 18),
               if (widget.games.isEmpty)
-                const Text(
+                Text(
                   'No hay juegos importados para respaldar.',
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 )
               else ...[
                 DropdownButtonFormField<String>(
@@ -730,11 +751,11 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.bold,
         letterSpacing: 1.1,
-        color: Colors.white70,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -766,7 +787,9 @@ class _StatCard extends StatelessWidget {
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
