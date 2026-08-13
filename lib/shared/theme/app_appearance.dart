@@ -31,10 +31,10 @@ enum AppAppearance {
       sprite: 'assets/sprites/pokemon/nds/black_white/643.png');
 
   final String label;
-  final Color background;
-  final Color surface;
-  final Color primary;
-  final Color secondary;
+  final int _backgroundValue;
+  final int _surfaceValue;
+  final int _primaryValue;
+  final int _secondaryValue;
   final String? spriteAsset;
   final IconData? fallbackIcon;
 
@@ -46,12 +46,17 @@ enum AppAppearance {
     int secondary, {
     String? sprite,
     IconData? icon,
-  })  : background = Color(background),
-        surface = Color(surface),
-        primary = Color(primary),
-        secondary = Color(secondary),
+  })  : _backgroundValue = background,
+        _surfaceValue = surface,
+        _primaryValue = primary,
+        _secondaryValue = secondary,
         spriteAsset = sprite,
         fallbackIcon = icon;
+
+  Color get background => Color(_backgroundValue);
+  Color get surface => Color(_surfaceValue);
+  Color get primary => Color(_primaryValue);
+  Color get secondary => Color(_secondaryValue);
 
   ThemeData get theme => AppTheme.fromPalette(
         background: background,
