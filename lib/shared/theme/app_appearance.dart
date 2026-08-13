@@ -69,4 +69,57 @@ enum AppAppearance {
         (appearance) => appearance.name == value,
         orElse: () => AppAppearance.crystal,
       );
+
+  static AppAppearance? forGameTitle(String title) {
+    final normalized = title
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+
+    if (normalized.contains('rojo fuego') || normalized.contains('fire red')) {
+      return AppAppearance.fireRed;
+    }
+    if (normalized.contains('verde hoja') || normalized.contains('leaf green')) {
+      return AppAppearance.leafGreen;
+    }
+    if (normalized.contains('esmeralda') || normalized.contains('emerald')) {
+      return AppAppearance.emerald;
+    }
+    if (normalized.contains('zafiro') || normalized.contains('sapphire')) {
+      return AppAppearance.sapphire;
+    }
+    if (normalized.contains('rubi') || normalized.contains('ruby')) {
+      return AppAppearance.ruby;
+    }
+    if (normalized.contains('cristal') || normalized.contains('crystal')) {
+      return AppAppearance.crystal;
+    }
+    if (normalized.contains('plata') || normalized.contains('silver')) {
+      return AppAppearance.silver;
+    }
+    if (normalized.contains('oro') || normalized.contains('gold')) {
+      return AppAppearance.gold;
+    }
+    if (normalized.contains('amarillo') || normalized.contains('yellow')) {
+      return AppAppearance.yellow;
+    }
+    if (normalized.contains('azul') || normalized.contains('blue')) {
+      return AppAppearance.blue;
+    }
+    if (normalized.contains('blanco') || normalized.contains('white')) {
+      return AppAppearance.white;
+    }
+    if (normalized.contains('negro') || normalized.contains('black')) {
+      return AppAppearance.black;
+    }
+    if (normalized.contains('rojo') || normalized.contains(' red')) {
+      return AppAppearance.red;
+    }
+    return null;
+  }
 }
