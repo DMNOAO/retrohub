@@ -21,6 +21,10 @@ class EmulatorPreferences {
   static const _showIdentityKey = 'emulator_gb_show_identity';
   static const _orientationKey = 'emulator_gb_orientation';
   static const _keepAwakeKey = 'emulator_gb_keep_awake';
+  static const _pauseInBackgroundKey = 'emulator_gb_pause_in_background';
+  static const _autoSaveOnExitKey = 'emulator_gb_auto_save_on_exit';
+  static const _autoLoadOnStartKey = 'emulator_gb_auto_load_on_start';
+  static const _confirmOverwriteKey = 'emulator_gb_confirm_overwrite';
 
   final GameBoyControlLayout layout;
   final GameBoyControlSize controlSize;
@@ -32,6 +36,10 @@ class EmulatorPreferences {
   final bool showConsoleIdentity;
   final EmulatorOrientation orientation;
   final bool keepScreenAwake;
+  final bool pauseInBackground;
+  final bool autoSaveOnExit;
+  final bool autoLoadOnStart;
+  final bool confirmBeforeOverwrite;
 
   const EmulatorPreferences({
     this.layout = GameBoyControlLayout.classic,
@@ -44,6 +52,10 @@ class EmulatorPreferences {
     this.showConsoleIdentity = true,
     this.orientation = EmulatorOrientation.automatic,
     this.keepScreenAwake = true,
+    this.pauseInBackground = true,
+    this.autoSaveOnExit = true,
+    this.autoLoadOnStart = false,
+    this.confirmBeforeOverwrite = true,
   });
 
   double get sizeScale => switch (controlSize) {
@@ -63,6 +75,10 @@ class EmulatorPreferences {
     bool? showConsoleIdentity,
     EmulatorOrientation? orientation,
     bool? keepScreenAwake,
+    bool? pauseInBackground,
+    bool? autoSaveOnExit,
+    bool? autoLoadOnStart,
+    bool? confirmBeforeOverwrite,
   }) {
     return EmulatorPreferences(
       layout: layout ?? this.layout,
@@ -75,6 +91,11 @@ class EmulatorPreferences {
       showConsoleIdentity: showConsoleIdentity ?? this.showConsoleIdentity,
       orientation: orientation ?? this.orientation,
       keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
+      pauseInBackground: pauseInBackground ?? this.pauseInBackground,
+      autoSaveOnExit: autoSaveOnExit ?? this.autoSaveOnExit,
+      autoLoadOnStart: autoLoadOnStart ?? this.autoLoadOnStart,
+      confirmBeforeOverwrite:
+          confirmBeforeOverwrite ?? this.confirmBeforeOverwrite,
     );
   }
 
@@ -106,6 +127,10 @@ class EmulatorPreferences {
         orElse: () => EmulatorOrientation.automatic,
       ),
       keepScreenAwake: storage.getBool(_keepAwakeKey) ?? true,
+      pauseInBackground: storage.getBool(_pauseInBackgroundKey) ?? true,
+      autoSaveOnExit: storage.getBool(_autoSaveOnExitKey) ?? true,
+      autoLoadOnStart: storage.getBool(_autoLoadOnStartKey) ?? false,
+      confirmBeforeOverwrite: storage.getBool(_confirmOverwriteKey) ?? true,
     );
   }
 
@@ -122,6 +147,10 @@ class EmulatorPreferences {
       storage.setBool(_showIdentityKey, showConsoleIdentity),
       storage.setString(_orientationKey, orientation.name),
       storage.setBool(_keepAwakeKey, keepScreenAwake),
+      storage.setBool(_pauseInBackgroundKey, pauseInBackground),
+      storage.setBool(_autoSaveOnExitKey, autoSaveOnExit),
+      storage.setBool(_autoLoadOnStartKey, autoLoadOnStart),
+      storage.setBool(_confirmOverwriteKey, confirmBeforeOverwrite),
     ]);
   }
 

@@ -40,7 +40,8 @@ class EmulatorPage extends ConsumerStatefulWidget {
   ConsumerState<EmulatorPage> createState() => _EmulatorPageState();
 }
 
-class _EmulatorPageState extends ConsumerState<EmulatorPage> {
+class _EmulatorPageState extends ConsumerState<EmulatorPage>
+    with WidgetsBindingObserver {
   static const int _buttonB = 0;
   static const int _buttonY = 1;
   static const int _buttonSelect = 2;
@@ -78,6 +79,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     if (_isAndroidSnes) {
       unawaited(
@@ -132,6 +134,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         playTimeMinutes: game.playTimeSeconds ~/ 60,
       ),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (CoreLoader.isSnesRom(game.romPath) ||
+        !_preferences.pauseInBackground) {
+      return;
+    }
+    _gameController.setPaused(state != AppLifecycleState.resumed);
   }
 
   Future<void> _loadEmulatorPreferences() async {
@@ -360,6 +371,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     if (_isClosing) return;
     setState(() => _isClosing = true);
 
+    if (!CoreLoader.isSnesRom(game.romPath) &&
+        _preferences.autoSaveOnExit) {
+      await _gameController.saveState(
+        slot: SaveStateService.autoSaveSlot,
+        title: 'Guardado automático',
+      );
+    }
     await _gameController.saveSram();
     final tracker = _pokemonJournalTracker;
     if (tracker != null) await tracker.stop();
@@ -413,6 +431,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
             return loaded;
           },
+          confirmBeforeOverwrite: _preferences.confirmBeforeOverwrite,
         ),
       ),
     );
@@ -426,6 +445,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _headerRefreshTimer?.cancel();
     _gameController.resetInput();
     final tracker = _pokemonJournalTracker;
@@ -521,6 +541,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                         EmulatorScreenFilter.pixel
                                     ? FilterQuality.none
                                     : FilterQuality.medium,
+                                autoLoadState:
+                                    _preferences.autoLoadOnStart && !isSnes,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,

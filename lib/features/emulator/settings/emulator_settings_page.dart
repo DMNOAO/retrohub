@@ -70,9 +70,36 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
           service: widget.saveStateService,
           onSave: widget.onSaveState,
           onLoad: widget.onLoadState,
+          confirmBeforeOverwrite: _preferences.confirmBeforeOverwrite,
         ),
       ),
     );
+  }
+
+  Future<void> _resetAllSettings() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restablecer ajustes'),
+        content: const Text(
+          'Se restaurarán los controles, la pantalla y las opciones de emulación.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restablecer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    const defaults = EmulatorPreferences();
+    await defaults.save();
+    if (mounted) setState(() => _preferences = defaults);
   }
 
   @override
@@ -185,9 +212,17 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        await EmulatorPreferences.reset();
+                        const defaults = EmulatorPreferences();
+                        final updated = _preferences.copyWith(
+                          layout: defaults.layout,
+                          controlSize: defaults.controlSize,
+                          controlOpacity: defaults.controlOpacity,
+                          vibrationEnabled: defaults.vibrationEnabled,
+                          swapAB: defaults.swapAB,
+                        );
+                        await updated.save();
                         if (mounted) {
-                          setState(() => _preferences = const EmulatorPreferences());
+                          setState(() => _preferences = updated);
                         }
                       },
                       icon: const Icon(Icons.restore),
@@ -297,6 +332,62 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const _SectionTitle('Emulación GB · GBC · GBA'),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Pausar al minimizar'),
+                    subtitle: const Text(
+                      'Detiene la emulación cuando RetroHub queda en segundo plano',
+                    ),
+                    value: _preferences.pauseInBackground,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(pauseInBackground: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Guardado automático al salir'),
+                    subtitle: const Text(
+                      'Usa un estado separado de los cinco slots manuales',
+                    ),
+                    value: _preferences.autoSaveOnExit,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(autoSaveOnExit: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Cargar guardado automático al iniciar'),
+                    subtitle: const Text(
+                      'Continúa desde el último cierre con autoguardado disponible',
+                    ),
+                    value: _preferences.autoLoadOnStart,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(autoLoadOnStart: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Confirmar antes de sobrescribir'),
+                    subtitle: const Text('Protege los estados guardados manualmente'),
+                    value: _preferences.confirmBeforeOverwrite,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(confirmBeforeOverwrite: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.restore),
+                    title: const Text('Restablecer todos los ajustes'),
+                    subtitle: const Text('Controles, pantalla y emulación'),
+                    onTap: _resetAllSettings,
+                  ),
+                ],
               ),
             ),
             ],

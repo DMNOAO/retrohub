@@ -27,6 +27,7 @@ class LibretroGameController {
   Future<bool> Function(int slot)? _loadState;
   Future<bool> Function()? _saveSram;
   Future<void> Function()? _restart;
+  void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
   Map<String, LibretroMemoryRegionDiagnostics> Function()?
@@ -84,6 +85,8 @@ class LibretroGameController {
 
   Future<void> restart() async => _restart?.call();
 
+  void setPaused(bool paused) => _setPaused?.call(paused);
+
   int get currentPlayTimeMinutes {
     return _currentPlayTimeMinutes?.call() ?? 0;
   }
@@ -121,6 +124,7 @@ class LibretroGameController {
     required Future<bool> Function(int slot) loadState,
     required Future<bool> Function() saveSram,
     required Future<void> Function() restart,
+    required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
     required Map<String, LibretroMemoryRegionDiagnostics> Function()
@@ -139,6 +143,7 @@ class LibretroGameController {
     _loadState = loadState;
     _saveSram = saveSram;
     _restart = restart;
+    _setPaused = setPaused;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
     _inspectMemoryRegions = inspectMemoryRegions;
     _inspectMemoryRegionDiagnostics = inspectMemoryRegionDiagnostics;
@@ -157,6 +162,7 @@ class LibretroGameController {
     _loadState = null;
     _saveSram = null;
     _restart = null;
+    _setPaused = null;
     _currentPlayTimeMinutes = null;
     _inspectMemoryRegions = null;
     _inspectMemoryRegionDiagnostics = null;
@@ -178,6 +184,7 @@ class LibretroGameView extends StatefulWidget {
   final LibretroGameController? controller;
   final BoxFit screenFit;
   final FilterQuality filterQuality;
+  final bool autoLoadState;
 
   const LibretroGameView({
     super.key,
@@ -189,6 +196,7 @@ class LibretroGameView extends StatefulWidget {
     this.controller,
     this.screenFit = BoxFit.contain,
     this.filterQuality = FilterQuality.none,
+    this.autoLoadState = false,
   });
 
   @override
@@ -231,6 +239,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   bool _isDecodingFrame = false;
   bool _disposed = false;
   bool _persistenceOperationInProgress = false;
+  bool _paused = false;
+  bool _autoLoadAttempted = false;
 
   String? _errorMessage;
   String _statusMessage = 'Preparando emulador...';
@@ -283,6 +293,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       oldWidget.controller?._detach();
       _attachController();
     }
+    if (!oldWidget.autoLoadState && widget.autoLoadState) {
+      unawaited(_tryAutoLoadState());
+    }
   }
 
   void _attachController() {
@@ -293,6 +306,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       loadState: _loadState,
       saveSram: _saveSram,
       restart: _restartEmulator,
+      setPaused: _setPaused,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
       inspectMemoryRegions: _inspectMemoryRegions,
       inspectMemoryRegionDiagnostics: _inspectMemoryRegionDiagnostics,
@@ -514,6 +528,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       );
 
       _refreshPokemonDiagnostic();
+      unawaited(_tryAutoLoadState());
     } catch (error, stackTrace) {
       debugPrint('Error iniciando Libretro: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -534,6 +549,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void _emulationTick() {
     if (_disposed ||
         !_isRunning ||
+        _paused ||
         _isDecodingFrame ||
         _persistenceOperationInProgress ||
         _bridge == null)
@@ -550,6 +566,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _audioPlayer?.pump(bridge);
     final LibretroFrame? frame = bridge.readFrame();
     if (frame != null) _decodeFrame(frame);
+  }
+
+  void _setPaused(bool paused) {
+    if (_disposed || _paused == paused) return;
+    _paused = paused;
+    if (paused) _releaseAllButtons();
+    _audioPlayer?.setPaused(paused || _speedMultiplierNotifier.value != 1);
+  }
+
+  Future<void> _tryAutoLoadState() async {
+    if (_autoLoadAttempted || !widget.autoLoadState || !_isRunning) return;
+    _autoLoadAttempted = true;
+    await _loadState(SaveStateService.autoSaveSlot);
   }
 
   void _handleLinkStateChanged(LinkState state) {
