@@ -593,10 +593,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 children: [
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: SpeedButton(
-                                      speedMultiplier:
-                                          _gameController.speedMultiplier,
-                                      onTap: _gameController.cycleSpeed,
+                                    child: SizedBox(
+                                      width: 92,
+                                      height: 32,
+                                      child: SpeedButton(
+                                        speedMultiplier:
+                                            _gameController.speedMultiplier,
+                                        onTap: _gameController.cycleSpeed,
+                                      ),
                                     ),
                                   ),
                                   if (CoreLoader.isGameBoyRom(game.romPath))
