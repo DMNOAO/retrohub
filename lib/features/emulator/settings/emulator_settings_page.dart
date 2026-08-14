@@ -1,0 +1,418 @@
+import 'package:flutter/material.dart';
+
+import '../data/save_state_service.dart';
+import '../save_states/save_states_page.dart';
+import 'emulator_preferences.dart';
+
+class EmulatorSettingsPage extends StatefulWidget {
+  final String gameTitle;
+  final bool supportsGameBoyOptions;
+  final EmulatorPreferences initialPreferences;
+  final Future<void> Function() onRestart;
+  final Future<bool> Function(int slot, String title) onSaveState;
+  final Future<bool> Function(int slot) onLoadState;
+  final SaveStateService saveStateService;
+
+  const EmulatorSettingsPage({
+    super.key,
+    required this.gameTitle,
+    required this.supportsGameBoyOptions,
+    required this.initialPreferences,
+    required this.onRestart,
+    required this.onSaveState,
+    required this.onLoadState,
+    required this.saveStateService,
+  });
+
+  @override
+  State<EmulatorSettingsPage> createState() => _EmulatorSettingsPageState();
+}
+
+class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
+  late EmulatorPreferences _preferences = widget.initialPreferences;
+
+  Future<void> _update(EmulatorPreferences value) async {
+    setState(() => _preferences = value);
+    await value.save();
+  }
+
+  Future<void> _restart() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reiniciar juego'),
+        content: const Text(
+          'El juego volverá a iniciarse. El progreso que no hayas guardado dentro del juego se perderá.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reiniciar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await widget.onRestart();
+    if (mounted) Navigator.pop(context, _preferences);
+  }
+
+  Future<void> _openStates(SaveStatesMode mode) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SaveStatesPage(
+          gameTitle: widget.gameTitle,
+          mode: mode,
+          service: widget.saveStateService,
+          onSave: widget.onSaveState,
+          onLoad: widget.onLoadState,
+          confirmBeforeOverwrite: _preferences.confirmBeforeOverwrite,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetAllSettings() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restablecer ajustes'),
+        content: const Text(
+          'Se restaurarán los controles, la pantalla y las opciones de emulación.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restablecer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    const defaults = EmulatorPreferences();
+    await defaults.save();
+    if (mounted) setState(() => _preferences = defaults);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Navigator.pop(context, _preferences);
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Ajustes del emulador')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            const _SectionTitle('Partida'),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.restart_alt),
+                    title: const Text('Reiniciar juego'),
+                    subtitle: const Text('Volver a la pantalla de inicio del juego'),
+                    onTap: _restart,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.save_outlined),
+                    title: const Text('Guardar estado'),
+                    onTap: () => _openStates(SaveStatesMode.save),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.history),
+                    title: const Text('Cargar estado'),
+                    onTap: () => _openStates(SaveStatesMode.load),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.supportsGameBoyOptions) ...[
+            const SizedBox(height: 22),
+            const _SectionTitle('Controles GB · GBC · GBA'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Distribución', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    SegmentedButton<GameBoyControlLayout>(
+                      segments: const [
+                        ButtonSegment(
+                          value: GameBoyControlLayout.classic,
+                          label: Text('Clásica GBA'),
+                          icon: Icon(Icons.sports_esports),
+                        ),
+                        ButtonSegment(
+                          value: GameBoyControlLayout.compact,
+                          label: Text('Compacta'),
+                          icon: Icon(Icons.compress),
+                        ),
+                      ],
+                      selected: {_preferences.layout},
+                      onSelectionChanged: (selection) => _update(
+                        _preferences.copyWith(layout: selection.first),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Tamaño', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    SegmentedButton<GameBoyControlSize>(
+                      segments: const [
+                        ButtonSegment(value: GameBoyControlSize.small, label: Text('Pequeño')),
+                        ButtonSegment(value: GameBoyControlSize.normal, label: Text('Normal')),
+                        ButtonSegment(value: GameBoyControlSize.large, label: Text('Grande')),
+                      ],
+                      selected: {_preferences.controlSize},
+                      onSelectionChanged: (selection) => _update(
+                        _preferences.copyWith(controlSize: selection.first),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text('Opacidad · ${(_preferences.controlOpacity * 100).round()}%'),
+                    Slider(
+                      value: _preferences.controlOpacity,
+                      min: .45,
+                      max: 1,
+                      divisions: 11,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(controlOpacity: value),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Vibración al pulsar'),
+                      value: _preferences.vibrationEnabled,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(vibrationEnabled: value),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Intercambiar A/B'),
+                      value: _preferences.swapAB,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(swapAB: value),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        const defaults = EmulatorPreferences();
+                        final updated = _preferences.copyWith(
+                          layout: defaults.layout,
+                          controlSize: defaults.controlSize,
+                          controlOpacity: defaults.controlOpacity,
+                          vibrationEnabled: defaults.vibrationEnabled,
+                          swapAB: defaults.swapAB,
+                        );
+                        await updated.save();
+                        if (mounted) {
+                          setState(() => _preferences = updated);
+                        }
+                      },
+                      icon: const Icon(Icons.restore),
+                      label: const Text('Restablecer controles'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const _SectionTitle('Pantalla GB · GBC · GBA'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Escalado', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<EmulatorScreenScale>(
+                      initialValue: _preferences.screenScale,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.aspectRatio,
+                          child: Text('Mantener proporción'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.fitWidth,
+                          child: Text('Ajustar al ancho'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.stretch,
+                          child: Text('Ocupar espacio disponible'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          _update(_preferences.copyWith(screenScale: value));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Filtro de imagen', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    SegmentedButton<EmulatorScreenFilter>(
+                      segments: const [
+                        ButtonSegment(
+                          value: EmulatorScreenFilter.pixel,
+                          label: Text('Píxel nítido'),
+                        ),
+                        ButtonSegment(
+                          value: EmulatorScreenFilter.smooth,
+                          label: Text('Suavizado'),
+                        ),
+                      ],
+                      selected: {_preferences.screenFilter},
+                      onSelectionChanged: (selection) => _update(
+                        _preferences.copyWith(screenFilter: selection.first),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mostrar identidad de consola'),
+                      subtitle: const Text('Logotipo RetroHub bajo la pantalla'),
+                      value: _preferences.showConsoleIdentity,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(showConsoleIdentity: value),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Orientación', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<EmulatorOrientation>(
+                      initialValue: _preferences.orientation,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.automatic,
+                          child: Text('Automática'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.portrait,
+                          child: Text('Vertical'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.landscape,
+                          child: Text('Horizontal'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          _update(_preferences.copyWith(orientation: value));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mantener pantalla encendida'),
+                      subtitle: const Text('Evita que el dispositivo se bloquee al jugar'),
+                      value: _preferences.keepScreenAwake,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(keepScreenAwake: value),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const _SectionTitle('Emulación GB · GBC · GBA'),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Pausar al minimizar'),
+                    subtitle: const Text(
+                      'Detiene la emulación cuando RetroHub queda en segundo plano',
+                    ),
+                    value: _preferences.pauseInBackground,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(pauseInBackground: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Guardado automático al salir'),
+                    subtitle: const Text(
+                      'Usa un estado separado de los cinco slots manuales',
+                    ),
+                    value: _preferences.autoSaveOnExit,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(autoSaveOnExit: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Cargar guardado automático al iniciar'),
+                    subtitle: const Text(
+                      'Continúa desde el último cierre con autoguardado disponible',
+                    ),
+                    value: _preferences.autoLoadOnStart,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(autoLoadOnStart: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Confirmar antes de sobrescribir'),
+                    subtitle: const Text('Protege los estados guardados manualmente'),
+                    value: _preferences.confirmBeforeOverwrite,
+                    onChanged: (value) => _update(
+                      _preferences.copyWith(confirmBeforeOverwrite: value),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.restore),
+                    title: const Text('Restablecer todos los ajustes'),
+                    subtitle: const Text('Controles, pantalla y emulación'),
+                    onTap: _resetAllSettings,
+                  ),
+                ],
+              ),
+            ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+      ),
+    );
+  }
+}

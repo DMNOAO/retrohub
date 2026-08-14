@@ -20,11 +20,14 @@ import '../../link/link_state.dart';
 import '../../link/link_transport_factory.dart';
 
 class LibretroGameController {
+  bool hapticsEnabled = false;
   void Function(int buttonId, bool pressed)? _setButtonState;
   VoidCallback? _resetInput;
   Future<bool> Function(int slot, String title)? _saveState;
   Future<bool> Function(int slot)? _loadState;
   Future<bool> Function()? _saveSram;
+  Future<void> Function()? _restart;
+  void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
   Map<String, LibretroMemoryRegionDiagnostics> Function()?
@@ -59,7 +62,10 @@ class LibretroGameController {
   /// [LibretroGameView]. No introduce lógica de emulación nueva.
   void cycleSpeed() => _cycleSpeed?.call();
 
-  void pressButton(int buttonId) => _setButtonState?.call(buttonId, true);
+  void pressButton(int buttonId) {
+    if (hapticsEnabled) HapticFeedback.selectionClick();
+    _setButtonState?.call(buttonId, true);
+  }
 
   void releaseButton(int buttonId) => _setButtonState?.call(buttonId, false);
 
@@ -76,6 +82,10 @@ class LibretroGameController {
   Future<bool> saveSram() async {
     return await _saveSram?.call() ?? false;
   }
+
+  Future<void> restart() async => _restart?.call();
+
+  void setPaused(bool paused) => _setPaused?.call(paused);
 
   int get currentPlayTimeMinutes {
     return _currentPlayTimeMinutes?.call() ?? 0;
@@ -113,6 +123,8 @@ class LibretroGameController {
     required Future<bool> Function(int slot, String title) saveState,
     required Future<bool> Function(int slot) loadState,
     required Future<bool> Function() saveSram,
+    required Future<void> Function() restart,
+    required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
     required Map<String, LibretroMemoryRegionDiagnostics> Function()
@@ -130,6 +142,8 @@ class LibretroGameController {
     _saveState = saveState;
     _loadState = loadState;
     _saveSram = saveSram;
+    _restart = restart;
+    _setPaused = setPaused;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
     _inspectMemoryRegions = inspectMemoryRegions;
     _inspectMemoryRegionDiagnostics = inspectMemoryRegionDiagnostics;
@@ -147,6 +161,8 @@ class LibretroGameController {
     _saveState = null;
     _loadState = null;
     _saveSram = null;
+    _restart = null;
+    _setPaused = null;
     _currentPlayTimeMinutes = null;
     _inspectMemoryRegions = null;
     _inspectMemoryRegionDiagnostics = null;
@@ -166,6 +182,9 @@ class LibretroGameView extends StatefulWidget {
   final String romPath;
   final int initialPlayTimeMinutes;
   final LibretroGameController? controller;
+  final BoxFit screenFit;
+  final FilterQuality filterQuality;
+  final bool autoLoadState;
 
   const LibretroGameView({
     super.key,
@@ -175,6 +194,9 @@ class LibretroGameView extends StatefulWidget {
     required this.romPath,
     this.initialPlayTimeMinutes = 0,
     this.controller,
+    this.screenFit = BoxFit.contain,
+    this.filterQuality = FilterQuality.none,
+    this.autoLoadState = false,
   });
 
   @override
@@ -217,6 +239,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   bool _isDecodingFrame = false;
   bool _disposed = false;
   bool _persistenceOperationInProgress = false;
+  bool _paused = false;
+  bool _autoLoadAttempted = false;
 
   String? _errorMessage;
   String _statusMessage = 'Preparando emulador...';
@@ -269,6 +293,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       oldWidget.controller?._detach();
       _attachController();
     }
+    if (!oldWidget.autoLoadState && widget.autoLoadState) {
+      unawaited(_tryAutoLoadState());
+    }
   }
 
   void _attachController() {
@@ -278,6 +305,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveState: _saveState,
       loadState: _loadState,
       saveSram: _saveSram,
+      restart: _restartEmulator,
+      setPaused: _setPaused,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
       inspectMemoryRegions: _inspectMemoryRegions,
       inspectMemoryRegionDiagnostics: _inspectMemoryRegionDiagnostics,
@@ -499,6 +528,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       );
 
       _refreshPokemonDiagnostic();
+      unawaited(_tryAutoLoadState());
     } catch (error, stackTrace) {
       debugPrint('Error iniciando Libretro: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -519,6 +549,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void _emulationTick() {
     if (_disposed ||
         !_isRunning ||
+        _paused ||
         _isDecodingFrame ||
         _persistenceOperationInProgress ||
         _bridge == null)
@@ -535,6 +566,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     _audioPlayer?.pump(bridge);
     final LibretroFrame? frame = bridge.readFrame();
     if (frame != null) _decodeFrame(frame);
+  }
+
+  void _setPaused(bool paused) {
+    if (_disposed || _paused == paused) return;
+    _paused = paused;
+    if (paused) _releaseAllButtons();
+    _audioPlayer?.setPaused(paused || _speedMultiplierNotifier.value != 1);
+  }
+
+  Future<void> _tryAutoLoadState() async {
+    if (_autoLoadAttempted || !widget.autoLoadState || !_isRunning) return;
+    _autoLoadAttempted = true;
+    await _loadState(SaveStateService.autoSaveSlot);
   }
 
   void _handleLinkStateChanged(LinkState state) {
@@ -998,8 +1042,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
               aspectRatio: image.width / image.height,
               child: RawImage(
                 image: image,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
+                fit: widget.screenFit,
+                filterQuality: widget.filterQuality,
               ),
             ),
           ),

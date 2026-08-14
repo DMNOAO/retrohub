@@ -10,6 +10,7 @@ import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
+import '../../shared/theme/app_appearance.dart';
 import 'pokedex_grid.dart';
 
 class JournalHistoryPage extends ConsumerStatefulWidget {
@@ -102,7 +103,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
         ? _items
         : _items.where((item) => item.category == _filter).toList();
 
-    return Scaffold(
+    final journalAppearance = AppAppearance.forGameTitle(widget.game.title);
+    final history = Scaffold(
       appBar: AppBar(
         title: const Text('Historia completa'),
         actions: [
@@ -152,6 +154,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
               ],
             ),
     );
+    if (journalAppearance == null) return history;
+    return Theme(data: journalAppearance.theme, child: history);
   }
 }
 

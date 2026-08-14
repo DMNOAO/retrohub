@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'presentation/widget/retrohub_console_logo.dart';
 import 'presentation/widget/retrohub_quick_menu.dart';
 import 'presentation/widget/speed_button.dart';
@@ -23,6 +24,8 @@ import '../pokemon/models/pokemon_game_profile.dart';
 import 'data/save_state_service.dart';
 import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
+import 'settings/emulator_preferences.dart';
+import 'settings/emulator_settings_page.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
@@ -37,7 +40,8 @@ class EmulatorPage extends ConsumerStatefulWidget {
   ConsumerState<EmulatorPage> createState() => _EmulatorPageState();
 }
 
-class _EmulatorPageState extends ConsumerState<EmulatorPage> {
+class _EmulatorPageState extends ConsumerState<EmulatorPage>
+    with WidgetsBindingObserver {
   static const int _buttonB = 0;
   static const int _buttonY = 1;
   static const int _buttonSelect = 2;
@@ -64,6 +68,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   bool _exitDialogOpen = false;
   Timer? _headerRefreshTimer;
   List<int> _partySpeciesIds = const <int>[];
+  EmulatorPreferences _preferences = const EmulatorPreferences();
 
   Game get game => widget.game;
 
@@ -74,6 +79,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     if (_isAndroidSnes) {
       unawaited(
@@ -85,6 +91,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     }
 
     _sessionStartedAt = DateTime.now();
+    unawaited(_loadEmulatorPreferences());
     _database = ref.read(databaseProvider);
 
     unawaited(_database.markGameOpened(game.id, _sessionStartedAt));
@@ -127,6 +134,38 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         playTimeMinutes: game.playTimeSeconds ~/ 60,
       ),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (CoreLoader.isSnesRom(game.romPath) ||
+        !_preferences.pauseInBackground) {
+      return;
+    }
+    _gameController.setPaused(state != AppLifecycleState.resumed);
+  }
+
+  Future<void> _loadEmulatorPreferences() async {
+    final preferences = await EmulatorPreferences.load();
+    if (!mounted) return;
+    setState(() => _preferences = preferences);
+    await _applyDisplayPreferences(preferences);
+  }
+
+  Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
+    if (_isAndroidSnes || CoreLoader.isSnesRom(game.romPath)) return;
+    await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
+    final orientations = switch (preferences.orientation) {
+      EmulatorOrientation.automatic => const <DeviceOrientation>[],
+      EmulatorOrientation.portrait => const <DeviceOrientation>[
+          DeviceOrientation.portraitUp,
+        ],
+      EmulatorOrientation.landscape => const <DeviceOrientation>[
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ],
+    };
+    await SystemChrome.setPreferredOrientations(orientations);
   }
 
   Future<void> _refreshHeaderParty() async {
@@ -256,11 +295,56 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         );
         break;
       case 'settings':
-        _showActionMessage(context, 'Configuración del emulador');
+        await _openEmulatorSettings(context);
         break;
       case 'exit':
         await _requestExit(context);
         break;
+    }
+  }
+
+  Future<void> _openEmulatorSettings(BuildContext context) async {
+    final preferences = await Navigator.of(context).push<EmulatorPreferences>(
+      MaterialPageRoute(
+        builder: (_) => EmulatorSettingsPage(
+          gameTitle: game.title,
+          supportsGameBoyOptions: !CoreLoader.isSnesRom(game.romPath),
+          initialPreferences: _preferences,
+          saveStateService: SaveStateService(
+            gameId: game.id,
+            romPath: game.romPath,
+          ),
+          onRestart: _gameController.restart,
+          onSaveState: (slot, title) async {
+            final saved = await _gameController.saveState(
+              slot: slot,
+              title: title,
+            );
+            if (saved) {
+              await _journalEventService.logSaveState(
+                slot: slot,
+                title: title,
+                playTimeMinutes: _currentPlayTimeMinutes,
+              );
+            }
+            return saved;
+          },
+          onLoadState: (slot) async {
+            final loaded = await _gameController.loadState(slot);
+            if (loaded) {
+              await _journalEventService.logLoadState(
+                slot: slot,
+                playTimeMinutes: _currentPlayTimeMinutes,
+              );
+            }
+            return loaded;
+          },
+        ),
+      ),
+    );
+    if (preferences != null && mounted) {
+      setState(() => _preferences = preferences);
+      await _applyDisplayPreferences(preferences);
     }
   }
 
@@ -287,6 +371,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     if (_isClosing) return;
     setState(() => _isClosing = true);
 
+    if (!CoreLoader.isSnesRom(game.romPath) &&
+        _preferences.autoSaveOnExit) {
+      await _gameController.saveState(
+        slot: SaveStateService.autoSaveSlot,
+        title: 'Guardado automático',
+      );
+    }
     await _gameController.saveSram();
     final tracker = _pokemonJournalTracker;
     if (tracker != null) await tracker.stop();
@@ -340,6 +431,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
             return loaded;
           },
+          confirmBeforeOverwrite: _preferences.confirmBeforeOverwrite,
         ),
       ),
     );
@@ -353,6 +445,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _headerRefreshTimer?.cancel();
     _gameController.resetInput();
     final tracker = _pokemonJournalTracker;
@@ -364,6 +457,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           DeviceOrientation.portraitUp,
         ]),
       );
+    } else {
+      unawaited(WakelockPlus.disable());
+      unawaited(SystemChrome.setPreferredOrientations(const []));
     }
     super.dispose();
   }
@@ -377,7 +473,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
+    final bool pageLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
+    _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
 
     return PopScope(
       canPop: _isClosing,
@@ -432,6 +531,18 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 initialPlayTimeMinutes:
                                     game.playTimeSeconds ~/ 60,
                                 controller: _gameController,
+                                screenFit: switch (_preferences.screenScale) {
+                                  EmulatorScreenScale.aspectRatio =>
+                                    BoxFit.contain,
+                                  EmulatorScreenScale.fitWidth => BoxFit.fitWidth,
+                                  EmulatorScreenScale.stretch => BoxFit.fill,
+                                },
+                                filterQuality: _preferences.screenFilter ==
+                                        EmulatorScreenFilter.pixel
+                                    ? FilterQuality.none
+                                    : FilterQuality.medium,
+                                autoLoadState:
+                                    _preferences.autoLoadOnStart && !isSnes,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -496,45 +607,127 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       padding: EdgeInsets.all(padding),
                       child: Column(
                         children: [
-                          Expanded(
-                            child: Center(
-                              child: AspectRatio(
-                                aspectRatio: isSnes
-                                    ? 4 / 3
-                                    : (isGba ? 3 / 2 : 10 / 9),
-                                child: gameView,
+                          if (!isSnes) ...[
+                            SizedBox(
+                              height: 54,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      width: 92,
+                                      height: 32,
+                                      child: SpeedButton(
+                                        speedMultiplier:
+                                            _gameController.speedMultiplier,
+                                        onTap: _gameController.cycleSpeed,
+                                      ),
+                                    ),
+                                  ),
+                                  if (CoreLoader.isGameBoyRom(game.romPath))
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: _LinkStatusChip(
+                                        linkManager:
+                                            _gameController.linkManager,
+                                      ),
+                                    ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: RetroHubQuickMenu(
+                                      onAction: (String value) =>
+                                          _handleMenuAction(context, value),
+                                    ),
+                                  ),
+                                ],
                               ),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: AspectRatio(
+                              aspectRatio: isSnes
+                                  ? 4 / 3
+                                  : (isGba ? 3 / 2 : 10 / 9),
+                              child: gameView,
                             ),
                           ),
                           const SizedBox(height: 8),
 
-                          RetroHubConsoleLogo(
-                            console: isSnes
-                                ? RetroHubConsoleType.superNintendo
-                                : isGba
-                                ? RetroHubConsoleType.gameBoyAdvance
-                                : isGbc
-                                ? RetroHubConsoleType.gameBoyColor
-                                : RetroHubConsoleType.gameBoy,
+                          if (!isSnes &&
+                              isGba &&
+                              _preferences.layout ==
+                                  GameBoyControlLayout.classic)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _GameBoyShoulderButton(
+                                  label: 'L',
+                                  buttonId: _buttonL,
+                                  controller: _gameController,
+                                ),
+                                if (_preferences.showConsoleIdentity)
+                                  const RetroHubConsoleLogo(
+                                    console: RetroHubConsoleType.gameBoyAdvance,
+                                  )
+                                else
+                                  const Spacer(),
+                                _GameBoyShoulderButton(
+                                  label: 'R',
+                                  buttonId: _buttonR,
+                                  controller: _gameController,
+                                ),
+                              ],
+                            )
+                          else if (isSnes || _preferences.showConsoleIdentity)
+                            RetroHubConsoleLogo(
+                              console: isSnes
+                                  ? RetroHubConsoleType.superNintendo
+                                  : isGba
+                                  ? RetroHubConsoleType.gameBoyAdvance
+                                  : isGbc
+                                  ? RetroHubConsoleType.gameBoyColor
+                                  : RetroHubConsoleType.gameBoy,
+                            ),
+                          SizedBox(
+                            height: !isSnes &&
+                                    !isGba &&
+                                    !_preferences.showConsoleIdentity
+                                ? 2
+                                : 10,
                           ),
-                          const SizedBox(height: 10),
 
                           _GameBoyControls(
                             compact: false,
+                            classicLayout: !isSnes &&
+                                _preferences.layout ==
+                                    GameBoyControlLayout.classic,
+                            sizeScale: isSnes ? 1 : _preferences.sizeScale,
+                            opacity: isSnes ? 1 : _preferences.controlOpacity,
+                            swapLabels: !isSnes && _preferences.swapAB,
                             controller: _gameController,
                             buttonUp: _buttonUp,
                             buttonDown: _buttonDown,
                             buttonLeft: _buttonLeft,
                             buttonRight: _buttonRight,
-                            buttonA: _buttonA,
-                            buttonB: _buttonB,
+                            buttonA: !isSnes && _preferences.swapAB
+                                ? _buttonB
+                                : _buttonA,
+                            buttonB: !isSnes && _preferences.swapAB
+                                ? _buttonA
+                                : _buttonB,
                             buttonX: _buttonX,
                             buttonY: _buttonY,
                             buttonSelect: _buttonSelect,
                             buttonStart: _buttonStart,
                             buttonL: _buttonL,
                             buttonR: _buttonR,
-                            showShoulder: isGba || isSnes,
+                            showShoulder: isSnes ||
+                                (isGba &&
+                                    _preferences.layout !=
+                                        GameBoyControlLayout.classic),
                             isSnes: isSnes,
                           ),
                         ],
@@ -544,26 +737,33 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 ),
               ),
             ),
-            Positioned(
-              top: 8,
-              right: 14,
-              child: RetroHubQuickMenu(
-                onAction: (String value) => _handleMenuAction(context, value),
+            if (isSnes || pageLandscape)
+              Positioned(
+                top: 8,
+                right: 14,
+                child: RetroHubQuickMenu(
+                  onAction: (String value) =>
+                      _handleMenuAction(context, value),
+                ),
               ),
-            ),
-            Positioned(
-              top: 62,
-              right: 14,
-              child: SpeedButton(
-                speedMultiplier: _gameController.speedMultiplier,
-                onTap: _gameController.cycleSpeed,
+            if (isSnes || pageLandscape)
+              Positioned(
+                top: 62,
+                right: 14,
+                child: SpeedButton(
+                  speedMultiplier: _gameController.speedMultiplier,
+                  onTap: _gameController.cycleSpeed,
+                ),
               ),
-            ),
-            if (CoreLoader.isGameBoyRom(game.romPath)) Positioned(
-              top: 100,
-              right: 14,
-              child: _LinkStatusChip(linkManager: _gameController.linkManager),
-            ),
+            if ((isSnes || pageLandscape) &&
+                CoreLoader.isGameBoyRom(game.romPath))
+              Positioned(
+                top: 100,
+                right: 14,
+                child: _LinkStatusChip(
+                  linkManager: _gameController.linkManager,
+                ),
+              ),
           ],
         ),
       ),
@@ -1170,6 +1370,10 @@ class _LandscapeRightControls extends StatelessWidget {
 
 class _GameBoyControls extends StatelessWidget {
   final bool compact;
+  final bool classicLayout;
+  final double sizeScale;
+  final double opacity;
+  final bool swapLabels;
   final LibretroGameController controller;
   final int buttonUp;
   final int buttonDown;
@@ -1188,6 +1392,10 @@ class _GameBoyControls extends StatelessWidget {
 
   const _GameBoyControls({
     required this.compact,
+    this.classicLayout = false,
+    this.sizeScale = 1,
+    this.opacity = 1,
+    this.swapLabels = false,
     required this.controller,
     required this.buttonUp,
     required this.buttonDown,
@@ -1207,10 +1415,10 @@ class _GameBoyControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double dPadKeySize = compact ? 30 : 42;
-    final double actionSize = compact ? 54 : 66;
-    final double systemWidth = compact ? 68 : 82;
-    final double systemHeight = compact ? 24 : 28;
+    final double dPadKeySize = (compact ? 30 : 42) * sizeScale;
+    final double actionSize = (compact ? 54 : 66) * sizeScale;
+    final double systemWidth = (compact ? 68 : 82) * sizeScale;
+    final double systemHeight = (compact ? 24 : 28) * sizeScale;
 
     final Widget dPad = _GameBoyDPad(
       keySize: dPadKeySize,
@@ -1237,14 +1445,14 @@ class _GameBoyControls extends StatelessWidget {
               children: [
                 _GameBoyActionButton(
                   size: actionSize,
-                  label: 'B',
+                  label: swapLabels ? 'A' : 'B',
                   buttonId: buttonB,
                   controller: controller,
                 ),
                 SizedBox(width: compact ? 12 : 16),
                 _GameBoyActionButton(
                   size: actionSize,
-                  label: 'A',
+                  label: swapLabels ? 'B' : 'A',
                   buttonId: buttonA,
                   controller: controller,
                 ),
@@ -1293,13 +1501,12 @@ class _GameBoyControls extends StatelessWidget {
       ],
     );
 
-    return SizedBox(
-      height: showShoulder ? 224 : 184,
+    final controls = SizedBox(
+      height: (showShoulder ? 224 : 184) * sizeScale,
       child: Column(
         children: [
           if (showShoulder) ...[shoulderButtons, const SizedBox(height: 10)],
-          systemButtons,
-          const SizedBox(height: 10),
+          if (!classicLayout) ...[systemButtons, const SizedBox(height: 10)],
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1307,9 +1514,14 @@ class _GameBoyControls extends StatelessWidget {
               children: [dPad, actions],
             ),
           ),
+          if (classicLayout) ...[
+            const SizedBox(height: 10),
+            systemButtons,
+          ],
         ],
       ),
     );
+    return Opacity(opacity: opacity, child: controls);
   }
 }
 

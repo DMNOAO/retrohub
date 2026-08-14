@@ -110,7 +110,14 @@ class JournalDashboardPage extends ConsumerWidget {
                               Text(item.game.title, maxLines: 1, overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
-                              Text(item.game.console, style: const TextStyle(color: Colors.white70)),
+                              Text(
+                                item.game.console,
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
                               const SizedBox(height: 10),
                               Text(snapshot?.currentLocation ?? 'Bitácora disponible',
                                   maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -119,7 +126,11 @@ class JournalDashboardPage extends ConsumerWidget {
                                 snapshot == null
                                     ? '${item.eventCount} eventos • ${item.manualEntryCount} entradas'
                                     : '${snapshot.badgesCount} medallas • ${snapshot.pokedexCaught} capturados • ${item.eventCount} eventos',
-                                style: const TextStyle(color: Colors.white70),
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
                               ),
                             ],
                           ),

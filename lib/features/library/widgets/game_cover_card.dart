@@ -23,6 +23,8 @@ class _GameCoverCardState extends State<GameCoverCard> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -39,20 +41,20 @@ class _GameCoverCardState extends State<GameCoverCard> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: _hovered
-                    ? const Color(0xFF8B5CF6)
-                    : Colors.white.withOpacity(0.08),
+                    ? colors.primary
+                    : colors.onSurface.withValues(alpha: 0.35),
                 width: _hovered ? 2 : 1,
               ),
               boxShadow: _hovered
                   ? [
                       BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.35),
+                        color: colors.primary.withOpacity(0.35),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
                     ]
                   : [],
-              color: const Color(0xFF15151F),
+              color: colors.surface,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,10 +67,10 @@ class _GameCoverCardState extends State<GameCoverCard> {
                     child: widget.coverPath == null
                         ? Container(
                             color: Colors.black26,
-                            child: const Icon(
+                            child: Icon(
                               Icons.videogame_asset,
                               size: 48,
-                              color: Colors.white38,
+                              color: colors.onSurface.withValues(alpha: 0.38),
                             ),
                           )
                         : Image.asset(
@@ -86,8 +88,8 @@ class _GameCoverCardState extends State<GameCoverCard> {
                         widget.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: colors.onSurface,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -95,7 +97,7 @@ class _GameCoverCardState extends State<GameCoverCard> {
                       Text(
                         widget.console,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
+                          color: colors.onSurface.withValues(alpha: 0.55),
                           fontSize: 12,
                         ),
                       ),

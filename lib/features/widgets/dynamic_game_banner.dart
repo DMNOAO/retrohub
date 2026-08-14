@@ -21,8 +21,7 @@ class DynamicGameBanner extends StatefulWidget {
 }
 
 class _DynamicGameBannerState extends State<DynamicGameBanner> {
-  static const Color _fallbackColor = Color(0xFF311B92);
-  Color _dominant = _fallbackColor;
+  Color? _dominant;
 
   @override
   void initState() { super.initState(); _loadDominantColor(); }
@@ -30,7 +29,7 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
   @override
   void didUpdateWidget(covariant DynamicGameBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.coverPath != widget.coverPath) { _dominant = _fallbackColor; _loadDominantColor(); }
+    if (oldWidget.coverPath != widget.coverPath) { _dominant = null; _loadDominantColor(); }
   }
 
   Future<Uint8List?> _readCoverBytes(String path) async {
@@ -82,17 +81,36 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
   @override
   Widget build(BuildContext context) {
     final compact = widget.height <= 150;
+    final scheme = Theme.of(context).colorScheme;
+    final dominant = _dominant ?? scheme.primary;
+    final start = Color.lerp(dominant, scheme.primary, .12)!;
+    final middle = Color.lerp(dominant, scheme.surface, .55)!;
     return Container(
       constraints: BoxConstraints(minHeight: widget.height),
       width: double.infinity,
       padding: EdgeInsets.all(compact ? 12 : 18),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), gradient: LinearGradient(colors: [_dominant, Color.lerp(_dominant, Colors.black, .72)!, Colors.black])),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [start, middle, scheme.surface],
+          stops: const [0, .55, 1],
+        ),
+        border: Border.all(
+          color: scheme.onSurface.withValues(alpha: .55),
+        ),
+      ),
       child: Row(children: [
         Container(
           width: compact ? 82 : 100,
           height: compact ? 116 : 140,
           padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(color: Colors.black.withValues(alpha: .30), borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: .72),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: scheme.onSurface.withValues(alpha: .38),
+            ),
+          ),
           child: _buildCover(),
         ),
         SizedBox(width: compact ? 14 : 24),
@@ -102,7 +120,7 @@ class _DynamicGameBannerState extends State<DynamicGameBanner> {
           children: [
             Text('Continúa tu aventura', style: TextStyle(color: Colors.white70, fontSize: compact ? 12 : 14)),
             SizedBox(height: compact ? 2 : 6),
-            Text(widget.game.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 20 : 26, fontWeight: FontWeight.bold)),
+            Text(widget.game.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: compact ? 20 : 26, fontWeight: FontWeight.bold)),
             SizedBox(height: compact ? 2 : 6),
             Text('${widget.game.console} • ${PlayTimeFormatter.fromSeconds(widget.game.playTimeSeconds)} jugadas', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white70, fontSize: compact ? 12 : 14)),
             SizedBox(height: compact ? 6 : 10),

@@ -11,6 +11,7 @@ import '../../core/assets/sprite_resolver.dart';
 import '../../core/utils/play_time_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
+import '../../shared/theme/app_appearance.dart';
 import 'journal_history_page.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
@@ -82,7 +83,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   @override
   Widget build(BuildContext context) {
     final game = _game ?? widget.game;
-    return Scaffold(
+    final journalAppearance = AppAppearance.forGameTitle(game.title);
+    final journal = Scaffold(
       appBar: AppBar(
         title: const Text('Bitácora'),
         actions: [
@@ -108,6 +110,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                   showKantoReveal: _showKantoReveal,
                 ),
     );
+    if (journalAppearance == null) return journal;
+    return Theme(data: journalAppearance.theme, child: journal);
   }
 }
 

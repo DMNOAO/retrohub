@@ -16,6 +16,7 @@ class SaveStatesPage extends StatefulWidget {
   final SaveStateService service;
   final Future<bool> Function(int slot, String title) onSave;
   final Future<bool> Function(int slot) onLoad;
+  final bool confirmBeforeOverwrite;
 
   const SaveStatesPage({
     super.key,
@@ -24,6 +25,7 @@ class SaveStatesPage extends StatefulWidget {
     required this.service,
     required this.onSave,
     required this.onLoad,
+    this.confirmBeforeOverwrite = true,
   });
 
   @override
@@ -59,7 +61,7 @@ class _SaveStatesPageState extends State<SaveStatesPage> {
 
       if (title == null || !mounted) return;
 
-      if (slot.exists) {
+      if (slot.exists && widget.confirmBeforeOverwrite) {
         final bool overwrite = await _confirmOverwrite(slot);
         if (!overwrite || !mounted) return;
       }

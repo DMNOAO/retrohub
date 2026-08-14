@@ -8,27 +8,54 @@ class AppTheme {
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFB8B2C8);
 
-  static ThemeData darkTheme() {
+  static ThemeData fromPalette({
+    required Color background,
+    required Color surface,
+    required Color primary,
+    required Color secondary,
+  }) {
+    final brightness = ThemeData.estimateBrightnessForColor(surface);
+    final onSurface = _foregroundFor(surface);
+    final onBackground = _foregroundFor(background);
+    final border = onSurface.withValues(alpha: 0.55);
+    final scheme = ColorScheme(
+      brightness: brightness,
+      primary: primary,
+      onPrimary: _foregroundFor(primary),
+      secondary: secondary,
+      onSecondary: _foregroundFor(secondary),
+      surface: surface,
+      onSurface: onSurface,
+      error: const Color(0xFFFF6B7A),
+      onError: Colors.white,
+    );
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.dark(
-        primary: primary,
-        secondary: secondary,
-        surface: surface,
-      ),
-      appBarTheme: const AppBarTheme(
+      colorScheme: scheme,
+      appBarTheme: AppBarTheme(
         backgroundColor: background,
-        foregroundColor: textPrimary,
+        foregroundColor: onBackground,
         elevation: 0,
         centerTitle: false,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
         indicatorColor: primary.withValues(alpha: 0.25),
-        labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : onSurface.withValues(alpha: 0.72),
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -39,8 +66,33 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: border),
         ),
+      ),
+      dividerColor: primary.withValues(alpha: 0.18),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: primary),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: _foregroundFor(primary),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
+        foregroundColor: _foregroundFor(primary),
       ),
     );
   }
+
+  static ThemeData darkTheme() => fromPalette(
+        background: background,
+        surface: surface,
+        primary: primary,
+        secondary: secondary,
+      );
+
+  static Color _foregroundFor(Color color) =>
+      ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+          ? Colors.white
+          : const Color(0xFF111018);
 }

@@ -6,6 +6,7 @@ import '../../../core/emulation/core_loader.dart';
 import 'models/save_slot.dart';
 
 class SaveStateService {
+  static const int autoSaveSlot = 0;
   static const int slotCount = 5;
 
   final String gameId;
@@ -224,8 +225,8 @@ class SaveStateService {
   }
 
   void _validateSlot(int slot) {
-    if (slot < 1 || slot > slotCount) {
-      throw RangeError.range(slot, 1, slotCount, 'slot');
+    if (slot < autoSaveSlot || slot > slotCount) {
+      throw RangeError.range(slot, autoSaveSlot, slotCount, 'slot');
     }
   }
 }

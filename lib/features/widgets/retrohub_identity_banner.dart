@@ -38,6 +38,9 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final start = Color.lerp(scheme.surface, scheme.primary, .48)!;
+    final middle = Color.lerp(scheme.surface, scheme.secondary, .20)!;
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(minHeight: 145),
@@ -45,7 +48,11 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         gradient: LinearGradient(
-          colors: [Colors.deepPurple.shade900, Colors.black],
+          colors: [start, middle, scheme.surface],
+          stops: const [0, .52, 1],
+        ),
+        border: Border.all(
+          color: scheme.onSurface.withValues(alpha: .55),
         ),
       ),
       child: Column(
@@ -69,10 +76,13 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Preserva la historia de cada partida',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.white70),
+            style: TextStyle(
+              fontSize: 16,
+              color: scheme.onSurface.withValues(alpha: .75),
+            ),
           ),
         ],
       ),
