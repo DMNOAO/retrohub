@@ -6,6 +6,7 @@ import 'emulator_preferences.dart';
 
 class EmulatorSettingsPage extends StatefulWidget {
   final String gameTitle;
+  final bool supportsGameBoyOptions;
   final EmulatorPreferences initialPreferences;
   final Future<void> Function() onRestart;
   final Future<bool> Function(int slot, String title) onSaveState;
@@ -15,6 +16,7 @@ class EmulatorSettingsPage extends StatefulWidget {
   const EmulatorSettingsPage({
     super.key,
     required this.gameTitle,
+    required this.supportsGameBoyOptions,
     required this.initialPreferences,
     required this.onRestart,
     required this.onSaveState,
@@ -110,6 +112,7 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 ],
               ),
             ),
+            if (widget.supportsGameBoyOptions) ...[
             const SizedBox(height: 22),
             const _SectionTitle('Controles GB · GBC · GBA'),
             Card(
@@ -194,6 +197,109 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 22),
+            const _SectionTitle('Pantalla GB · GBC · GBA'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Escalado', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<EmulatorScreenScale>(
+                      initialValue: _preferences.screenScale,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.aspectRatio,
+                          child: Text('Mantener proporción'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.fitWidth,
+                          child: Text('Ajustar al ancho'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorScreenScale.stretch,
+                          child: Text('Ocupar espacio disponible'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          _update(_preferences.copyWith(screenScale: value));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Filtro de imagen', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    SegmentedButton<EmulatorScreenFilter>(
+                      segments: const [
+                        ButtonSegment(
+                          value: EmulatorScreenFilter.pixel,
+                          label: Text('Píxel nítido'),
+                        ),
+                        ButtonSegment(
+                          value: EmulatorScreenFilter.smooth,
+                          label: Text('Suavizado'),
+                        ),
+                      ],
+                      selected: {_preferences.screenFilter},
+                      onSelectionChanged: (selection) => _update(
+                        _preferences.copyWith(screenFilter: selection.first),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mostrar identidad de consola'),
+                      subtitle: const Text('Logotipo RetroHub bajo la pantalla'),
+                      value: _preferences.showConsoleIdentity,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(showConsoleIdentity: value),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Orientación', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<EmulatorOrientation>(
+                      initialValue: _preferences.orientation,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.automatic,
+                          child: Text('Automática'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.portrait,
+                          child: Text('Vertical'),
+                        ),
+                        DropdownMenuItem(
+                          value: EmulatorOrientation.landscape,
+                          child: Text('Horizontal'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          _update(_preferences.copyWith(orientation: value));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mantener pantalla encendida'),
+                      subtitle: const Text('Evita que el dispositivo se bloquee al jugar'),
+                      value: _preferences.keepScreenAwake,
+                      onChanged: (value) => _update(
+                        _preferences.copyWith(keepScreenAwake: value),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            ],
           ],
         ),
       ),

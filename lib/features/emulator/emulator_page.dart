@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'presentation/widget/retrohub_console_logo.dart';
 import 'presentation/widget/retrohub_quick_menu.dart';
 import 'presentation/widget/speed_button.dart';
@@ -135,7 +136,25 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
   Future<void> _loadEmulatorPreferences() async {
     final preferences = await EmulatorPreferences.load();
-    if (mounted) setState(() => _preferences = preferences);
+    if (!mounted) return;
+    setState(() => _preferences = preferences);
+    await _applyDisplayPreferences(preferences);
+  }
+
+  Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
+    if (_isAndroidSnes || CoreLoader.isSnesRom(game.romPath)) return;
+    await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
+    final orientations = switch (preferences.orientation) {
+      EmulatorOrientation.automatic => const <DeviceOrientation>[],
+      EmulatorOrientation.portrait => const <DeviceOrientation>[
+          DeviceOrientation.portraitUp,
+        ],
+      EmulatorOrientation.landscape => const <DeviceOrientation>[
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ],
+    };
+    await SystemChrome.setPreferredOrientations(orientations);
   }
 
   Future<void> _refreshHeaderParty() async {
@@ -278,6 +297,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
       MaterialPageRoute(
         builder: (_) => EmulatorSettingsPage(
           gameTitle: game.title,
+          supportsGameBoyOptions: !CoreLoader.isSnesRom(game.romPath),
           initialPreferences: _preferences,
           saveStateService: SaveStateService(
             gameId: game.id,
@@ -313,6 +333,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     );
     if (preferences != null && mounted) {
       setState(() => _preferences = preferences);
+      await _applyDisplayPreferences(preferences);
     }
   }
 
@@ -416,6 +437,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
           DeviceOrientation.portraitUp,
         ]),
       );
+    } else {
+      unawaited(WakelockPlus.disable());
+      unawaited(SystemChrome.setPreferredOrientations(const []));
     }
     super.dispose();
   }
@@ -485,6 +509,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 initialPlayTimeMinutes:
                                     game.playTimeSeconds ~/ 60,
                                 controller: _gameController,
+                                screenFit: switch (_preferences.screenScale) {
+                                  EmulatorScreenScale.aspectRatio =>
+                                    BoxFit.contain,
+                                  EmulatorScreenScale.fitWidth => BoxFit.fitWidth,
+                                  EmulatorScreenScale.stretch => BoxFit.fill,
+                                },
+                                filterQuality: _preferences.screenFilter ==
+                                        EmulatorScreenFilter.pixel
+                                    ? FilterQuality.none
+                                    : FilterQuality.medium,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -572,9 +606,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                   buttonId: _buttonL,
                                   controller: _gameController,
                                 ),
-                                const RetroHubConsoleLogo(
-                                  console: RetroHubConsoleType.gameBoyAdvance,
-                                ),
+                                if (_preferences.showConsoleIdentity)
+                                  const RetroHubConsoleLogo(
+                                    console: RetroHubConsoleType.gameBoyAdvance,
+                                  )
+                                else
+                                  const Spacer(),
                                 _GameBoyShoulderButton(
                                   label: 'R',
                                   buttonId: _buttonR,
@@ -582,7 +619,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                 ),
                               ],
                             )
-                          else
+                          else if (isSnes || _preferences.showConsoleIdentity)
                             RetroHubConsoleLogo(
                               console: isSnes
                                   ? RetroHubConsoleType.superNintendo
@@ -592,7 +629,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                   ? RetroHubConsoleType.gameBoyColor
                                   : RetroHubConsoleType.gameBoy,
                             ),
-                          const SizedBox(height: 10),
+                          SizedBox(
+                            height: !isSnes &&
+                                    !isGba &&
+                                    !_preferences.showConsoleIdentity
+                                ? 2
+                                : 10,
+                          ),
 
                           _GameBoyControls(
                             compact: false,

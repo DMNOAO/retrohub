@@ -176,6 +176,8 @@ class LibretroGameView extends StatefulWidget {
   final String romPath;
   final int initialPlayTimeMinutes;
   final LibretroGameController? controller;
+  final BoxFit screenFit;
+  final FilterQuality filterQuality;
 
   const LibretroGameView({
     super.key,
@@ -185,6 +187,8 @@ class LibretroGameView extends StatefulWidget {
     required this.romPath,
     this.initialPlayTimeMinutes = 0,
     this.controller,
+    this.screenFit = BoxFit.contain,
+    this.filterQuality = FilterQuality.none,
   });
 
   @override
@@ -1009,8 +1013,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
               aspectRatio: image.width / image.height,
               child: RawImage(
                 image: image,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
+                fit: widget.screenFit,
+                filterQuality: widget.filterQuality,
               ),
             ),
           ),
