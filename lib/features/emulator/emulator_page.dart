@@ -453,6 +453,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
+    final bool pageLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
     _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
 
@@ -583,6 +585,40 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       padding: EdgeInsets.all(padding),
                       child: Column(
                         children: [
+                          if (!isSnes) ...[
+                            SizedBox(
+                              height: 54,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SpeedButton(
+                                      speedMultiplier:
+                                          _gameController.speedMultiplier,
+                                      onTap: _gameController.cycleSpeed,
+                                    ),
+                                  ),
+                                  if (CoreLoader.isGameBoyRom(game.romPath))
+                                    Align(
+                                      alignment: Alignment.center,
+                                      child: _LinkStatusChip(
+                                        linkManager:
+                                            _gameController.linkManager,
+                                      ),
+                                    ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: RetroHubQuickMenu(
+                                      onAction: (String value) =>
+                                          _handleMenuAction(context, value),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
                           Flexible(
                             fit: FlexFit.loose,
                             child: AspectRatio(
@@ -675,26 +711,33 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                 ),
               ),
             ),
-            Positioned(
-              top: 8,
-              right: 14,
-              child: RetroHubQuickMenu(
-                onAction: (String value) => _handleMenuAction(context, value),
+            if (isSnes || pageLandscape)
+              Positioned(
+                top: 8,
+                right: 14,
+                child: RetroHubQuickMenu(
+                  onAction: (String value) =>
+                      _handleMenuAction(context, value),
+                ),
               ),
-            ),
-            Positioned(
-              top: 62,
-              right: 14,
-              child: SpeedButton(
-                speedMultiplier: _gameController.speedMultiplier,
-                onTap: _gameController.cycleSpeed,
+            if (isSnes || pageLandscape)
+              Positioned(
+                top: 62,
+                right: 14,
+                child: SpeedButton(
+                  speedMultiplier: _gameController.speedMultiplier,
+                  onTap: _gameController.cycleSpeed,
+                ),
               ),
-            ),
-            if (CoreLoader.isGameBoyRom(game.romPath)) Positioned(
-              top: 100,
-              right: 14,
-              child: _LinkStatusChip(linkManager: _gameController.linkManager),
-            ),
+            if ((isSnes || pageLandscape) &&
+                CoreLoader.isGameBoyRom(game.romPath))
+              Positioned(
+                top: 100,
+                right: 14,
+                child: _LinkStatusChip(
+                  linkManager: _gameController.linkManager,
+                ),
+              ),
           ],
         ),
       ),
