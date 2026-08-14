@@ -20,11 +20,13 @@ import '../../link/link_state.dart';
 import '../../link/link_transport_factory.dart';
 
 class LibretroGameController {
+  bool hapticsEnabled = false;
   void Function(int buttonId, bool pressed)? _setButtonState;
   VoidCallback? _resetInput;
   Future<bool> Function(int slot, String title)? _saveState;
   Future<bool> Function(int slot)? _loadState;
   Future<bool> Function()? _saveSram;
+  Future<void> Function()? _restart;
   int Function()? _currentPlayTimeMinutes;
   Map<String, int> Function()? _inspectMemoryRegions;
   Map<String, LibretroMemoryRegionDiagnostics> Function()?
@@ -59,7 +61,10 @@ class LibretroGameController {
   /// [LibretroGameView]. No introduce lógica de emulación nueva.
   void cycleSpeed() => _cycleSpeed?.call();
 
-  void pressButton(int buttonId) => _setButtonState?.call(buttonId, true);
+  void pressButton(int buttonId) {
+    if (hapticsEnabled) HapticFeedback.selectionClick();
+    _setButtonState?.call(buttonId, true);
+  }
 
   void releaseButton(int buttonId) => _setButtonState?.call(buttonId, false);
 
@@ -76,6 +81,8 @@ class LibretroGameController {
   Future<bool> saveSram() async {
     return await _saveSram?.call() ?? false;
   }
+
+  Future<void> restart() async => _restart?.call();
 
   int get currentPlayTimeMinutes {
     return _currentPlayTimeMinutes?.call() ?? 0;
@@ -113,6 +120,7 @@ class LibretroGameController {
     required Future<bool> Function(int slot, String title) saveState,
     required Future<bool> Function(int slot) loadState,
     required Future<bool> Function() saveSram,
+    required Future<void> Function() restart,
     required int Function() currentPlayTimeMinutes,
     required Map<String, int> Function() inspectMemoryRegions,
     required Map<String, LibretroMemoryRegionDiagnostics> Function()
@@ -130,6 +138,7 @@ class LibretroGameController {
     _saveState = saveState;
     _loadState = loadState;
     _saveSram = saveSram;
+    _restart = restart;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
     _inspectMemoryRegions = inspectMemoryRegions;
     _inspectMemoryRegionDiagnostics = inspectMemoryRegionDiagnostics;
@@ -147,6 +156,7 @@ class LibretroGameController {
     _saveState = null;
     _loadState = null;
     _saveSram = null;
+    _restart = null;
     _currentPlayTimeMinutes = null;
     _inspectMemoryRegions = null;
     _inspectMemoryRegionDiagnostics = null;
@@ -278,6 +288,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveState: _saveState,
       loadState: _loadState,
       saveSram: _saveSram,
+      restart: _restartEmulator,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
       inspectMemoryRegions: _inspectMemoryRegions,
       inspectMemoryRegionDiagnostics: _inspectMemoryRegionDiagnostics,

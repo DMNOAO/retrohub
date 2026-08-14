@@ -23,6 +23,8 @@ import '../pokemon/models/pokemon_game_profile.dart';
 import 'data/save_state_service.dart';
 import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
+import 'settings/emulator_preferences.dart';
+import 'settings/emulator_settings_page.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
@@ -64,6 +66,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
   bool _exitDialogOpen = false;
   Timer? _headerRefreshTimer;
   List<int> _partySpeciesIds = const <int>[];
+  EmulatorPreferences _preferences = const EmulatorPreferences();
 
   Game get game => widget.game;
 
@@ -85,6 +88,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
     }
 
     _sessionStartedAt = DateTime.now();
+    unawaited(_loadEmulatorPreferences());
     _database = ref.read(databaseProvider);
 
     unawaited(_database.markGameOpened(game.id, _sessionStartedAt));
@@ -127,6 +131,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         playTimeMinutes: game.playTimeSeconds ~/ 60,
       ),
     );
+  }
+
+  Future<void> _loadEmulatorPreferences() async {
+    final preferences = await EmulatorPreferences.load();
+    if (mounted) setState(() => _preferences = preferences);
   }
 
   Future<void> _refreshHeaderParty() async {
@@ -256,11 +265,54 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         );
         break;
       case 'settings':
-        _showActionMessage(context, 'Configuración del emulador');
+        await _openEmulatorSettings(context);
         break;
       case 'exit':
         await _requestExit(context);
         break;
+    }
+  }
+
+  Future<void> _openEmulatorSettings(BuildContext context) async {
+    final preferences = await Navigator.of(context).push<EmulatorPreferences>(
+      MaterialPageRoute(
+        builder: (_) => EmulatorSettingsPage(
+          gameTitle: game.title,
+          initialPreferences: _preferences,
+          saveStateService: SaveStateService(
+            gameId: game.id,
+            romPath: game.romPath,
+          ),
+          onRestart: _gameController.restart,
+          onSaveState: (slot, title) async {
+            final saved = await _gameController.saveState(
+              slot: slot,
+              title: title,
+            );
+            if (saved) {
+              await _journalEventService.logSaveState(
+                slot: slot,
+                title: title,
+                playTimeMinutes: _currentPlayTimeMinutes,
+              );
+            }
+            return saved;
+          },
+          onLoadState: (slot) async {
+            final loaded = await _gameController.loadState(slot);
+            if (loaded) {
+              await _journalEventService.logLoadState(
+                slot: slot,
+                playTimeMinutes: _currentPlayTimeMinutes,
+              );
+            }
+            return loaded;
+          },
+        ),
+      ),
+    );
+    if (preferences != null && mounted) {
+      setState(() => _preferences = preferences);
     }
   }
 
@@ -378,6 +430,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
+    _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
 
     return PopScope(
       canPop: _isClosing,
@@ -521,13 +574,22 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
 
                           _GameBoyControls(
                             compact: false,
+                            classicLayout: !isSnes &&
+                                _preferences.layout ==
+                                    GameBoyControlLayout.classic,
+                            sizeScale: isSnes ? 1 : _preferences.sizeScale,
+                            opacity: isSnes ? 1 : _preferences.controlOpacity,
                             controller: _gameController,
                             buttonUp: _buttonUp,
                             buttonDown: _buttonDown,
                             buttonLeft: _buttonLeft,
                             buttonRight: _buttonRight,
-                            buttonA: _buttonA,
-                            buttonB: _buttonB,
+                            buttonA: !isSnes && _preferences.swapAB
+                                ? _buttonB
+                                : _buttonA,
+                            buttonB: !isSnes && _preferences.swapAB
+                                ? _buttonA
+                                : _buttonB,
                             buttonX: _buttonX,
                             buttonY: _buttonY,
                             buttonSelect: _buttonSelect,
@@ -1170,6 +1232,9 @@ class _LandscapeRightControls extends StatelessWidget {
 
 class _GameBoyControls extends StatelessWidget {
   final bool compact;
+  final bool classicLayout;
+  final double sizeScale;
+  final double opacity;
   final LibretroGameController controller;
   final int buttonUp;
   final int buttonDown;
@@ -1188,6 +1253,9 @@ class _GameBoyControls extends StatelessWidget {
 
   const _GameBoyControls({
     required this.compact,
+    this.classicLayout = false,
+    this.sizeScale = 1,
+    this.opacity = 1,
     required this.controller,
     required this.buttonUp,
     required this.buttonDown,
@@ -1207,10 +1275,10 @@ class _GameBoyControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double dPadKeySize = compact ? 30 : 42;
-    final double actionSize = compact ? 54 : 66;
-    final double systemWidth = compact ? 68 : 82;
-    final double systemHeight = compact ? 24 : 28;
+    final double dPadKeySize = (compact ? 30 : 42) * sizeScale;
+    final double actionSize = (compact ? 54 : 66) * sizeScale;
+    final double systemWidth = (compact ? 68 : 82) * sizeScale;
+    final double systemHeight = (compact ? 24 : 28) * sizeScale;
 
     final Widget dPad = _GameBoyDPad(
       keySize: dPadKeySize,
@@ -1293,13 +1361,12 @@ class _GameBoyControls extends StatelessWidget {
       ],
     );
 
-    return SizedBox(
-      height: showShoulder ? 224 : 184,
+    final controls = SizedBox(
+      height: (showShoulder ? 224 : 184) * sizeScale,
       child: Column(
         children: [
           if (showShoulder) ...[shoulderButtons, const SizedBox(height: 10)],
-          systemButtons,
-          const SizedBox(height: 10),
+          if (!classicLayout) ...[systemButtons, const SizedBox(height: 10)],
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1307,9 +1374,14 @@ class _GameBoyControls extends StatelessWidget {
               children: [dPad, actions],
             ),
           ),
+          if (classicLayout) ...[
+            const SizedBox(height: 10),
+            systemButtons,
+          ],
         ],
       ),
     );
+    return Opacity(opacity: opacity, child: controls);
   }
 }
 
