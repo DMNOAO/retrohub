@@ -549,27 +549,49 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                       padding: EdgeInsets.all(padding),
                       child: Column(
                         children: [
-                          Expanded(
-                            child: Center(
-                              child: AspectRatio(
-                                aspectRatio: isSnes
-                                    ? 4 / 3
-                                    : (isGba ? 3 / 2 : 10 / 9),
-                                child: gameView,
-                              ),
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: AspectRatio(
+                              aspectRatio: isSnes
+                                  ? 4 / 3
+                                  : (isGba ? 3 / 2 : 10 / 9),
+                              child: gameView,
                             ),
                           ),
                           const SizedBox(height: 8),
 
-                          RetroHubConsoleLogo(
-                            console: isSnes
-                                ? RetroHubConsoleType.superNintendo
-                                : isGba
-                                ? RetroHubConsoleType.gameBoyAdvance
-                                : isGbc
-                                ? RetroHubConsoleType.gameBoyColor
-                                : RetroHubConsoleType.gameBoy,
-                          ),
+                          if (!isSnes &&
+                              isGba &&
+                              _preferences.layout ==
+                                  GameBoyControlLayout.classic)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _GameBoyShoulderButton(
+                                  label: 'L',
+                                  buttonId: _buttonL,
+                                  controller: _gameController,
+                                ),
+                                const RetroHubConsoleLogo(
+                                  console: RetroHubConsoleType.gameBoyAdvance,
+                                ),
+                                _GameBoyShoulderButton(
+                                  label: 'R',
+                                  buttonId: _buttonR,
+                                  controller: _gameController,
+                                ),
+                              ],
+                            )
+                          else
+                            RetroHubConsoleLogo(
+                              console: isSnes
+                                  ? RetroHubConsoleType.superNintendo
+                                  : isGba
+                                  ? RetroHubConsoleType.gameBoyAdvance
+                                  : isGbc
+                                  ? RetroHubConsoleType.gameBoyColor
+                                  : RetroHubConsoleType.gameBoy,
+                            ),
                           const SizedBox(height: 10),
 
                           _GameBoyControls(
@@ -579,6 +601,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                                     GameBoyControlLayout.classic,
                             sizeScale: isSnes ? 1 : _preferences.sizeScale,
                             opacity: isSnes ? 1 : _preferences.controlOpacity,
+                            swapLabels: !isSnes && _preferences.swapAB,
                             controller: _gameController,
                             buttonUp: _buttonUp,
                             buttonDown: _buttonDown,
@@ -596,7 +619,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage> {
                             buttonStart: _buttonStart,
                             buttonL: _buttonL,
                             buttonR: _buttonR,
-                            showShoulder: isGba || isSnes,
+                            showShoulder: isSnes ||
+                                (isGba &&
+                                    _preferences.layout !=
+                                        GameBoyControlLayout.classic),
                             isSnes: isSnes,
                           ),
                         ],
@@ -1235,6 +1261,7 @@ class _GameBoyControls extends StatelessWidget {
   final bool classicLayout;
   final double sizeScale;
   final double opacity;
+  final bool swapLabels;
   final LibretroGameController controller;
   final int buttonUp;
   final int buttonDown;
@@ -1256,6 +1283,7 @@ class _GameBoyControls extends StatelessWidget {
     this.classicLayout = false,
     this.sizeScale = 1,
     this.opacity = 1,
+    this.swapLabels = false,
     required this.controller,
     required this.buttonUp,
     required this.buttonDown,
@@ -1305,14 +1333,14 @@ class _GameBoyControls extends StatelessWidget {
               children: [
                 _GameBoyActionButton(
                   size: actionSize,
-                  label: 'B',
+                  label: swapLabels ? 'A' : 'B',
                   buttonId: buttonB,
                   controller: controller,
                 ),
                 SizedBox(width: compact ? 12 : 16),
                 _GameBoyActionButton(
                   size: actionSize,
-                  label: 'A',
+                  label: swapLabels ? 'B' : 'A',
                   buttonId: buttonA,
                   controller: controller,
                 ),
