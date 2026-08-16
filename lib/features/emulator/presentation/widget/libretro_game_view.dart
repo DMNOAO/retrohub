@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
+import '../../special_events/crystal_gs_ball_service.dart';
 import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
@@ -26,6 +27,8 @@ class LibretroGameController {
   Future<bool> Function(int slot, String title)? _saveState;
   Future<bool> Function(int slot)? _loadState;
   Future<bool> Function()? _saveSram;
+  Future<CrystalGsBallStatus> Function()? _inspectGsBall;
+  Future<CrystalGsBallActivationResult> Function()? _activateGsBall;
   Future<void> Function()? _restart;
   void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
@@ -83,6 +86,17 @@ class LibretroGameController {
     return await _saveSram?.call() ?? false;
   }
 
+  Future<CrystalGsBallStatus> inspectGsBall() async {
+    return await _inspectGsBall?.call() ?? CrystalGsBallStatus.noSave;
+  }
+
+  Future<CrystalGsBallActivationResult> activateGsBall() async {
+    return await _activateGsBall?.call() ??
+        const CrystalGsBallActivationResult(
+          status: CrystalGsBallStatus.noSave,
+        );
+  }
+
   Future<void> restart() async => _restart?.call();
 
   void setPaused(bool paused) => _setPaused?.call(paused);
@@ -123,6 +137,8 @@ class LibretroGameController {
     required Future<bool> Function(int slot, String title) saveState,
     required Future<bool> Function(int slot) loadState,
     required Future<bool> Function() saveSram,
+    required Future<CrystalGsBallStatus> Function() inspectGsBall,
+    required Future<CrystalGsBallActivationResult> Function() activateGsBall,
     required Future<void> Function() restart,
     required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
@@ -142,6 +158,8 @@ class LibretroGameController {
     _saveState = saveState;
     _loadState = loadState;
     _saveSram = saveSram;
+    _inspectGsBall = inspectGsBall;
+    _activateGsBall = activateGsBall;
     _restart = restart;
     _setPaused = setPaused;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
@@ -161,6 +179,8 @@ class LibretroGameController {
     _saveState = null;
     _loadState = null;
     _saveSram = null;
+    _inspectGsBall = null;
+    _activateGsBall = null;
     _restart = null;
     _setPaused = null;
     _currentPlayTimeMinutes = null;
@@ -256,6 +276,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   late final StreamSubscription<Uint8List> _linkPacketSubscription;
   final List<Uint8List> _pendingLinkPackets = <Uint8List>[];
 
+  final CrystalGsBallService _crystalGsBallService =
+      const CrystalGsBallService();
+
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
 
@@ -305,6 +328,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveState: _saveState,
       loadState: _loadState,
       saveSram: _saveSram,
+      inspectGsBall: _inspectGsBall,
+      activateGsBall: _activateGsBall,
       restart: _restartEmulator,
       setPaused: _setPaused,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
@@ -701,6 +726,49 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       _systemRamSize = status.systemRamSize;
       _pokemonStatus = status;
     });
+  }
+
+  Future<CrystalGsBallStatus> _inspectGsBall() async {
+    final paths = _persistencePaths;
+    if (paths == null) return CrystalGsBallStatus.noSave;
+
+    if (!_persistenceOperationInProgress) {
+      await _saveSram();
+    }
+    return _crystalGsBallService.inspect(paths.sramFile);
+  }
+
+  Future<CrystalGsBallActivationResult> _activateGsBall() async {
+    final bridge = _bridge;
+    final paths = _persistencePaths;
+    if (_disposed ||
+        !_isRunning ||
+        bridge == null ||
+        paths == null ||
+        _persistenceOperationInProgress) {
+      return const CrystalGsBallActivationResult(
+        status: CrystalGsBallStatus.noSave,
+      );
+    }
+
+    final bool wasPaused = _paused;
+    _paused = true;
+    _persistenceOperationInProgress = true;
+    try {
+      Directory(paths.sramDirectory).createSync(recursive: true);
+      if (!bridge.saveSram(paths.sramFile)) {
+        throw StateError('No se pudo guardar la SRAM antes de activar el evento.');
+      }
+
+      final result = await _crystalGsBallService.activate(paths.sramFile);
+      if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
+        throw StateError('El evento se activó, pero no se pudo recargar la SRAM.');
+      }
+      return result;
+    } finally {
+      _persistenceOperationInProgress = false;
+      _paused = wasPaused;
+    }
   }
 
   Future<bool> _saveSram() async {
