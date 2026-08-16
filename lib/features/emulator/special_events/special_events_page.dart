@@ -1,15 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../../pokemon/models/pokemon_game_profile.dart';
 import 'crystal_gs_ball_service.dart';
+import 'gen3_special_event_service.dart';
 
 class SpecialEventsPage extends StatefulWidget {
+  final PokemonGameVersion version;
   final Future<CrystalGsBallStatus> Function() inspectGsBall;
   final Future<CrystalGsBallActivationResult> Function() activateGsBall;
+  final Future<Gen3SpecialEventStatus> Function(Gen3SpecialEvent event)
+      inspectGen3Event;
+  final Future<Gen3SpecialEventActivationResult> Function(
+    Gen3SpecialEvent event,
+  )
+  activateGen3Event;
 
   const SpecialEventsPage({
     super.key,
+    required this.version,
     required this.inspectGsBall,
     required this.activateGsBall,
+    required this.inspectGen3Event,
+    required this.activateGen3Event,
   });
 
   @override
@@ -17,8 +29,12 @@ class SpecialEventsPage extends StatefulWidget {
 }
 
 class _SpecialEventsPageState extends State<SpecialEventsPage> {
-  CrystalGsBallStatus? _status;
-  bool _working = false;
+  final Gen3SpecialEventService _gen3Service =
+      const Gen3SpecialEventService();
+  CrystalGsBallStatus? _gsStatus;
+  final Map<Gen3SpecialEvent, Gen3SpecialEventStatus> _gen3Statuses = {};
+  Gen3SpecialEvent? _workingEvent;
+  bool _workingGs = false;
 
   @override
   void initState() {
@@ -27,191 +43,367 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   }
 
   Future<void> _refresh() async {
-    final status = await widget.inspectGsBall();
-    if (mounted) setState(() => _status = status);
+    if (widget.version == PokemonGameVersion.crystal) {
+      final status = await widget.inspectGsBall();
+      if (mounted) setState(() => _gsStatus = status);
+      return;
+    }
+    final events = _gen3Service.eventsFor(widget.version);
+    final statuses = <Gen3SpecialEvent, Gen3SpecialEventStatus>{};
+    for (final event in events) {
+      statuses[event] = await widget.inspectGen3Event(event);
+    }
+    if (mounted) setState(() => _gen3Statuses.addAll(statuses));
   }
 
-  Future<void> _activate() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Activar evento GS Ball'),
-        content: const Text(
-          'RetroHub guardará la partida y creará una copia de seguridad antes de habilitar el evento oficial de Celebi.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
+  Future<bool> _confirm(String title) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Activar $title'),
+            content: const Text(
+              'RetroHub guardará la partida y creará una copia de seguridad antes de habilitar este evento original.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Activar evento'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Activar evento'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+        ) ??
+        false;
+  }
 
-    setState(() => _working = true);
+  Future<void> _activateGsBall() async {
+    if (!await _confirm('evento GS Ball') || !mounted) return;
+    setState(() => _workingGs = true);
     try {
       final result = await widget.activateGsBall();
       if (!mounted) return;
-      setState(() => _status = result.status);
-      final message = result.succeeded
-          ? 'Evento activado. Reinicia el juego y sigue las instrucciones.'
-          : _messageFor(result.status);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      setState(() => _gsStatus = result.status);
+      _showResult(result.succeeded, _gsMessage(result.status));
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo activar el evento: $error')),
-      );
+      _showError(error);
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _workingGs = false);
     }
+  }
+
+  Future<void> _activateGen3(_EventPresentation presentation) async {
+    if (!await _confirm(presentation.title) || !mounted) return;
+    setState(() => _workingEvent = presentation.event);
+    try {
+      final result = await widget.activateGen3Event(presentation.event);
+      if (!mounted) return;
+      setState(() => _gen3Statuses[presentation.event] = result.status);
+      _showResult(result.succeeded, _gen3Message(result.status));
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingEvent = null);
+    }
+  }
+
+  void _showResult(bool succeeded, String fallback) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          succeeded
+              ? 'Evento activado. Reinicia el juego y sigue las instrucciones.'
+              : fallback,
+        ),
+      ),
+    );
+  }
+
+  void _showError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No se pudo activar el evento: $error')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
+    final cards = widget.version == PokemonGameVersion.crystal
+        ? <Widget>[_buildGsCard()]
+        : _presentations(widget.version)
+              .map((presentation) => _buildGen3Card(presentation))
+              .toList();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Eventos especiales')),
       body: ListView(
         padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const CircleAvatar(
-                        child: Icon(Icons.auto_awesome),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'GS Ball · Celebi',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const Text('Pokémon Cristal'),
-                          ],
-                        ),
-                      ),
-                      _StatusChip(status: status),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Requisito',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('Haber vencido a la Liga Pokémon.'),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Después de activar el evento',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  const _Instruction(
-                    number: 1,
-                    text:
-                        'Reinicia el juego y entra al Centro Pokémon de Ciudad Trigal.',
-                  ),
-                  const _Instruction(
-                    number: 2,
-                    text:
-                        'Al intentar salir, la recepcionista te entregará la GS Ball mediante la escena original.',
-                  ),
-                  const _Instruction(
-                    number: 3,
-                    text:
-                        'Lleva la GS Ball a César en Pueblo Azalea.',
-                  ),
-                  const _Instruction(
-                    number: 4,
-                    text:
-                        'Espera un día y vuelve a hablar con César.',
-                  ),
-                  const _Instruction(
-                    number: 5,
-                    text:
-                        'Lleva la GS Ball al santuario del Encinar para encontrar a Celebi.',
-                  ),
-                  const SizedBox(height: 18),
-                  if (status == null)
-                    const Center(child: CircularProgressIndicator())
-                  else if (status == CrystalGsBallStatus.available)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _working ? null : _activate,
-                        icon: _working
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.lock_open),
-                        label: const Text('Activar evento'),
-                      ),
-                    )
-                  else
-                    Text(
-                      _messageFor(status),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        children: cards,
       ),
     );
   }
 
-  String _messageFor(CrystalGsBallStatus status) {
-    return switch (status) {
-      CrystalGsBallStatus.noSave =>
-        'Guarda la partida dentro del juego antes de continuar.',
-      CrystalGsBallStatus.incompatibleSave =>
-        'Este guardado no corresponde a una versión internacional compatible de Pokémon Cristal.',
-      CrystalGsBallStatus.leagueRequired =>
-        'Evento bloqueado: primero debes vencer a la Liga Pokémon y guardar la partida.',
-      CrystalGsBallStatus.available => 'El evento está disponible.',
-      CrystalGsBallStatus.activated =>
-        'Evento activado. Las instrucciones seguirán disponibles aquí.',
-    };
+  Widget _buildGsCard() {
+    return _EventCard(
+      title: 'GS Ball · Celebi',
+      game: 'Pokémon Cristal',
+      statusLabel: _gsStatusLabel(_gsStatus),
+      statusMessage: _gsStatus == null ? null : _gsMessage(_gsStatus!),
+      canActivate: _gsStatus == CrystalGsBallStatus.available,
+      working: _workingGs,
+      onActivate: _activateGsBall,
+      instructions: const [
+        'Reinicia el juego y entra al Centro Pokémon de Ciudad Trigal.',
+        'Al intentar salir, la recepcionista te entregará la GS Ball mediante la escena original.',
+        'Lleva la GS Ball a César en Pueblo Azalea.',
+        'Espera un día y vuelve a hablar con César.',
+        'Lleva la GS Ball al santuario del Encinar para encontrar a Celebi.',
+      ],
+    );
   }
+
+  Widget _buildGen3Card(_EventPresentation presentation) {
+    final status = _gen3Statuses[presentation.event];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _EventCard(
+        title: presentation.title,
+        game: presentation.game,
+        statusLabel: _gen3StatusLabel(status),
+        statusMessage: status == null ? null : _gen3Message(status),
+        canActivate: status == Gen3SpecialEventStatus.available,
+        working: _workingEvent == presentation.event,
+        onActivate: () => _activateGen3(presentation),
+        instructions: presentation.instructions,
+      ),
+    );
+  }
+
+  List<_EventPresentation> _presentations(PokemonGameVersion version) {
+    final game = _gameName(version);
+    final port = version == PokemonGameVersion.fireRed ||
+            version == PokemonGameVersion.leafGreen
+        ? 'el puerto de Ciudad Carmín'
+        : 'el ferry de Ciudad Calagua';
+    return _gen3Service.eventsFor(version).map((event) {
+      return switch (event) {
+        Gen3SpecialEvent.eonTicket => _EventPresentation(
+            event: event,
+            title: 'Ticket Eón · Latias/Latios',
+            game: game,
+            instructions: [
+              'Reinicia el juego y ve al ferry de Ciudad Calagua.',
+              'Presenta el Ticket Eón para viajar a Isla del Sur.',
+              'Entra al santuario e interactúa con la piedra central.',
+              version == PokemonGameVersion.ruby
+                  ? 'Encontrarás a Latias; Latios es el Pokémon errante de esta edición.'
+                  : version == PokemonGameVersion.sapphire
+                  ? 'Encontrarás a Latios; Latias es el Pokémon errante de esta edición.'
+                  : 'Encontrarás al Pokémon Eón opuesto al que elegiste después de la Liga.',
+            ],
+          ),
+        Gen3SpecialEvent.oldSeaMap => _EventPresentation(
+            event: event,
+            title: 'Mapa Viejo · Mew',
+            game: game,
+            instructions: const [
+              'Reinicia el juego y ve al ferry de Ciudad Calagua.',
+              'Presenta el Mapa Viejo para viajar a Isla Suprema.',
+              'Sigue a Mew entre la hierba alta hasta alcanzarlo.',
+              'Interactúa con Mew para iniciar el encuentro.',
+            ],
+          ),
+        Gen3SpecialEvent.auroraTicket => _EventPresentation(
+            event: event,
+            title: 'Ticket Aurora · Deoxys',
+            game: game,
+            instructions: [
+              'Reinicia el juego y ve a $port.',
+              'Presenta el Ticket Aurora para viajar a Isla Origen.',
+              'Resuelve el recorrido del triángulo sin dar pasos de más.',
+              'Cuando el triángulo se vuelva rojo, interactúa con él para encontrar a Deoxys.',
+            ],
+          ),
+        Gen3SpecialEvent.mysticTicket => _EventPresentation(
+            event: event,
+            title: 'Ticket Místico · Lugia y Ho-Oh',
+            game: game,
+            instructions: [
+              'Reinicia el juego y ve a $port.',
+              'Presenta el Ticket Místico para viajar a Roca Ombligo.',
+              'Desciende hasta el fondo para encontrar a Lugia.',
+              'Sube hasta la cima para encontrar a Ho-Oh.',
+            ],
+          ),
+      };
+    }).toList();
+  }
+
+  String _gameName(PokemonGameVersion version) => switch (version) {
+        PokemonGameVersion.ruby => 'Pokémon Rubí',
+        PokemonGameVersion.sapphire => 'Pokémon Zafiro',
+        PokemonGameVersion.emerald => 'Pokémon Esmeralda',
+        PokemonGameVersion.fireRed => 'Pokémon Rojo Fuego',
+        PokemonGameVersion.leafGreen => 'Pokémon Verde Hoja',
+        _ => 'Pokémon',
+      };
+
+  String _gsMessage(CrystalGsBallStatus status) => switch (status) {
+        CrystalGsBallStatus.noSave =>
+          'Guarda la partida dentro del juego antes de continuar.',
+        CrystalGsBallStatus.incompatibleSave =>
+          'Este guardado no corresponde a una versión internacional compatible de Pokémon Cristal.',
+        CrystalGsBallStatus.leagueRequired =>
+          'Evento bloqueado: primero debes vencer a la Liga Pokémon y guardar la partida.',
+        CrystalGsBallStatus.available => 'El evento está disponible.',
+        CrystalGsBallStatus.activated =>
+          'Evento activado. Las instrucciones seguirán disponibles aquí.',
+      };
+
+  String _gen3Message(Gen3SpecialEventStatus status) => switch (status) {
+        Gen3SpecialEventStatus.noSave =>
+          'Guarda la partida dentro del juego antes de continuar.',
+        Gen3SpecialEventStatus.incompatibleSave =>
+          'El guardado no tiene un formato compatible con este juego.',
+        Gen3SpecialEventStatus.leagueRequired =>
+          'Evento bloqueado: primero debes vencer a la Liga Pokémon y guardar la partida.',
+        Gen3SpecialEventStatus.available => 'El evento está disponible.',
+        Gen3SpecialEventStatus.activated =>
+          'Evento activado. Las instrucciones seguirán disponibles aquí.',
+        Gen3SpecialEventStatus.unsupported =>
+          'Este evento no está disponible en esta edición.',
+      };
+
+  String _gsStatusLabel(CrystalGsBallStatus? status) => switch (status) {
+        null => 'Comprobando',
+        CrystalGsBallStatus.noSave => 'Sin guardado',
+        CrystalGsBallStatus.incompatibleSave => 'No compatible',
+        CrystalGsBallStatus.leagueRequired => 'Bloqueado',
+        CrystalGsBallStatus.available => 'Disponible',
+        CrystalGsBallStatus.activated => 'Activado',
+      };
+
+  String _gen3StatusLabel(Gen3SpecialEventStatus? status) => switch (status) {
+        null => 'Comprobando',
+        Gen3SpecialEventStatus.noSave => 'Sin guardado',
+        Gen3SpecialEventStatus.incompatibleSave => 'No compatible',
+        Gen3SpecialEventStatus.leagueRequired => 'Bloqueado',
+        Gen3SpecialEventStatus.available => 'Disponible',
+        Gen3SpecialEventStatus.activated => 'Activado',
+        Gen3SpecialEventStatus.unsupported => 'No disponible',
+      };
 }
 
-class _StatusChip extends StatelessWidget {
-  final CrystalGsBallStatus? status;
+class _EventPresentation {
+  final Gen3SpecialEvent event;
+  final String title;
+  final String game;
+  final List<String> instructions;
 
-  const _StatusChip({required this.status});
+  const _EventPresentation({
+    required this.event,
+    required this.title,
+    required this.game,
+    required this.instructions,
+  });
+}
+
+class _EventCard extends StatelessWidget {
+  final String title;
+  final String game;
+  final String statusLabel;
+  final String? statusMessage;
+  final bool canActivate;
+  final bool working;
+  final VoidCallback onActivate;
+  final List<String> instructions;
+
+  const _EventCard({
+    required this.title,
+    required this.game,
+    required this.statusLabel,
+    required this.statusMessage,
+    required this.canActivate,
+    required this.working,
+    required this.onActivate,
+    required this.instructions,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      null => 'Comprobando',
-      CrystalGsBallStatus.noSave => 'Sin guardado',
-      CrystalGsBallStatus.incompatibleSave => 'No compatible',
-      CrystalGsBallStatus.leagueRequired => 'Bloqueado',
-      CrystalGsBallStatus.available => 'Disponible',
-      CrystalGsBallStatus.activated => 'Activado',
-    };
-    return Chip(label: Text(label));
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(child: Icon(Icons.auto_awesome)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      Text(game),
+                    ],
+                  ),
+                ),
+                Chip(label: Text(statusLabel)),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const Text('Requisito', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text('Haber vencido a la Liga Pokémon.'),
+            const SizedBox(height: 18),
+            const Text(
+              'Después de activar el evento',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            for (var index = 0; index < instructions.length; index++)
+              _Instruction(number: index + 1, text: instructions[index]),
+            const SizedBox(height: 8),
+            if (statusMessage == null)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              Text(
+                statusMessage!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (canActivate) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: working ? null : onActivate,
+                    icon: working
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_open),
+                    label: const Text('Activar evento'),
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
