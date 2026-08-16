@@ -26,6 +26,7 @@ import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
 import 'settings/emulator_preferences.dart';
 import 'settings/emulator_settings_page.dart';
+import 'special_events/special_events_page.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
@@ -304,6 +305,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   }
 
   Future<void> _openEmulatorSettings(BuildContext context) async {
+    final PokemonGameProfile pokemonProfile =
+        PokemonGameProfile.fromGameIdentity(
+          gameTitle: game.title,
+          romPath: game.romPath,
+        );
+
     final preferences = await Navigator.of(context).push<EmulatorPreferences>(
       MaterialPageRoute(
         builder: (_) => EmulatorSettingsPage(
@@ -314,6 +321,19 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             gameId: game.id,
             romPath: game.romPath,
           ),
+          onOpenSpecialEvents:
+              pokemonProfile.version == PokemonGameVersion.crystal
+              ? () async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => SpecialEventsPage(
+                        inspectGsBall: _gameController.inspectGsBall,
+                        activateGsBall: _gameController.activateGsBall,
+                      ),
+                    ),
+                  );
+                }
+              : null,
           onRestart: _gameController.restart,
           onSaveState: (slot, title) async {
             final saved = await _gameController.saveState(
