@@ -57,15 +57,10 @@ class CrystalGsBallService {
     return CrystalGsBallStatus.available;
   }
 
-  Future<CrystalGsBallActivationResult> activate(
-    String savePath, {
-    bool allowBeforeLeague = false,
-  }) async {
+  Future<CrystalGsBallActivationResult> activate(String savePath) async {
     final File save = File(savePath);
     final CrystalGsBallStatus status = await inspect(savePath);
-    final bool canActivate = status == CrystalGsBallStatus.available ||
-        (allowBeforeLeague && status == CrystalGsBallStatus.leagueRequired);
-    if (!canActivate) {
+    if (status != CrystalGsBallStatus.available) {
       return CrystalGsBallActivationResult(status: status);
     }
 
