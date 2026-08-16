@@ -21,6 +21,26 @@ void main() {
     expect(service.inspectBytes(bytes), CrystalGsBallStatus.available);
   });
 
+  test('allows a debug activation before the Hall of Fame', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'retrohub_gs_ball_debug_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final save = File('${directory.path}/crystal.srm');
+    await save.writeAsBytes(
+      Uint8List(CrystalGsBallService.minimumSaveLength),
+    );
+
+    final result = await service.activate(
+      save.path,
+      allowBeforeLeague: true,
+    );
+
+    expect(result.succeeded, isTrue);
+    expect(await service.inspect(save.path), CrystalGsBallStatus.activated);
+  });
+
   test('activates both GS Ball flags and creates a backup', () async {
     final directory = await Directory.systemTemp.createTemp('retrohub_gs_ball_');
     addTearDown(() => directory.delete(recursive: true));
