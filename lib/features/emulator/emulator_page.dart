@@ -321,14 +321,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             gameId: game.id,
             romPath: game.romPath,
           ),
-          onOpenSpecialEvents:
+          specialEventsSubtitle:
               pokemonProfile.version == PokemonGameVersion.crystal
+              ? 'GS Ball · Celebi'
+              : 'Mew, Deoxys, Lugia, Ho-Oh y más',
+          onOpenSpecialEvents:
+              _supportsSpecialEvents(pokemonProfile.version)
               ? () async {
                   await Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => SpecialEventsPage(
+                        version: pokemonProfile.version,
                         inspectGsBall: _gameController.inspectGsBall,
                         activateGsBall: _gameController.activateGsBall,
+                        inspectGen3Event: _gameController.inspectGen3Event,
+                        activateGen3Event: _gameController.activateGen3Event,
                       ),
                     ),
                   );
@@ -366,6 +373,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       setState(() => _preferences = preferences);
       await _applyDisplayPreferences(preferences);
     }
+  }
+
+  bool _supportsSpecialEvents(PokemonGameVersion version) {
+    return version == PokemonGameVersion.crystal ||
+        version == PokemonGameVersion.ruby ||
+        version == PokemonGameVersion.sapphire ||
+        version == PokemonGameVersion.emerald ||
+        version == PokemonGameVersion.fireRed ||
+        version == PokemonGameVersion.leafGreen;
   }
 
   Future<void> _requestExit(BuildContext context) async {
