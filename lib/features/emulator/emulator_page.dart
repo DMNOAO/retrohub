@@ -321,10 +321,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             gameId: game.id,
             romPath: game.romPath,
           ),
-          specialEventsSubtitle:
-              pokemonProfile.version == PokemonGameVersion.crystal
-              ? 'GS Ball · Celebi'
-              : 'Mew, Deoxys, Lugia, Ho-Oh y más',
+          specialEventsSubtitle: switch (pokemonProfile.version) {
+            PokemonGameVersion.crystal => 'GS Ball · Celebi',
+            PokemonGameVersion.ruby || PokemonGameVersion.sapphire =>
+              'Ticket Eón · Latias/Latios',
+            PokemonGameVersion.emerald =>
+              'Mew, Deoxys, Lugia, Ho-Oh y Pokémon Eón',
+            PokemonGameVersion.fireRed || PokemonGameVersion.leafGreen =>
+              'Deoxys, Lugia y Ho-Oh',
+            _ => 'Eventos oficiales',
+          },
           onOpenSpecialEvents:
               _supportsSpecialEvents(pokemonProfile.version)
               ? () async {
