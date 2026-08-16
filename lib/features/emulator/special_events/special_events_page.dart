@@ -1,13 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'crystal_gs_ball_service.dart';
 
 class SpecialEventsPage extends StatefulWidget {
   final Future<CrystalGsBallStatus> Function() inspectGsBall;
-  final Future<CrystalGsBallActivationResult> Function({
-    bool allowBeforeLeague,
-  }) activateGsBall;
+  final Future<CrystalGsBallActivationResult> Function() activateGsBall;
 
   const SpecialEventsPage({
     super.key,
@@ -34,19 +31,13 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     if (mounted) setState(() => _status = status);
   }
 
-  Future<void> _activate({bool debugBypass = false}) async {
+  Future<void> _activate() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          debugBypass
-              ? 'Activar evento para prueba'
-              : 'Activar evento GS Ball',
-        ),
-        content: Text(
-          debugBypass
-              ? 'Esta opción de desarrollo omitirá el requisito de la Liga y modificará esta partida. RetroHub creará primero una copia de seguridad.'
-              : 'RetroHub guardará la partida y creará una copia de seguridad antes de habilitar el evento oficial de Celebi.',
+        title: const Text('Activar evento GS Ball'),
+        content: const Text(
+          'RetroHub guardará la partida y creará una copia de seguridad antes de habilitar el evento oficial de Celebi.',
         ),
         actions: [
           TextButton(
@@ -64,9 +55,7 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
     setState(() => _working = true);
     try {
-      final result = await widget.activateGsBall(
-        allowBeforeLeague: debugBypass,
-      );
+      final result = await widget.activateGsBall();
       if (!mounted) return;
       setState(() => _status = result.status);
       final message = result.succeeded
@@ -175,33 +164,6 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
                             : const Icon(Icons.lock_open),
                         label: const Text('Activar evento'),
                       ),
-                    )
-                  else if (kDebugMode &&
-                      status == CrystalGsBallStatus.leagueRequired)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          _messageFor(status),
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _working
-                              ? null
-                              : () => _activate(debugBypass: true),
-                          icon: const Icon(Icons.science_outlined),
-                          label: const Text('Activar solo para prueba'),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Disponible únicamente en modo debug.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
                     )
                   else
                     Text(
