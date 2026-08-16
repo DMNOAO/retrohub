@@ -71,12 +71,9 @@ class CrystalGsBallService {
     bytes[gsBallFlagOffset] = gsBallAvailableValue;
     bytes[gsBallFlagBackupOffset] = gsBallAvailableValue;
 
-    final File temporary = File('$savePath.gsball.tmp');
     try {
-      await temporary.writeAsBytes(bytes, flush: true);
-      await temporary.rename(savePath);
+      await save.writeAsBytes(bytes, flush: true);
     } catch (_) {
-      if (await temporary.exists()) await temporary.delete();
       await File(backupPath).copy(savePath);
       rethrow;
     }
