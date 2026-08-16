@@ -26,6 +26,7 @@ import 'presentation/widget/libretro_game_view.dart';
 import 'memory_inspector/memory_inspector_page.dart';
 import 'settings/emulator_preferences.dart';
 import 'settings/emulator_settings_page.dart';
+import 'special_events/special_events_page.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
@@ -304,6 +305,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   }
 
   Future<void> _openEmulatorSettings(BuildContext context) async {
+    final PokemonGameProfile pokemonProfile =
+        PokemonGameProfile.fromGameIdentity(
+          gameTitle: game.title,
+          romPath: game.romPath,
+        );
+
     final preferences = await Navigator.of(context).push<EmulatorPreferences>(
       MaterialPageRoute(
         builder: (_) => EmulatorSettingsPage(
@@ -314,6 +321,32 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             gameId: game.id,
             romPath: game.romPath,
           ),
+          specialEventsSubtitle: switch (pokemonProfile.version) {
+            PokemonGameVersion.crystal => 'GS Ball · Celebi',
+            PokemonGameVersion.ruby || PokemonGameVersion.sapphire =>
+              'Ticket Eón · Latias/Latios',
+            PokemonGameVersion.emerald =>
+              'Mew, Deoxys, Lugia, Ho-Oh y Pokémon Eón',
+            PokemonGameVersion.fireRed || PokemonGameVersion.leafGreen =>
+              'Deoxys, Lugia y Ho-Oh',
+            _ => 'Eventos oficiales',
+          },
+          onOpenSpecialEvents:
+              _supportsSpecialEvents(pokemonProfile.version)
+              ? () async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => SpecialEventsPage(
+                        version: pokemonProfile.version,
+                        inspectGsBall: _gameController.inspectGsBall,
+                        activateGsBall: _gameController.activateGsBall,
+                        inspectGen3Event: _gameController.inspectGen3Event,
+                        activateGen3Event: _gameController.activateGen3Event,
+                      ),
+                    ),
+                  );
+                }
+              : null,
           onRestart: _gameController.restart,
           onSaveState: (slot, title) async {
             final saved = await _gameController.saveState(
@@ -346,6 +379,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       setState(() => _preferences = preferences);
       await _applyDisplayPreferences(preferences);
     }
+  }
+
+  bool _supportsSpecialEvents(PokemonGameVersion version) {
+    return version == PokemonGameVersion.crystal ||
+        version == PokemonGameVersion.ruby ||
+        version == PokemonGameVersion.sapphire ||
+        version == PokemonGameVersion.emerald ||
+        version == PokemonGameVersion.fireRed ||
+        version == PokemonGameVersion.leafGreen;
   }
 
   Future<void> _requestExit(BuildContext context) async {

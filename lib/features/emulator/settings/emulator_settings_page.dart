@@ -12,6 +12,8 @@ class EmulatorSettingsPage extends StatefulWidget {
   final Future<bool> Function(int slot, String title) onSaveState;
   final Future<bool> Function(int slot) onLoadState;
   final SaveStateService saveStateService;
+  final Future<void> Function()? onOpenSpecialEvents;
+  final String specialEventsSubtitle;
 
   const EmulatorSettingsPage({
     super.key,
@@ -22,6 +24,8 @@ class EmulatorSettingsPage extends StatefulWidget {
     required this.onSaveState,
     required this.onLoadState,
     required this.saveStateService,
+    this.onOpenSpecialEvents,
+    this.specialEventsSubtitle = 'Eventos oficiales',
   });
 
   @override
@@ -136,6 +140,16 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                     title: const Text('Cargar estado'),
                     onTap: () => _openStates(SaveStatesMode.load),
                   ),
+                  if (widget.onOpenSpecialEvents != null) ...[
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.auto_awesome),
+                      title: const Text('Eventos especiales'),
+                      subtitle: Text(widget.specialEventsSubtitle),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: widget.onOpenSpecialEvents,
+                    ),
+                  ],
                 ],
               ),
             ),
