@@ -11,10 +11,12 @@ import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
 import '../../special_events/crystal_gs_ball_service.dart';
+import '../../special_events/gen3_special_event_service.dart';
 import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
+import '../../../pokemon/models/pokemon_game_profile.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
 import '../../link/link_manager.dart';
 import '../../link/link_state.dart';
@@ -29,6 +31,10 @@ class LibretroGameController {
   Future<bool> Function()? _saveSram;
   Future<CrystalGsBallStatus> Function()? _inspectGsBall;
   Future<CrystalGsBallActivationResult> Function()? _activateGsBall;
+  Future<Gen3SpecialEventStatus> Function(Gen3SpecialEvent)?
+      _inspectGen3Event;
+  Future<Gen3SpecialEventActivationResult> Function(Gen3SpecialEvent)?
+      _activateGen3Event;
   Future<void> Function()? _restart;
   void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
@@ -97,6 +103,22 @@ class LibretroGameController {
         );
   }
 
+  Future<Gen3SpecialEventStatus> inspectGen3Event(
+    Gen3SpecialEvent event,
+  ) async {
+    return await _inspectGen3Event?.call(event) ??
+        Gen3SpecialEventStatus.noSave;
+  }
+
+  Future<Gen3SpecialEventActivationResult> activateGen3Event(
+    Gen3SpecialEvent event,
+  ) async {
+    return await _activateGen3Event?.call(event) ??
+        const Gen3SpecialEventActivationResult(
+          status: Gen3SpecialEventStatus.noSave,
+        );
+  }
+
   Future<void> restart() async => _restart?.call();
 
   void setPaused(bool paused) => _setPaused?.call(paused);
@@ -139,6 +161,12 @@ class LibretroGameController {
     required Future<bool> Function() saveSram,
     required Future<CrystalGsBallStatus> Function() inspectGsBall,
     required Future<CrystalGsBallActivationResult> Function() activateGsBall,
+    required Future<Gen3SpecialEventStatus> Function(Gen3SpecialEvent)
+        inspectGen3Event,
+    required Future<Gen3SpecialEventActivationResult> Function(
+      Gen3SpecialEvent,
+    )
+    activateGen3Event,
     required Future<void> Function() restart,
     required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
@@ -160,6 +188,8 @@ class LibretroGameController {
     _saveSram = saveSram;
     _inspectGsBall = inspectGsBall;
     _activateGsBall = activateGsBall;
+    _inspectGen3Event = inspectGen3Event;
+    _activateGen3Event = activateGen3Event;
     _restart = restart;
     _setPaused = setPaused;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
@@ -181,6 +211,8 @@ class LibretroGameController {
     _saveSram = null;
     _inspectGsBall = null;
     _activateGsBall = null;
+    _inspectGen3Event = null;
+    _activateGen3Event = null;
     _restart = null;
     _setPaused = null;
     _currentPlayTimeMinutes = null;
@@ -278,6 +310,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
   final CrystalGsBallService _crystalGsBallService =
       const CrystalGsBallService();
+  final Gen3SpecialEventService _gen3SpecialEventService =
+      const Gen3SpecialEventService();
 
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
@@ -330,6 +364,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveSram: _saveSram,
       inspectGsBall: _inspectGsBall,
       activateGsBall: _activateGsBall,
+      inspectGen3Event: _inspectGen3Event,
+      activateGen3Event: _activateGen3Event,
       restart: _restartEmulator,
       setPaused: _setPaused,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
@@ -763,6 +799,71 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       final result = await _crystalGsBallService.activate(paths.sramFile);
       if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
         throw StateError('El evento se activó, pero no se pudo recargar la SRAM.');
+      }
+      return result;
+    } finally {
+      _persistenceOperationInProgress = false;
+      _paused = wasPaused;
+    }
+  }
+
+  PokemonGameVersion get _pokemonVersion =>
+      PokemonGameProfile.fromGameIdentity(
+        gameTitle: widget.gameTitle,
+        romPath: widget.romPath,
+      ).version;
+
+  Future<Gen3SpecialEventStatus> _inspectGen3Event(
+    Gen3SpecialEvent event,
+  ) async {
+    final paths = _persistencePaths;
+    if (paths == null) return Gen3SpecialEventStatus.noSave;
+
+    if (!_persistenceOperationInProgress) {
+      await _saveSram();
+    }
+    return _gen3SpecialEventService.inspect(
+      savePath: paths.sramFile,
+      version: _pokemonVersion,
+      event: event,
+    );
+  }
+
+  Future<Gen3SpecialEventActivationResult> _activateGen3Event(
+    Gen3SpecialEvent event,
+  ) async {
+    final bridge = _bridge;
+    final paths = _persistencePaths;
+    if (_disposed ||
+        !_isRunning ||
+        bridge == null ||
+        paths == null ||
+        _persistenceOperationInProgress) {
+      return const Gen3SpecialEventActivationResult(
+        status: Gen3SpecialEventStatus.noSave,
+      );
+    }
+
+    final wasPaused = _paused;
+    _paused = true;
+    _persistenceOperationInProgress = true;
+    try {
+      Directory(paths.sramDirectory).createSync(recursive: true);
+      if (!bridge.saveSram(paths.sramFile)) {
+        throw StateError(
+          'No se pudo guardar la SRAM antes de activar el evento.',
+        );
+      }
+
+      final result = await _gen3SpecialEventService.activate(
+        savePath: paths.sramFile,
+        version: _pokemonVersion,
+        event: event,
+      );
+      if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
+        throw StateError(
+          'El evento se activó, pero no se pudo recargar la SRAM.',
+        );
       }
       return result;
     } finally {
