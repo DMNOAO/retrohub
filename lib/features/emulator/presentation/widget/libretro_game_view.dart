@@ -28,7 +28,8 @@ class LibretroGameController {
   Future<bool> Function(int slot)? _loadState;
   Future<bool> Function()? _saveSram;
   Future<CrystalGsBallStatus> Function()? _inspectGsBall;
-  Future<CrystalGsBallActivationResult> Function()? _activateGsBall;
+  Future<CrystalGsBallActivationResult> Function(bool allowBeforeLeague)?
+      _activateGsBall;
   Future<void> Function()? _restart;
   void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
@@ -90,8 +91,10 @@ class LibretroGameController {
     return await _inspectGsBall?.call() ?? CrystalGsBallStatus.noSave;
   }
 
-  Future<CrystalGsBallActivationResult> activateGsBall() async {
-    return await _activateGsBall?.call() ??
+  Future<CrystalGsBallActivationResult> activateGsBall({
+    bool allowBeforeLeague = false,
+  }) async {
+    return await _activateGsBall?.call(allowBeforeLeague) ??
         const CrystalGsBallActivationResult(
           status: CrystalGsBallStatus.noSave,
         );
@@ -138,7 +141,9 @@ class LibretroGameController {
     required Future<bool> Function(int slot) loadState,
     required Future<bool> Function() saveSram,
     required Future<CrystalGsBallStatus> Function() inspectGsBall,
-    required Future<CrystalGsBallActivationResult> Function() activateGsBall,
+    required Future<CrystalGsBallActivationResult> Function(
+      bool allowBeforeLeague,
+    ) activateGsBall,
     required Future<void> Function() restart,
     required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
@@ -738,7 +743,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     return _crystalGsBallService.inspect(paths.sramFile);
   }
 
-  Future<CrystalGsBallActivationResult> _activateGsBall() async {
+  Future<CrystalGsBallActivationResult> _activateGsBall(
+    bool allowBeforeLeague,
+  ) async {
     final bridge = _bridge;
     final paths = _persistencePaths;
     if (_disposed ||
@@ -760,7 +767,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw StateError('No se pudo guardar la SRAM antes de activar el evento.');
       }
 
-      final result = await _crystalGsBallService.activate(paths.sramFile);
+      final result = await _crystalGsBallService.activate(
+        paths.sramFile,
+        allowBeforeLeague: allowBeforeLeague,
+      );
       if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
         throw StateError('El evento se activó, pero no se pudo recargar la SRAM.');
       }
