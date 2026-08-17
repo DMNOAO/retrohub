@@ -611,10 +611,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (_disposed ||
         !_isRunning ||
         _paused ||
+        _isDecodingFrame ||
         _persistenceOperationInProgress ||
-        _bridge == null) {
+        _bridge == null)
       return;
-    }
 
     final LibretroBridge bridge = _bridge!;
     final int runs = _linkBridgeEnabled ? 1 : _speedMultiplierNotifier.value;
@@ -625,16 +625,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     }
 
     _audioPlayer?.pump(bridge);
-
-    // El decodificado de Flutter puede tardar más que un tick, sobre todo
-    // con SameBoy. La emulación debe continuar; únicamente omitimos el frame
-    // visual mientras la imagen anterior sigue convirtiéndose.
-    if (_isDecodingFrame) return;
-
     final LibretroFrame? frame = bridge.readFrame();
-    if (frame != null) {
-      _decodeFrame(frame);
-    }
+    if (frame != null) _decodeFrame(frame);
   }
 
   void _setPaused(bool paused) {
