@@ -43,7 +43,7 @@ Map<int,String> _dexNames(File f){ final out=<int,String>{}; for(final l in f.re
 
 Map<int,String> _entries(File f,Map<String,int> ids){
   final out=<int,String>{}; final text=f.readAsStringSync();
-  final labels=RegExp(r'(?m)^_?([A-Za-z0-9_]+)DexEntry::?').allMatches(text).toList();
+  final labels=RegExp(r'^_?([A-Za-z0-9_]+)DexEntry::?', multiLine:true).allMatches(text).toList();
   for(var i=0;i<labels.length;i++){
     final id=ids[_norm(labels[i].group(1)!)]; if(id==null) continue;
     final end=i+1<labels.length?labels[i+1].start:text.length; final block=text.substring(labels[i].end,end);
@@ -67,7 +67,7 @@ Map<String,String> _moveNames(Directory root){
 
 Map<int,List<_Move>> _learnsets(File f,Map<String,int> ids){
   final out=<int,List<_Move>>{}; if(!f.existsSync()) return out; final text=f.readAsStringSync();
-  final labels=RegExp(r'(?m)^([A-Za-z0-9_]+)EvosMoves:').allMatches(text).toList();
+  final labels=RegExp(r'^([A-Za-z0-9_]+)EvosMoves:', multiLine:true).allMatches(text).toList();
   for(var i=0;i<labels.length;i++){
     final id=ids[_norm(labels[i].group(1)!)]; if(id==null) continue; final end=i+1<labels.length?labels[i+1].start:text.length; final block=text.substring(labels[i].end,end);
     final marker=block.indexOf('; Learnset'); if(marker<0){out[id]=[];continue;} final part=block.substring(marker);
