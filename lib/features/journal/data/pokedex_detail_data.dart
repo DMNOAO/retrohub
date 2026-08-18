@@ -1,5 +1,6 @@
 import '../../../core/assets/game_asset_profile.dart';
 import 'crystal_pokedex_generated.dart';
+import 'gold_pokedex_generated.dart';
 import 'pokedex_models.dart';
 
 export 'pokedex_models.dart';
@@ -14,8 +15,9 @@ class PokedexDetailData {
         final local = _crystalOverrides[pokemonId] ?? const PokedexSpeciesDetail();
         return generated.merge(local);
       case PokemonAssetGame.gold:
+        return goldGeneratedSpecies[pokemonId] ?? const PokedexSpeciesDetail();
       case PokemonAssetGame.silver:
-        return _goldSilver[pokemonId] ?? const PokedexSpeciesDetail();
+        return const PokedexSpeciesDetail();
       default:
         return const PokedexSpeciesDetail();
     }
@@ -46,6 +48,4 @@ class PokedexDetailData {
     163: PokedexSpeciesDetail(encounters: [PokedexEncounter(location: 'Ruta 29', method: 'Hierba', time: 'Noche'), PokedexEncounter(location: 'Rutas 30, 31, 35, 36 y 37', method: 'Hierba', time: 'Noche')]),
     165: PokedexSpeciesDetail(encounters: [PokedexEncounter(location: 'Ruta 30', method: 'Hierba', time: 'Mañana · Día'), PokedexEncounter(location: 'Ruta 36', method: 'Hierba', time: 'Mañana')]),
   };
-
-  static const Map<int, PokedexSpeciesDetail> _goldSilver = {};
 }
