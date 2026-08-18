@@ -31,7 +31,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
         Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
           Text('#${widget.displayNumber.toString().padLeft(3, '0')}', style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 8),
-          SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: widget.pokemonId, isShiny: _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon),
+          SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: widget.pokemonId, isShiny: _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon, removeWhiteBackground: widget.profile.region == PokemonAssetRegion.johto),
           const SizedBox(height: 12),
           Text(name, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
