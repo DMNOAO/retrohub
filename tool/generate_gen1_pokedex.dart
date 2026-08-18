@@ -61,7 +61,11 @@ Map<String,String> _moveNames(Directory root){
     final m=RegExp(r'^\s*const\s+([A-Z][A-Z0-9_]*)').firstMatch(line); if(m==null) continue;
     final symbol=m.group(1)!; if(symbol=='NO_MOVE'){started=true;continue;} if(!started) continue; if(symbol=='SHOWPIC_ANIM') break; symbols.add(symbol);
   }
-  final labels=RegExp(r'db\s+"([^"]+)@"').allMatches(names.readAsStringSync()).map((m)=>m.group(1)!).toList();
+  final text=names.readAsStringSync();
+  var labels=RegExp(r'^\s*li\s+"([^"]+)"', multiLine:true).allMatches(text).map((m)=>m.group(1)!).toList();
+  if(labels.isEmpty){
+    labels=RegExp(r'db\s+"([^"]+)@"').allMatches(text).map((m)=>m.group(1)!).toList();
+  }
   final out=<String,String>{}; for(var i=0;i<symbols.length&&i<labels.length;i++) out[symbols[i]]=labels[i]; return out;
 }
 
