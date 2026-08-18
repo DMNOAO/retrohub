@@ -1,6 +1,7 @@
 import '../../../core/assets/game_asset_profile.dart';
 import 'crystal_pokedex_generated.dart';
 import 'gold_pokedex_generated.dart';
+import 'silver_pokedex_generated.dart';
 import 'pokedex_models.dart';
 
 export 'pokedex_models.dart';
@@ -17,7 +18,7 @@ class PokedexDetailData {
       case PokemonAssetGame.gold:
         return goldGeneratedSpecies[pokemonId] ?? const PokedexSpeciesDetail();
       case PokemonAssetGame.silver:
-        return const PokedexSpeciesDetail();
+        return silverGeneratedSpecies[pokemonId] ?? const PokedexSpeciesDetail();
       default:
         return const PokedexSpeciesDetail();
     }
