@@ -20,10 +20,15 @@ Future<void> main() async {
 
     final entries = <int, String>{};
     for (final file in Directory('${temp.path}/data/pokemon/dex_entries').listSync().whereType<File>()) {
-      final text = file.readAsStringSync();
-      final label = RegExp(r'^([A-Za-z0-9]+)PokedexEntry:\s*$', multiLine: true).firstMatch(text)?.group(1);
-      final id = label == null ? null : normalizedToId[_normalize(label)];
-      if (id != null) entries[id] = _parseDexText(text);
+      // Current pokecrystal dex-entry files do not contain a PokedexEntry label;
+      // the species identity is encoded by the filename (for example
+      // bulbasaur.asm). Normalize it against the canonical pointer-table names.
+      final filename = file.uri.pathSegments.last;
+      final stem = filename.toLowerCase().endsWith('.asm')
+          ? filename.substring(0, filename.length - 4)
+          : filename;
+      final id = normalizedToId[_normalize(stem)];
+      if (id != null) entries[id] = _parseDexText(file.readAsStringSync());
     }
 
     final learnsets = _parseLearnsets(
