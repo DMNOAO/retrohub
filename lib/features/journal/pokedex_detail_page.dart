@@ -25,13 +25,19 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
   Widget build(BuildContext context) {
     final data = PokedexDetailData.forGame(widget.profile, widget.pokemonId);
     final name = PokemonDecoder.pokemonName(widget.pokemonId);
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: Text(name)),
+      backgroundColor: scheme.primaryContainer,
+      appBar: AppBar(backgroundColor: scheme.primaryContainer, title: Text(name)),
       body: ListView(padding: const EdgeInsets.all(20), children: [
         Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
           Text('#${widget.displayNumber.toString().padLeft(3, '0')}', style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 8),
-          SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: widget.pokemonId, isShiny: _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon, removeWhiteBackground: widget.profile.region == PokemonAssetRegion.johto),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)),
+            child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: widget.pokemonId, isShiny: _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon),
+          ),
           const SizedBox(height: 12),
           Text(name, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
@@ -42,14 +48,14 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
         ]))),
         const SizedBox(height: 12),
         _Section(icon: Icons.location_on_outlined, title: 'Dónde encontrarlo', child: data.encounters.isEmpty
-            ? const Text('Sin datos de encuentro registrados para esta versión.')
+            ? const Text('No aparece de forma salvaje en esta versión.')
             : Column(children: data.encounters.map((e) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.place_outlined), title: Text(e.location), subtitle: Text('${e.method} · ${e.time}'))).toList())),
         const SizedBox(height: 12),
-        _LockedSection(icon: Icons.menu_book_outlined, title: 'Entrada de la Pokédex', unlocked: widget.caught, child: data.entry.isEmpty ? const Text('Entrada aún no registrada en los datos locales de esta versión.') : Text(data.entry)),
+        _LockedSection(icon: Icons.menu_book_outlined, title: 'Entrada de la Pokédex', unlocked: widget.caught, child: data.entry.isEmpty ? const Text('Sin entrada registrada.') : Text(data.entry)),
         const SizedBox(height: 12),
-        _LockedSection(icon: Icons.trending_up, title: 'Movimientos por nivel', unlocked: widget.caught, child: data.levelMoves.isEmpty ? const Text('Learnset aún no registrado en los datos locales de esta versión.') : Column(children: data.levelMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text('Nv. ${m.level}'), title: Text(m.name))).toList())),
+        _LockedSection(icon: Icons.trending_up, title: 'Movimientos por nivel', unlocked: widget.caught, child: data.levelMoves.isEmpty ? const Text('Sin movimientos registrados.') : Column(children: data.levelMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text('Nv. ${m.level}'), title: Text(m.name))).toList())),
         const SizedBox(height: 12),
-        _LockedSection(icon: Icons.album_outlined, title: 'MT / MO', unlocked: widget.caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no registradas en los datos locales de esta versión.') : Column(children: data.machineMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text(m.machine), title: Text(m.name))).toList())),
+        _LockedSection(icon: Icons.album_outlined, title: 'MT / MO', unlocked: widget.caught, child: data.machineMoves.isEmpty ? const Text('Sin MT/MO registradas.') : Column(children: data.machineMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text(m.machine), title: Text(m.name))).toList())),
       ]),
     );
   }
