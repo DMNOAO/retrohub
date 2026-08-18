@@ -63,9 +63,7 @@ Map<String,String> _moveNames(Directory root){
   }
   final text=names.readAsStringSync();
   var labels=RegExp(r'^\s*li\s+"([^"]+)"', multiLine:true).allMatches(text).map((m)=>m.group(1)!).toList();
-  if(labels.isEmpty){
-    labels=RegExp(r'db\s+"([^"]+)@"').allMatches(text).map((m)=>m.group(1)!).toList();
-  }
+  if(labels.isEmpty){ labels=RegExp(r'db\s+"([^"]+)@"').allMatches(text).map((m)=>m.group(1)!).toList(); }
   final out=<String,String>{}; for(var i=0;i<symbols.length&&i<labels.length;i++) out[symbols[i]]=labels[i]; return out;
 }
 
@@ -108,8 +106,12 @@ void _write(String path,String variable,String version,Map<int,String> entries,M
   final b=StringBuffer("import 'pokedex_models.dart';\n\n// GENERATED FILE. Run: dart run tool/generate_gen1_pokedex.dart\nconst Map<int, PokedexSpeciesDetail> $variable = {\n");
   for(var id=1;id<=151;id++){
     b.writeln('  $id: PokedexSpeciesDetail('); final entry=entries[id]; if(entry!=null) b.writeln("    entry: '${_esc(entry)}',");
-    b.writeln('    levelUpMoves: ['); for(final m in learn[id]??const[]){ final n=moveNames[m.name]??_pretty(m.name); b.writeln("      PokedexMove(level: ${m.level}, name: '${_esc(n)}'),"); } b.writeln('    ],');
-    b.writeln('    machines: ['); for(final m in machines[id]??const[]){ final n=moveNames[m]??_pretty(m); b.writeln("      '${_esc(n)}',"); } b.writeln('    ],');
+    b.writeln('    levelMoves: [');
+    for(final m in learn[id]??const[]){ final n=moveNames[m.name]??_pretty(m.name); b.writeln("      PokedexMove(${m.level}, '${_esc(n)}'),"); }
+    b.writeln('    ],');
+    b.writeln('    machineMoves: [');
+    for(final m in machines[id]??const[]){ final n=moveNames[m]??_pretty(m); b.writeln("      PokedexMachineMove('MT/MO', '${_esc(n)}'),"); }
+    b.writeln('    ],');
     b.writeln('    encounters: ['); for(final e in enc[id]??const[]){ b.writeln("      PokedexEncounter(location: '${_esc(e.location)}', method: '${e.method}', time: 'Cualquier hora'),"); } b.writeln('    ],'); b.writeln('  ),');
   } b.writeln('};'); File(path).writeAsStringSync(b.toString()); stdout.writeln('$version dataset written to $path.');
 }
