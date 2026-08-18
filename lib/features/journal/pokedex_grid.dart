@@ -62,7 +62,13 @@ class _PokedexGridState extends State<PokedexGrid> {
             final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isGen3 && _order == PokedexOrder.hoenn) ? index + 1 : dexId;
             return InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: seen ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PokedexDetailPage(profile: widget.profile, pokemonId: dexId, displayNumber: displayNumber, caught: caught))) : null,
+              onTap: seen ? () {
+                final gameTheme = Theme.of(context);
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => Theme(
+                  data: gameTheme,
+                  child: PokedexDetailPage(profile: widget.profile, pokemonId: dexId, displayNumber: displayNumber, caught: caught),
+                )));
+              } : null,
               child: Container(
                 decoration: BoxDecoration(color: seen ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(14), border: Border.all(color: caught ? scheme.primary : scheme.outlineVariant, width: caught ? 2 : 1)),
                 child: Stack(children: [
