@@ -4,6 +4,7 @@ import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
+import 'pokedex_detail_page.dart';
 import 'pokedex_orders.dart';
 
 enum PokedexOrder { johto, hoenn, national }
@@ -14,13 +15,7 @@ class PokedexGrid extends StatefulWidget {
   final Set<int> caughtIds;
   final bool nationalDexUnlocked;
 
-  const PokedexGrid({
-    super.key,
-    required this.profile,
-    required this.seenIds,
-    required this.caughtIds,
-    this.nationalDexUnlocked = true,
-  });
+  const PokedexGrid({super.key, required this.profile, required this.seenIds, required this.caughtIds, this.nationalDexUnlocked = true});
 
   @override
   State<PokedexGrid> createState() => _PokedexGridState();
@@ -28,7 +23,6 @@ class PokedexGrid extends StatefulWidget {
 
 class _PokedexGridState extends State<PokedexGrid> {
   late PokedexOrder _order;
-
   bool get _isGen2 => widget.profile.region == PokemonAssetRegion.johto;
   bool get _isGen3 => widget.profile.region == PokemonAssetRegion.hoenn;
 
@@ -40,151 +34,60 @@ class _PokedexGridState extends State<PokedexGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final national = List<int>.generate(
-      _isGen3 ? 386 : (_isGen2 ? 251 : 151),
-      (index) => index + 1,
-    );
-    final ids = _isGen2 && _order == PokedexOrder.johto
-        ? _johtoOrder
-        : _isGen3 && _order == PokedexOrder.hoenn
-            ? hoennPokedexOrder
-            : national;
+    final national = List<int>.generate(_isGen3 ? 386 : (_isGen2 ? 251 : 151), (index) => index + 1);
+    final ids = _isGen2 && _order == PokedexOrder.johto ? _johtoOrder : _isGen3 && _order == PokedexOrder.hoenn ? hoennPokedexOrder : national;
     final visibleSeen = pokedexIdsInOrder(widget.seenIds, ids);
     final visibleCaught = pokedexIdsInOrder(widget.caughtIds, ids);
     final scheme = Theme.of(context).colorScheme;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${visibleSeen.length} vistos · ${visibleCaught.length} capturados',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        child: Row(children: [
+          Expanded(child: Text('${visibleSeen.length} vistos · ${visibleCaught.length} capturados', style: Theme.of(context).textTheme.titleMedium)),
+          if (_isGen2) SegmentedButton<PokedexOrder>(segments: const [ButtonSegment(value: PokedexOrder.johto, label: Text('Johto')), ButtonSegment(value: PokedexOrder.national, label: Text('Nacional'))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
+          if (_isGen3) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
+        ]),
+      ),
+      Expanded(child: LayoutBuilder(builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1100 ? 10 : constraints.maxWidth >= 800 ? 8 : constraints.maxWidth >= 560 ? 6 : 3;
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
+          itemCount: ids.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: .82),
+          itemBuilder: (context, index) {
+            final dexId = ids[index];
+            final seen = widget.seenIds.contains(dexId);
+            final caught = widget.caughtIds.contains(dexId);
+            final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isGen3 && _order == PokedexOrder.hoenn) ? index + 1 : dexId;
+            return InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: seen ? () {
+                final gameTheme = Theme.of(context);
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => Theme(
+                  data: gameTheme,
+                  child: PokedexDetailPage(profile: widget.profile, pokemonId: dexId, displayNumber: displayNumber, caught: caught),
+                )));
+              } : null,
+              child: Container(
+                decoration: BoxDecoration(color: seen ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(14), border: Border.all(color: caught ? scheme.primary : scheme.outlineVariant, width: caught ? 2 : 1)),
+                child: Stack(children: [
+                  Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Align(alignment: Alignment.topLeft, child: Text('#${displayNumber.toString().padLeft(4, '0')}', style: Theme.of(context).textTheme.labelSmall)),
+                      Expanded(child: Center(child: seen ? SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: dexId), size: 62, fallbackIcon: Icons.catching_pokemon) : Icon(Icons.question_mark, size: 34, color: scheme.onSurfaceVariant.withValues(alpha: .38)))),
+                      Text(seen ? PokemonDecoder.pokemonName(dexId) : 'No visto', maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelMedium),
+                    ]),
+                  ),
+                  if (caught) Positioned(right: 7, top: 7, child: Icon(Icons.catching_pokemon, size: 18, color: scheme.primary)),
+                ]),
               ),
-              if (_isGen2)
-                SegmentedButton<PokedexOrder>(
-                  segments: const [
-                    ButtonSegment(value: PokedexOrder.johto, label: Text('Johto')),
-                    ButtonSegment(value: PokedexOrder.national, label: Text('Nacional')),
-                  ],
-                  selected: {_order},
-                  onSelectionChanged: (value) => setState(() => _order = value.first),
-                ),
-              if (_isGen3)
-                SegmentedButton<PokedexOrder>(
-                  segments: [
-                    const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')),
-                    ButtonSegment(
-                      value: PokedexOrder.national,
-                      enabled: widget.nationalDexUnlocked,
-                      label: const Text('Nacional'),
-                      icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline),
-                    ),
-                  ],
-                  selected: {_order},
-                  onSelectionChanged: (value) => setState(() => _order = value.first),
-                ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1100
-                  ? 10
-                  : constraints.maxWidth >= 800
-                      ? 8
-                      : constraints.maxWidth >= 560
-                          ? 6
-                          : 3;
-              return GridView.builder(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-                itemCount: ids.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: .82,
-                ),
-                itemBuilder: (context, index) {
-                  final dexId = ids[index];
-                  final seen = widget.seenIds.contains(dexId);
-                  final caught = widget.caughtIds.contains(dexId);
-                  final displayNumber = (_isGen2 && _order == PokedexOrder.johto) ||
-                          (_isGen3 && _order == PokedexOrder.hoenn)
-                      ? index + 1
-                      : dexId;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: seen ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: caught ? scheme.primary : scheme.outlineVariant,
-                        width: caught ? 2 : 1,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(7),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Align(
-                                alignment: Alignment.topLeft,
-                                child: Text(
-                                  '#${displayNumber.toString().padLeft(4, '0')}',
-                                  style: Theme.of(context).textTheme.labelSmall,
-                                ),
-                              ),
-                              Expanded(
-                                child: Center(
-                                  child: seen
-                                      ? SpriteImage(
-                                          path: SpriteResolver.pokemonForGame(
-                                            profile: widget.profile,
-                                            pokemonId: dexId,
-                                          ),
-                                          size: 62,
-                                          fallbackIcon: Icons.catching_pokemon,
-                                        )
-                                      : Icon(
-                                          Icons.question_mark,
-                                          size: 34,
-                                          color: scheme.onSurfaceVariant.withValues(alpha: .38),
-                                        ),
-                                ),
-                              ),
-                              Text(
-                                seen ? PokemonDecoder.pokemonName(dexId) : 'No visto',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.labelMedium,
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (caught)
-                          Positioned(
-                            right: 7,
-                            top: 7,
-                            child: Icon(Icons.catching_pokemon, size: 18, color: scheme.primary),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
+            );
+          },
+        );
+      })),
+    ]);
   }
 }
 
