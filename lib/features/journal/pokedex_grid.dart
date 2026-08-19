@@ -71,7 +71,7 @@ class _PokedexGridState extends State<PokedexGrid> {
                     pokemonId: dexId,
                     displayNumber: displayNumber,
                     caught: caught,
-                    availableIds: visibleSeen,
+                    availableIds: visibleSeen.toList(),
                     caughtIds: widget.caughtIds,
                     dexOrder: ids,
                   ),
