@@ -828,6 +828,9 @@ class _EmulatorHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final coverPath = CoverHelper.getCover(game.title, game.console);
 
+    final bool isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+
     return Row(
       children: [
         _GameArtwork(
@@ -838,16 +841,19 @@ class _EmulatorHeader extends StatelessWidget {
           iconSize: 20,
         ),
         const SizedBox(width: 9),
-        Expanded(
-          child: Text(
-            _cleanGameTitle(game.title),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
+        if (isLandscape)
+          Expanded(
+            child: Text(
+              _cleanGameTitle(game.title),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          )
+        else
+          const Spacer(),
         if (partySpeciesIds.isNotEmpty) ...[
-          const SizedBox(width: 8),
+          if (isLandscape) const SizedBox(width: 8),
           _PartySprites(
             game: game,
             speciesIds: partySpeciesIds,
@@ -872,11 +878,7 @@ class _PartySprites extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-    final visibleIds = speciesIds
-        .take(isLandscape ? 6 : 3)
-        .toList(growable: false);
+    final visibleIds = speciesIds.take(6).toList(growable: false);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: visibleIds
