@@ -66,7 +66,15 @@ class _PokedexGridState extends State<PokedexGrid> {
                 final gameTheme = Theme.of(context);
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => Theme(
                   data: gameTheme,
-                  child: PokedexDetailPage(profile: widget.profile, pokemonId: dexId, displayNumber: displayNumber, caught: caught),
+                  child: PokedexDetailPage(
+                    profile: widget.profile,
+                    pokemonId: dexId,
+                    displayNumber: displayNumber,
+                    caught: caught,
+                    availableIds: visibleSeen.toList(),
+                    caughtIds: widget.caughtIds,
+                    dexOrder: ids,
+                  ),
                 )));
               } : null,
               child: Container(
