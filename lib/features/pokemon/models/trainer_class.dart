@@ -157,7 +157,10 @@ class TrainerClassResolver {
       'assets/sprites/characters/trainers/gbc/black_belt.png',
     ),
     0x33: TrainerClassInfo('Ejecutivo (M)'),
-    0x34: TrainerClassInfo('Médium (psíquico)'),
+    0x34: TrainerClassInfo(
+      'Médium (psíquico)',
+      'assets/sprites/characters/trainers/gbc/psychic.png',
+    ),
     0x35: TrainerClassInfo(
       'Excursionista (campo)',
       'assets/sprites/characters/trainers/gbc/picnicker.png',

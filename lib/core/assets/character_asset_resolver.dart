@@ -44,6 +44,7 @@ class CharacterAssetResolver {
     'marinero': 'sailor',
     'mecanico': 'engineer',
     'medium': 'medium',
+    'medium_psiquico': 'psychic',
     'mentalista': 'psychic',
     'excursionista': 'hiker',
     'montanero': 'hiker',
