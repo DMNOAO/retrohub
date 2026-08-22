@@ -1222,7 +1222,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
           ),
           if (kDebugMode && !Platform.isAndroid)
             Positioned(top: 12, left: 12, child: _buildStatusBadge()),
-          if (kDebugMode && !Platform.isAndroid)
+          if ((kDebugMode && !Platform.isAndroid) ||
+              _pokemonVersion == PokemonGameVersion.fireRed ||
+              _pokemonVersion == PokemonGameVersion.leafGreen)
             Positioned(top: 12, right: 12, child: _buildMemoryBadge()),
         ],
       );

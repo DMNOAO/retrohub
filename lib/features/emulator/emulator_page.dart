@@ -112,7 +112,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         (CoreLoader.isGbaRom(game.romPath) &&
             (pokemonProfile.version == PokemonGameVersion.emerald ||
                 pokemonProfile.version == PokemonGameVersion.ruby ||
-                pokemonProfile.version == PokemonGameVersion.sapphire));
+                pokemonProfile.version == PokemonGameVersion.sapphire ||
+                pokemonProfile.version == PokemonGameVersion.fireRed ||
+                pokemonProfile.version == PokemonGameVersion.leafGreen));
 
     if (supportsPokemonJournal) {
       _pokemonJournalTracker = PokemonJournalTracker(
@@ -1323,15 +1325,15 @@ class _EmulatorVisualTheme {
     if (identity.contains('firered') ||
         identity.contains('fire red') ||
         identity.contains('rojo fuego')) {
-      primary = const Color(0xFF45151A);
-      secondary = const Color(0xFF7A281E);
-      accent = const Color(0xFFFF805C);
+      primary = const Color(0xFFF05A24);
+      secondary = const Color(0xFF7A260E);
+      accent = const Color(0xFFFFC44F);
     } else if (identity.contains('leafgreen') ||
         identity.contains('leaf green') ||
         identity.contains('verde hoja')) {
-      primary = const Color(0xFF123D2A);
-      secondary = const Color(0xFF277044);
-      accent = const Color(0xFF78E58F);
+      primary = const Color(0xFF62C947);
+      secondary = const Color(0xFF286A22);
+      accent = const Color(0xFFD0F58F);
     } else if (identity.contains('emerald') || identity.contains('esmeralda')) {
       primary = const Color(0xFF0E382D);
       secondary = const Color(0xFF176A4B);
