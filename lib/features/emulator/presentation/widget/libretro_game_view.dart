@@ -515,11 +515,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw Exception('$coreName no pudo cargar la ROM:\n${widget.romPath}');
       }
 
-      // Todos los cores entregan PCM mediante los callbacks estándar de
-      // libretro. El reproductor adapta la frecuencia informada por cada core.
-      final audioPlayer = LibretroAudioPlayer();
-      _audioPlayer = audioPlayer;
-      await audioPlayer.start(bridge);
+      // SameBoy (GB/GBC) permanece sin audio hasta contar con una salida PCM
+      // estable. mGBA y SNES9x conservan el pipeline SoLoud actual.
+      final String normalizedCoreName = coreName.toLowerCase();
+      final bool usesSoLoudAudio = !normalizedCoreName.contains('sameboy');
+
+      if (usesSoLoudAudio) {
+        final audioPlayer = LibretroAudioPlayer();
+        _audioPlayer = audioPlayer;
+        await audioPlayer.start(bridge);
+      } else {
+        _audioPlayer = null;
+        bridge.clearAudio();
+      }
 
       final paths = _persistencePaths;
       if (paths != null && File(paths.sramFile).existsSync()) {
