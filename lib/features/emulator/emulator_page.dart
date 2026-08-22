@@ -605,6 +605,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               width: 138,
                               child: _LandscapeLeftControls(
                                 controller: _gameController,
+                                directionalControl:
+                                    _preferences.directionalControl,
                                 buttonUp: _buttonUp,
                                 buttonDown: _buttonDown,
                                 buttonLeft: _buttonLeft,
@@ -750,6 +752,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             opacity: isSnes ? 1 : _preferences.controlOpacity,
                             swapLabels: !isSnes && _preferences.swapAB,
                             controller: _gameController,
+                            directionalControl:
+                                _preferences.directionalControl,
                             buttonUp: _buttonUp,
                             buttonDown: _buttonDown,
                             buttonLeft: _buttonLeft,
@@ -1279,6 +1283,7 @@ class _CoreNotFoundView extends StatelessWidget {
 
 class _LandscapeLeftControls extends StatelessWidget {
   final LibretroGameController controller;
+  final DirectionalControlType directionalControl;
   final int buttonUp;
   final int buttonDown;
   final int buttonLeft;
@@ -1289,6 +1294,7 @@ class _LandscapeLeftControls extends StatelessWidget {
 
   const _LandscapeLeftControls({
     required this.controller,
+    required this.directionalControl,
     required this.buttonUp,
     required this.buttonDown,
     required this.buttonLeft,
@@ -1319,7 +1325,8 @@ class _LandscapeLeftControls extends StatelessWidget {
           controller: controller,
         ),
         const SizedBox(height: 22),
-        _GameBoyDPad(
+        _DirectionalControl(
+          type: directionalControl,
           keySize: 38,
           controller: controller,
           buttonUp: buttonUp,
@@ -1419,6 +1426,7 @@ class _GameBoyControls extends StatelessWidget {
   final double opacity;
   final bool swapLabels;
   final LibretroGameController controller;
+  final DirectionalControlType directionalControl;
   final int buttonUp;
   final int buttonDown;
   final int buttonLeft;
@@ -1441,6 +1449,7 @@ class _GameBoyControls extends StatelessWidget {
     this.opacity = 1,
     this.swapLabels = false,
     required this.controller,
+    required this.directionalControl,
     required this.buttonUp,
     required this.buttonDown,
     required this.buttonLeft,
@@ -1464,7 +1473,8 @@ class _GameBoyControls extends StatelessWidget {
     final double systemWidth = (compact ? 68 : 82) * sizeScale;
     final double systemHeight = (compact ? 24 : 28) * sizeScale;
 
-    final Widget dPad = _GameBoyDPad(
+    final Widget dPad = _DirectionalControl(
+      type: directionalControl,
       keySize: dPadKeySize,
       controller: controller,
       buttonUp: buttonUp,
@@ -1615,6 +1625,226 @@ class _SnesActionPad extends StatelessWidget {
             child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: const Color(0xFFD3B84A)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DirectionalControl extends StatelessWidget {
+  final DirectionalControlType type;
+  final double keySize;
+  final LibretroGameController controller;
+  final int buttonUp;
+  final int buttonDown;
+  final int buttonLeft;
+  final int buttonRight;
+
+  const _DirectionalControl({
+    required this.type,
+    required this.keySize,
+    required this.controller,
+    required this.buttonUp,
+    required this.buttonDown,
+    required this.buttonLeft,
+    required this.buttonRight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (type == DirectionalControlType.joystick) {
+      return _VirtualJoystick(
+        size: keySize * 3,
+        controller: controller,
+        buttonUp: buttonUp,
+        buttonDown: buttonDown,
+        buttonLeft: buttonLeft,
+        buttonRight: buttonRight,
+      );
+    }
+    return _GameBoyDPad(
+      keySize: keySize,
+      controller: controller,
+      buttonUp: buttonUp,
+      buttonDown: buttonDown,
+      buttonLeft: buttonLeft,
+      buttonRight: buttonRight,
+    );
+  }
+}
+
+class _VirtualJoystick extends StatefulWidget {
+  final double size;
+  final LibretroGameController controller;
+  final int buttonUp;
+  final int buttonDown;
+  final int buttonLeft;
+  final int buttonRight;
+
+  const _VirtualJoystick({
+    required this.size,
+    required this.controller,
+    required this.buttonUp,
+    required this.buttonDown,
+    required this.buttonLeft,
+    required this.buttonRight,
+  });
+
+  @override
+  State<_VirtualJoystick> createState() => _VirtualJoystickState();
+}
+
+class _VirtualJoystickState extends State<_VirtualJoystick> {
+  Offset _knobOffset = Offset.zero;
+  final Set<int> _pressedButtons = <int>{};
+  int? _activePointer;
+
+  double get _travelRadius => widget.size * .27;
+
+  void _updatePosition(Offset localPosition) {
+    final center = Offset(widget.size / 2, widget.size / 2);
+    final rawOffset = localPosition - center;
+    final distance = rawOffset.distance;
+    final clampedOffset = distance <= _travelRadius || distance == 0
+        ? rawOffset
+        : rawOffset / distance * _travelRadius;
+    final normalized = clampedOffset / _travelRadius;
+    final desiredButtons = <int>{};
+
+    // The threshold creates a central dead zone and still allows diagonals.
+    if (normalized.dx < -.32) desiredButtons.add(widget.buttonLeft);
+    if (normalized.dx > .32) desiredButtons.add(widget.buttonRight);
+    if (normalized.dy < -.32) desiredButtons.add(widget.buttonUp);
+    if (normalized.dy > .32) desiredButtons.add(widget.buttonDown);
+
+    _setPressedButtons(desiredButtons);
+    setState(() => _knobOffset = clampedOffset);
+  }
+
+  void _setPressedButtons(Set<int> desiredButtons) {
+    for (final button in _pressedButtons.difference(desiredButtons)) {
+      widget.controller.releaseButton(button);
+    }
+    for (final button in desiredButtons.difference(_pressedButtons)) {
+      widget.controller.pressButton(button);
+    }
+    _pressedButtons
+      ..clear()
+      ..addAll(desiredButtons);
+  }
+
+  void _release() {
+    _setPressedButtons(<int>{});
+    if (mounted) setState(() => _knobOffset = Offset.zero);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VirtualJoystick oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.buttonUp != widget.buttonUp ||
+        oldWidget.buttonDown != widget.buttonDown ||
+        oldWidget.buttonLeft != widget.buttonLeft ||
+        oldWidget.buttonRight != widget.buttonRight) {
+      for (final button in _pressedButtons) {
+        oldWidget.controller.releaseButton(button);
+      }
+      _pressedButtons.clear();
+      _knobOffset = Offset.zero;
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final button in _pressedButtons) {
+      widget.controller.releaseButton(button);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final knobSize = widget.size * .44;
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (event) {
+        if (_activePointer != null) return;
+        _activePointer = event.pointer;
+        _updatePosition(event.localPosition);
+      },
+      onPointerMove: (event) {
+        if (_activePointer == event.pointer) {
+          _updatePosition(event.localPosition);
+        }
+      },
+      onPointerUp: (event) {
+        if (_activePointer != event.pointer) return;
+        _activePointer = null;
+        _release();
+      },
+      onPointerCancel: (event) {
+        if (_activePointer != event.pointer) return;
+        _activePointer = null;
+        _release();
+      },
+      child: SizedBox.square(
+        dimension: widget.size,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              colors: <Color>[
+                Color(0xFF34343B),
+                Color(0xFF202026),
+                Color(0xFF111116),
+              ],
+              stops: <double>[0, .72, 1],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: .14),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: .48),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: .06),
+                blurRadius: 4,
+                offset: const Offset(-2, -2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Transform.translate(
+              offset: _knobOffset,
+              child: Container(
+                width: knobSize,
+                height: knobSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[Color(0xFF77777F), Color(0xFF3D3D44)],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .22),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .55),
+                      blurRadius: 8,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

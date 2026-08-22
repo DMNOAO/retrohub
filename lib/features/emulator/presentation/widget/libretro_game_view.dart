@@ -515,12 +515,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw Exception('$coreName no pudo cargar la ROM:\n${widget.romPath}');
       }
 
-      // El pipeline PCM/SoLoud se usa exclusivamente para SNES.
-      // GB/GBC (SameBoy) y GBA (mGBA) mantienen su comportamiento previo.
+      // SameBoy (GB/GBC) permanece sin audio hasta contar con una salida PCM
+      // estable. mGBA y SNES9x conservan el pipeline SoLoud actual.
       final String normalizedCoreName = coreName.toLowerCase();
-      final bool usesSoLoudAudio =
-          normalizedCoreName.contains('snes9x') ||
-          normalizedCoreName.contains('snes');
+      final bool usesSoLoudAudio = !normalizedCoreName.contains('sameboy');
 
       if (usesSoLoudAudio) {
         final audioPlayer = LibretroAudioPlayer();
@@ -528,6 +526,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         await audioPlayer.start(bridge);
       } else {
         _audioPlayer = null;
+        bridge.clearAudio();
       }
 
       final paths = _persistencePaths;

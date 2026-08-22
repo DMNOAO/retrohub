@@ -153,6 +153,48 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 ],
               ),
             ),
+            const SizedBox(height: 22),
+            const _SectionTitle('Controles'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Control de dirección',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Elige entre la cruceta tradicional o una palanca virtual de ocho direcciones.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    SegmentedButton<DirectionalControlType>(
+                      segments: const [
+                        ButtonSegment(
+                          value: DirectionalControlType.dPad,
+                          label: Text('Cruceta'),
+                          icon: Icon(Icons.control_camera_rounded),
+                        ),
+                        ButtonSegment(
+                          value: DirectionalControlType.joystick,
+                          label: Text('Palanca'),
+                          icon: Icon(Icons.sports_esports_rounded),
+                        ),
+                      ],
+                      selected: {_preferences.directionalControl},
+                      onSelectionChanged: (selection) => _update(
+                        _preferences.copyWith(
+                          directionalControl: selection.first,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (widget.supportsGameBoyOptions) ...[
             const SizedBox(height: 22),
             const _SectionTitle('Controles GB · GBC · GBA'),
@@ -233,6 +275,7 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                           controlOpacity: defaults.controlOpacity,
                           vibrationEnabled: defaults.vibrationEnabled,
                           swapAB: defaults.swapAB,
+                          directionalControl: defaults.directionalControl,
                         );
                         await updated.save();
                         if (mounted) {
