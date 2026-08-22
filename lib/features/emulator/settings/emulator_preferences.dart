@@ -12,6 +12,8 @@ enum EmulatorScreenFilter { pixel, smooth }
 
 enum EmulatorOrientation { automatic, portrait, landscape }
 
+enum SnesButtonColorStyle { violet, multicolor, monochrome, custom }
+
 class EmulatorPreferences {
   static const _layoutKey = 'emulator_gb_control_layout';
   static const _sizeKey = 'emulator_gb_control_size';
@@ -28,6 +30,12 @@ class EmulatorPreferences {
   static const _autoSaveOnExitKey = 'emulator_gb_auto_save_on_exit';
   static const _autoLoadOnStartKey = 'emulator_gb_auto_load_on_start';
   static const _confirmOverwriteKey = 'emulator_gb_confirm_overwrite';
+  static const _snesFullscreenKey = 'emulator_snes_fullscreen';
+  static const _snesButtonColorStyleKey = 'emulator_snes_button_color_style';
+  static const _snesButtonAColorKey = 'emulator_snes_button_a_color';
+  static const _snesButtonBColorKey = 'emulator_snes_button_b_color';
+  static const _snesButtonXColorKey = 'emulator_snes_button_x_color';
+  static const _snesButtonYColorKey = 'emulator_snes_button_y_color';
 
   final GameBoyControlLayout layout;
   final GameBoyControlSize controlSize;
@@ -44,6 +52,12 @@ class EmulatorPreferences {
   final bool autoSaveOnExit;
   final bool autoLoadOnStart;
   final bool confirmBeforeOverwrite;
+  final bool snesFullscreen;
+  final SnesButtonColorStyle snesButtonColorStyle;
+  final int snesButtonAColor;
+  final int snesButtonBColor;
+  final int snesButtonXColor;
+  final int snesButtonYColor;
 
   const EmulatorPreferences({
     this.layout = GameBoyControlLayout.classic,
@@ -61,6 +75,12 @@ class EmulatorPreferences {
     this.autoSaveOnExit = true,
     this.autoLoadOnStart = false,
     this.confirmBeforeOverwrite = true,
+    this.snesFullscreen = false,
+    this.snesButtonColorStyle = SnesButtonColorStyle.violet,
+    this.snesButtonAColor = 0xFF5E4B8B,
+    this.snesButtonBColor = 0xFF8173AE,
+    this.snesButtonXColor = 0xFF8173AE,
+    this.snesButtonYColor = 0xFF5E4B8B,
   });
 
   double get sizeScale => switch (controlSize) {
@@ -85,6 +105,12 @@ class EmulatorPreferences {
     bool? autoSaveOnExit,
     bool? autoLoadOnStart,
     bool? confirmBeforeOverwrite,
+    bool? snesFullscreen,
+    SnesButtonColorStyle? snesButtonColorStyle,
+    int? snesButtonAColor,
+    int? snesButtonBColor,
+    int? snesButtonXColor,
+    int? snesButtonYColor,
   }) {
     return EmulatorPreferences(
       layout: layout ?? this.layout,
@@ -103,6 +129,13 @@ class EmulatorPreferences {
       autoLoadOnStart: autoLoadOnStart ?? this.autoLoadOnStart,
       confirmBeforeOverwrite:
           confirmBeforeOverwrite ?? this.confirmBeforeOverwrite,
+      snesFullscreen: snesFullscreen ?? this.snesFullscreen,
+      snesButtonColorStyle:
+          snesButtonColorStyle ?? this.snesButtonColorStyle,
+      snesButtonAColor: snesButtonAColor ?? this.snesButtonAColor,
+      snesButtonBColor: snesButtonBColor ?? this.snesButtonBColor,
+      snesButtonXColor: snesButtonXColor ?? this.snesButtonXColor,
+      snesButtonYColor: snesButtonYColor ?? this.snesButtonYColor,
     );
   }
 
@@ -142,6 +175,20 @@ class EmulatorPreferences {
       autoSaveOnExit: storage.getBool(_autoSaveOnExitKey) ?? true,
       autoLoadOnStart: storage.getBool(_autoLoadOnStartKey) ?? false,
       confirmBeforeOverwrite: storage.getBool(_confirmOverwriteKey) ?? true,
+      snesFullscreen: storage.getBool(_snesFullscreenKey) ?? false,
+      snesButtonColorStyle: SnesButtonColorStyle.values.firstWhere(
+        (value) =>
+            value.name == storage.getString(_snesButtonColorStyleKey),
+        orElse: () => SnesButtonColorStyle.violet,
+      ),
+      snesButtonAColor:
+          storage.getInt(_snesButtonAColorKey) ?? 0xFF5E4B8B,
+      snesButtonBColor:
+          storage.getInt(_snesButtonBColorKey) ?? 0xFF8173AE,
+      snesButtonXColor:
+          storage.getInt(_snesButtonXColorKey) ?? 0xFF8173AE,
+      snesButtonYColor:
+          storage.getInt(_snesButtonYColorKey) ?? 0xFF5E4B8B,
     );
   }
 
@@ -163,6 +210,15 @@ class EmulatorPreferences {
       storage.setBool(_autoSaveOnExitKey, autoSaveOnExit),
       storage.setBool(_autoLoadOnStartKey, autoLoadOnStart),
       storage.setBool(_confirmOverwriteKey, confirmBeforeOverwrite),
+      storage.setBool(_snesFullscreenKey, snesFullscreen),
+      storage.setString(
+        _snesButtonColorStyleKey,
+        snesButtonColorStyle.name,
+      ),
+      storage.setInt(_snesButtonAColorKey, snesButtonAColor),
+      storage.setInt(_snesButtonBColorKey, snesButtonBColor),
+      storage.setInt(_snesButtonXColorKey, snesButtonXColor),
+      storage.setInt(_snesButtonYColorKey, snesButtonYColor),
     ]);
   }
 
