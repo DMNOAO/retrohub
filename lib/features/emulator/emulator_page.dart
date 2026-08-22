@@ -604,6 +604,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     : FilterQuality.medium,
                                 autoLoadState:
                                     _preferences.autoLoadOnStart && !isSnes,
+                                displayAspectRatio: isSnes ? 4 / 3 : null,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
