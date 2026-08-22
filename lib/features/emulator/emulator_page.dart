@@ -572,6 +572,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
               decoration: BoxDecoration(gradient: visualTheme.gradient),
               child: SafeArea(
                 top: false,
+                left: !consoleFullscreen,
+                right: !consoleFullscreen,
+                bottom: !consoleFullscreen,
                 child: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints constraints) {
                     final bool landscape =
@@ -700,7 +703,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               .clamp(0.0, constraints.maxWidth / 2)
                               .toDouble();
                       return ColoredBox(
-                        color: const Color(0xFF171A2D),
+                        color: visualTheme.background,
                         child: Row(
                           children: [
                             SizedBox(
@@ -708,8 +711,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               child: _SnesSidePanel(
                                 isLeft: true,
                                 opacity: _preferences.controlOpacity,
-                                topColor: const Color(0xFF37325D),
-                                bottomColor: const Color(0xFF20243D),
+                                topColor: visualTheme.background,
+                                bottomColor: visualTheme.gradient.colors[2],
+                                borderColor: visualTheme.accent.withValues(
+                                  alpha: .55,
+                                ),
                                 child: _LandscapeLeftControls(
                                   controller: _gameController,
                                   directionalControl:
@@ -732,8 +738,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               child: _SnesSidePanel(
                                 isLeft: false,
                                 opacity: _preferences.controlOpacity,
-                                topColor: const Color(0xFF37325D),
-                                bottomColor: const Color(0xFF20243D),
+                                topColor: visualTheme.background,
+                                bottomColor: visualTheme.gradient.colors[2],
+                                borderColor: visualTheme.accent.withValues(
+                                  alpha: .55,
+                                ),
                                 child: _LandscapeRightControls(
                                   controller: _gameController,
                                   buttonA: _preferences.swapAB
@@ -748,6 +757,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   buttonR: _buttonR,
                                   showShoulder: true,
                                   isSnes: false,
+                                  rotateActions: false,
                                 ),
                               ),
                             ),
@@ -1470,6 +1480,7 @@ class _SnesSidePanel extends StatelessWidget {
   final Widget child;
   final Color topColor;
   final Color bottomColor;
+  final Color borderColor;
 
   const _SnesSidePanel({
     required this.isLeft,
@@ -1477,6 +1488,7 @@ class _SnesSidePanel extends StatelessWidget {
     required this.child,
     this.topColor = const Color(0xFFD9D8DC),
     this.bottomColor = const Color(0xFFB8B7BD),
+    this.borderColor = const Color(0xFF77747F),
   });
 
   @override
@@ -1491,9 +1503,9 @@ class _SnesSidePanel extends StatelessWidget {
         border: Border(
           left: isLeft
               ? BorderSide.none
-              : const BorderSide(color: Color(0xFF77747F), width: 2),
+              : BorderSide(color: borderColor, width: 2),
           right: isLeft
-              ? const BorderSide(color: Color(0xFF77747F), width: 2)
+              ? BorderSide(color: borderColor, width: 2)
               : BorderSide.none,
         ),
       ),
@@ -1582,6 +1594,7 @@ class _LandscapeRightControls extends StatelessWidget {
   final int buttonR;
   final bool showShoulder;
   final bool isSnes;
+  final bool rotateActions;
   final Color buttonAColor;
   final Color buttonBColor;
   final Color buttonXColor;
@@ -1597,6 +1610,7 @@ class _LandscapeRightControls extends StatelessWidget {
     required this.buttonR,
     required this.showShoulder,
     required this.isSnes,
+    this.rotateActions = true,
     this.buttonAColor = const Color(0xFF5E4B8B),
     this.buttonBColor = const Color(0xFF8173AE),
     this.buttonXColor = const Color(0xFF8173AE),
@@ -1638,25 +1652,28 @@ class _LandscapeRightControls extends StatelessWidget {
             buttonYColor: buttonYColor,
           )
         else
-          Transform.rotate(
-            angle: -0.20,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _GameBoyActionButton(
-                  size: 58,
-                  label: 'B',
-                  buttonId: buttonB,
-                  controller: controller,
-                ),
-                const SizedBox(width: 14),
-                _GameBoyActionButton(
-                  size: 58,
-                  label: 'A',
-                  buttonId: buttonA,
-                  controller: controller,
-                ),
-              ],
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Transform.rotate(
+              angle: rotateActions ? -0.20 : 0,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _GameBoyActionButton(
+                    size: 58,
+                    label: 'B',
+                    buttonId: buttonB,
+                    controller: controller,
+                  ),
+                  const SizedBox(width: 14),
+                  _GameBoyActionButton(
+                    size: 58,
+                    label: 'A',
+                    buttonId: buttonA,
+                    controller: controller,
+                  ),
+                ],
+              ),
             ),
           ),
       ],
