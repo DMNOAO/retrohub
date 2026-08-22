@@ -4,6 +4,8 @@ enum GameBoyControlLayout { classic, compact }
 
 enum GameBoyControlSize { small, normal, large }
 
+enum DirectionalControlType { dPad, joystick }
+
 enum EmulatorScreenScale { aspectRatio, fitWidth, stretch }
 
 enum EmulatorScreenFilter { pixel, smooth }
@@ -16,6 +18,7 @@ class EmulatorPreferences {
   static const _opacityKey = 'emulator_gb_control_opacity';
   static const _vibrationKey = 'emulator_gb_control_vibration';
   static const _swapButtonsKey = 'emulator_gb_swap_ab';
+  static const _directionalControlKey = 'emulator_directional_control';
   static const _screenScaleKey = 'emulator_gb_screen_scale';
   static const _screenFilterKey = 'emulator_gb_screen_filter';
   static const _showIdentityKey = 'emulator_gb_show_identity';
@@ -31,6 +34,7 @@ class EmulatorPreferences {
   final double controlOpacity;
   final bool vibrationEnabled;
   final bool swapAB;
+  final DirectionalControlType directionalControl;
   final EmulatorScreenScale screenScale;
   final EmulatorScreenFilter screenFilter;
   final bool showConsoleIdentity;
@@ -47,6 +51,7 @@ class EmulatorPreferences {
     this.controlOpacity = 1,
     this.vibrationEnabled = true,
     this.swapAB = false,
+    this.directionalControl = DirectionalControlType.dPad,
     this.screenScale = EmulatorScreenScale.aspectRatio,
     this.screenFilter = EmulatorScreenFilter.pixel,
     this.showConsoleIdentity = true,
@@ -70,6 +75,7 @@ class EmulatorPreferences {
     double? controlOpacity,
     bool? vibrationEnabled,
     bool? swapAB,
+    DirectionalControlType? directionalControl,
     EmulatorScreenScale? screenScale,
     EmulatorScreenFilter? screenFilter,
     bool? showConsoleIdentity,
@@ -86,6 +92,7 @@ class EmulatorPreferences {
       controlOpacity: controlOpacity ?? this.controlOpacity,
       vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       swapAB: swapAB ?? this.swapAB,
+      directionalControl: directionalControl ?? this.directionalControl,
       screenScale: screenScale ?? this.screenScale,
       screenFilter: screenFilter ?? this.screenFilter,
       showConsoleIdentity: showConsoleIdentity ?? this.showConsoleIdentity,
@@ -113,6 +120,10 @@ class EmulatorPreferences {
       controlOpacity: (storage.getDouble(_opacityKey) ?? 1).clamp(.45, 1),
       vibrationEnabled: storage.getBool(_vibrationKey) ?? true,
       swapAB: storage.getBool(_swapButtonsKey) ?? false,
+      directionalControl: DirectionalControlType.values.firstWhere(
+        (value) => value.name == storage.getString(_directionalControlKey),
+        orElse: () => DirectionalControlType.dPad,
+      ),
       screenScale: EmulatorScreenScale.values.firstWhere(
         (value) => value.name == storage.getString(_screenScaleKey),
         orElse: () => EmulatorScreenScale.aspectRatio,
@@ -142,6 +153,7 @@ class EmulatorPreferences {
       storage.setDouble(_opacityKey, controlOpacity),
       storage.setBool(_vibrationKey, vibrationEnabled),
       storage.setBool(_swapButtonsKey, swapAB),
+      storage.setString(_directionalControlKey, directionalControl.name),
       storage.setString(_screenScaleKey, screenScale.name),
       storage.setString(_screenFilterKey, screenFilter.name),
       storage.setBool(_showIdentityKey, showConsoleIdentity),
