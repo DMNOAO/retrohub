@@ -14,6 +14,8 @@ final class PokemonEmeraldMemoryReader {
   static const int _fireRedLeafGreenSaveBlock1Size = 0x3D68;
   static const int _fireRedLeafGreenSaveBlock2Size = 0x0F24;
   static const int _fireRedLeafGreenDmaPadding = 0x80;
+  static const int _fireRedLeafGreenDexSeen1Offset = 0x05F8;
+  static const int _fireRedLeafGreenDexSeen2Offset = 0x3A18;
   static const int _rubySapphireSaveBlock1Address = 0x02025734;
   static const int _rubySapphireSaveBlock2Address = 0x02024EA4;
   static const int _rubySapphireSaveBlock1Size = 0x3AC0;
@@ -636,6 +638,10 @@ final class PokemonEmeraldMemoryReader {
         !_hasConsistentRubySapphirePokedex(saveBlock1!, saveBlock2)) {
       return false;
     }
+    if (_isFireRedLeafGreen &&
+        !_hasConsistentFireRedLeafGreenPokedex(saveBlock1!, saveBlock2)) {
+      return false;
+    }
 
     // Estos campos forman la cabecera de SaveBlock2 en todos los juegos
     // principales de Gen III. Validarlos evita aceptar buffers temporales
@@ -657,7 +663,11 @@ final class PokemonEmeraldMemoryReader {
     final int minutes = _u8(saveBlock2 + 0x10);
     final int seconds = _u8(saveBlock2 + 0x11);
     final int frames = _u8(saveBlock2 + 0x12);
-    if (hours > 9999 || minutes > 59 || seconds > 59 || frames > 59) {
+    final int maximumHours = _isFireRedLeafGreen ? 999 : 9999;
+    if (hours > maximumHours ||
+        minutes > 59 ||
+        seconds > 59 ||
+        frames > 59) {
       return false;
     }
 
@@ -753,6 +763,26 @@ final class PokemonEmeraldMemoryReader {
     );
     final List<int> tertiarySeen = _read(
       saveBlock1 + _rubySapphireDexSeen3Offset,
+      _pokedexBytes,
+    );
+    return equalBytes(primarySeen, secondarySeen) &&
+        equalBytes(primarySeen, tertiarySeen);
+  }
+
+  bool _hasConsistentFireRedLeafGreenPokedex(
+    int saveBlock1,
+    int saveBlock2,
+  ) {
+    final List<int> primarySeen = _read(
+      saveBlock2 + _pokedexSeenOffset,
+      _pokedexBytes,
+    );
+    final List<int> secondarySeen = _read(
+      saveBlock1 + _fireRedLeafGreenDexSeen1Offset,
+      _pokedexBytes,
+    );
+    final List<int> tertiarySeen = _read(
+      saveBlock1 + _fireRedLeafGreenDexSeen2Offset,
       _pokedexBytes,
     );
     return equalBytes(primarySeen, secondarySeen) &&

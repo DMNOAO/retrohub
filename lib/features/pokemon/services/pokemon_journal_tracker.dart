@@ -131,6 +131,22 @@ class PokemonJournalTracker {
         );
         return;
       }
+      final PokemonMemorySnapshot? accepted = _accepted;
+      if (accepted != null) {
+        final String? transitionError = _transitionPlausibilityError(
+          accepted,
+          current,
+        );
+        if (transitionError != null) {
+          RuntimeDiagnosticsLog.recordJournalDecision(
+            'Snapshot rejected',
+            transitionError,
+          );
+          _candidate = null;
+          _candidateRepeats = 0;
+          return;
+        }
+      }
 
       await _ensureEmeraldGymLeaderEvents(current);
 
@@ -255,6 +271,33 @@ class PokemonJournalTracker {
               : pokemon.pokedexId >= 1 && pokemon.pokedexId <= 386,
         )) {
       return 'invalid party';
+    }
+    return null;
+  }
+
+  String? _transitionPlausibilityError(
+    PokemonMemorySnapshot previous,
+    PokemonMemorySnapshot current,
+  ) {
+    final bool fireRedLeafGreen =
+        current.profile.version == PokemonGameVersion.fireRed ||
+        current.profile.version == PokemonGameVersion.leafGreen;
+    if (!fireRedLeafGreen) return null;
+
+    if (current.playerName != previous.playerName ||
+        current.trainerId != previous.trainerId) {
+      return 'FRLG player identity changed transiently';
+    }
+    if (previous.party.isNotEmpty && current.party.isEmpty) {
+      return 'FRLG party disappeared transiently';
+    }
+
+    final int? previousPlayTime = previous.gamePlayTimeMinutes;
+    final int? currentPlayTime = current.gamePlayTimeMinutes;
+    if (previousPlayTime != null &&
+        currentPlayTime != null &&
+        currentPlayTime > previousPlayTime + 10) {
+      return 'FRLG playtime jumped forward transiently';
     }
     return null;
   }
