@@ -154,7 +154,19 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   }
 
   Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
-    if (_isAndroidSnes || CoreLoader.isSnesRom(game.romPath)) return;
+    if (CoreLoader.isSnesRom(game.romPath)) {
+      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
+      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(
+        preferences.snesFullscreen
+            ? SystemUiMode.immersiveSticky
+            : SystemUiMode.edgeToEdge,
+      );
+      return;
+    }
     await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
     final orientations = switch (preferences.orientation) {
       EmulatorOrientation.automatic => const <DeviceOrientation>[],
@@ -316,6 +328,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         builder: (_) => EmulatorSettingsPage(
           gameTitle: game.title,
           supportsGameBoyOptions: !CoreLoader.isSnesRom(game.romPath),
+          supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
           initialPreferences: _preferences,
           saveStateService: SaveStateService(
             gameId: game.id,
@@ -500,9 +513,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         ]),
       );
     } else {
-      unawaited(WakelockPlus.disable());
       unawaited(SystemChrome.setPreferredOrientations(const []));
     }
+    unawaited(WakelockPlus.disable());
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     super.dispose();
   }
 
@@ -518,6 +532,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final bool pageLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
+    final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
     _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
 
     return PopScope(
@@ -527,7 +542,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       },
       child: Scaffold(
         backgroundColor: visualTheme.background,
-        appBar: AppBar(
+        appBar: snesFullscreen ? null : AppBar(
           toolbarHeight: 58,
           backgroundColor: visualTheme.appBar,
           foregroundColor: Colors.white,
@@ -553,8 +568,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     final Widget gameView = Container(
                       decoration: BoxDecoration(
                         color: Colors.black,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
+                        borderRadius: BorderRadius.circular(
+                          snesFullscreen ? 0 : 18,
+                        ),
+                        border: snesFullscreen ? null : Border.all(
                           color: corePath != null
                               ? visualTheme.accent
                               : Theme.of(context).colorScheme.error,
@@ -562,7 +579,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         ),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(
+                          snesFullscreen ? 0 : 15,
+                        ),
                         child: corePath != null
                             ? LibretroGameView(
                                 key: _gameViewKey,
@@ -592,6 +611,70 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               ),
                       ),
                     );
+
+                    if (snesFullscreen && landscape) {
+                      final gameWidth = (constraints.maxHeight * 4 / 3)
+                          .clamp(0.0, constraints.maxWidth)
+                          .toDouble();
+                      final sideWidth =
+                          ((constraints.maxWidth - gameWidth) / 2)
+                              .clamp(0.0, constraints.maxWidth / 2)
+                              .toDouble();
+                      return ColoredBox(
+                        color: const Color(0xFFC8C7CC),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: true,
+                                opacity: _preferences.controlOpacity,
+                                child: _LandscapeLeftControls(
+                                  controller: _gameController,
+                                  directionalControl:
+                                      _preferences.directionalControl,
+                                  buttonUp: _buttonUp,
+                                  buttonDown: _buttonDown,
+                                  buttonLeft: _buttonLeft,
+                                  buttonRight: _buttonRight,
+                                  buttonSelect: _buttonSelect,
+                                  buttonL: _buttonL,
+                                  showShoulder: true,
+                                  showSnesLogo: true,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: false,
+                                opacity: _preferences.controlOpacity,
+                                child: _LandscapeRightControls(
+                                  controller: _gameController,
+                                  buttonA: _buttonA,
+                                  buttonB: _buttonB,
+                                  buttonX: _buttonX,
+                                  buttonY: _buttonY,
+                                  buttonStart: _buttonStart,
+                                  buttonR: _buttonR,
+                                  showShoulder: true,
+                                  isSnes: true,
+                                  buttonAColor:
+                                      Color(_preferences.snesButtonAColor),
+                                  buttonBColor:
+                                      Color(_preferences.snesButtonBColor),
+                                  buttonXColor:
+                                      Color(_preferences.snesButtonXColor),
+                                  buttonYColor:
+                                      Color(_preferences.snesButtonYColor),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
                     if (landscape) {
                       return Padding(
@@ -640,6 +723,18 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 buttonR: _buttonR,
                                 showShoulder: isGba || isSnes,
                                 isSnes: isSnes,
+                                buttonAColor: Color(
+                                  _preferences.snesButtonAColor,
+                                ),
+                                buttonBColor: Color(
+                                  _preferences.snesButtonBColor,
+                                ),
+                                buttonXColor: Color(
+                                  _preferences.snesButtonXColor,
+                                ),
+                                buttonYColor: Color(
+                                  _preferences.snesButtonYColor,
+                                ),
                               ),
                             ),
                           ],
@@ -749,7 +844,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 _preferences.layout ==
                                     GameBoyControlLayout.classic,
                             sizeScale: isSnes ? 1 : _preferences.sizeScale,
-                            opacity: isSnes ? 1 : _preferences.controlOpacity,
+                            opacity: _preferences.controlOpacity,
                             swapLabels: !isSnes && _preferences.swapAB,
                             controller: _gameController,
                             directionalControl:
@@ -775,6 +870,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     _preferences.layout !=
                                         GameBoyControlLayout.classic),
                             isSnes: isSnes,
+                            buttonAColor:
+                                Color(_preferences.snesButtonAColor),
+                            buttonBColor:
+                                Color(_preferences.snesButtonBColor),
+                            buttonXColor:
+                                Color(_preferences.snesButtonXColor),
+                            buttonYColor:
+                                Color(_preferences.snesButtonYColor),
                           ),
                         ],
                       ),
@@ -1281,6 +1384,46 @@ class _CoreNotFoundView extends StatelessWidget {
   }
 }
 
+class _SnesSidePanel extends StatelessWidget {
+  final bool isLeft;
+  final double opacity;
+  final Widget child;
+
+  const _SnesSidePanel({
+    required this.isLeft,
+    required this.opacity,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color(0xFFD9D8DC),
+            Color(0xFFB8B7BD),
+          ],
+        ),
+        border: Border(
+          left: isLeft
+              ? BorderSide.none
+              : const BorderSide(color: Color(0xFF77747F), width: 2),
+          right: isLeft
+              ? const BorderSide(color: Color(0xFF77747F), width: 2)
+              : BorderSide.none,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Opacity(opacity: opacity, child: child),
+      ),
+    );
+  }
+}
+
 class _LandscapeLeftControls extends StatelessWidget {
   final LibretroGameController controller;
   final DirectionalControlType directionalControl;
@@ -1291,6 +1434,7 @@ class _LandscapeLeftControls extends StatelessWidget {
   final int buttonSelect;
   final int buttonL;
   final bool showShoulder;
+  final bool showSnesLogo;
 
   const _LandscapeLeftControls({
     required this.controller,
@@ -1302,6 +1446,7 @@ class _LandscapeLeftControls extends StatelessWidget {
     required this.buttonSelect,
     required this.buttonL,
     required this.showShoulder,
+    this.showSnesLogo = false,
   });
 
   @override
@@ -1334,6 +1479,15 @@ class _LandscapeLeftControls extends StatelessWidget {
           buttonLeft: buttonLeft,
           buttonRight: buttonRight,
         ),
+        if (showSnesLogo) ...[
+          const SizedBox(height: 14),
+          const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: RetroHubConsoleLogo(
+              console: RetroHubConsoleType.superNintendo,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1349,6 +1503,10 @@ class _LandscapeRightControls extends StatelessWidget {
   final int buttonR;
   final bool showShoulder;
   final bool isSnes;
+  final Color buttonAColor;
+  final Color buttonBColor;
+  final Color buttonXColor;
+  final Color buttonYColor;
 
   const _LandscapeRightControls({
     required this.controller,
@@ -1360,6 +1518,10 @@ class _LandscapeRightControls extends StatelessWidget {
     required this.buttonR,
     required this.showShoulder,
     required this.isSnes,
+    this.buttonAColor = const Color(0xFF5E4B8B),
+    this.buttonBColor = const Color(0xFF8173AE),
+    this.buttonXColor = const Color(0xFF8173AE),
+    this.buttonYColor = const Color(0xFF5E4B8B),
   });
 
   @override
@@ -1391,6 +1553,10 @@ class _LandscapeRightControls extends StatelessWidget {
             buttonB: buttonB,
             buttonX: buttonX,
             buttonY: buttonY,
+            buttonAColor: buttonAColor,
+            buttonBColor: buttonBColor,
+            buttonXColor: buttonXColor,
+            buttonYColor: buttonYColor,
           )
         else
           Transform.rotate(
@@ -1441,6 +1607,10 @@ class _GameBoyControls extends StatelessWidget {
   final int buttonR;
   final bool showShoulder;
   final bool isSnes;
+  final Color buttonAColor;
+  final Color buttonBColor;
+  final Color buttonXColor;
+  final Color buttonYColor;
 
   const _GameBoyControls({
     required this.compact,
@@ -1464,6 +1634,10 @@ class _GameBoyControls extends StatelessWidget {
     required this.buttonR,
     required this.showShoulder,
     required this.isSnes,
+    this.buttonAColor = const Color(0xFF5E4B8B),
+    this.buttonBColor = const Color(0xFF8173AE),
+    this.buttonXColor = const Color(0xFF8173AE),
+    this.buttonYColor = const Color(0xFF5E4B8B),
   });
 
   @override
@@ -1491,6 +1665,10 @@ class _GameBoyControls extends StatelessWidget {
             buttonB: buttonB,
             buttonX: buttonX,
             buttonY: buttonY,
+            buttonAColor: buttonAColor,
+            buttonBColor: buttonBColor,
+            buttonXColor: buttonXColor,
+            buttonYColor: buttonYColor,
           )
         : Transform.rotate(
             angle: -0.20,
@@ -1586,6 +1764,10 @@ class _SnesActionPad extends StatelessWidget {
   final int buttonB;
   final int buttonX;
   final int buttonY;
+  final Color buttonAColor;
+  final Color buttonBColor;
+  final Color buttonXColor;
+  final Color buttonYColor;
 
   const _SnesActionPad({
     required this.size,
@@ -1594,6 +1776,10 @@ class _SnesActionPad extends StatelessWidget {
     required this.buttonB,
     required this.buttonX,
     required this.buttonY,
+    required this.buttonAColor,
+    required this.buttonBColor,
+    required this.buttonXColor,
+    required this.buttonYColor,
   });
 
   @override
@@ -1608,21 +1794,21 @@ class _SnesActionPad extends StatelessWidget {
         children: [
           Positioned(
             left: buttonStep,
-            child: _GameBoyActionButton(size: size, label: 'X', buttonId: buttonX, controller: controller, color: const Color(0xFF4D75C8)),
+            child: _GameBoyActionButton(size: size, label: 'X', buttonId: buttonX, controller: controller, color: buttonXColor),
           ),
           Positioned(
             top: buttonStep,
-            child: _GameBoyActionButton(size: size, label: 'Y', buttonId: buttonY, controller: controller, color: const Color(0xFF58A66C)),
+            child: _GameBoyActionButton(size: size, label: 'Y', buttonId: buttonY, controller: controller, color: buttonYColor),
           ),
           Positioned(
             top: buttonStep,
             right: 0,
-            child: _GameBoyActionButton(size: size, label: 'A', buttonId: buttonA, controller: controller, color: const Color(0xFFC84D58)),
+            child: _GameBoyActionButton(size: size, label: 'A', buttonId: buttonA, controller: controller, color: buttonAColor),
           ),
           Positioned(
             left: buttonStep,
             bottom: 0,
-            child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: const Color(0xFFD3B84A)),
+            child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: buttonBColor),
           ),
         ],
       ),
