@@ -167,6 +167,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       );
       return;
     }
+    if (CoreLoader.isGbaRom(game.romPath) && preferences.gbaFullscreen) {
+      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
+      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      return;
+    }
     await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
     final orientations = switch (preferences.orientation) {
       EmulatorOrientation.automatic => const <DeviceOrientation>[],
@@ -179,6 +188,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         ],
     };
     await SystemChrome.setPreferredOrientations(orientations);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   Future<void> _refreshHeaderParty() async {
@@ -329,6 +339,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           gameTitle: game.title,
           supportsGameBoyOptions: !CoreLoader.isSnesRom(game.romPath),
           supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
+          supportsGbaFullscreen: CoreLoader.isGbaRom(game.romPath),
           initialPreferences: _preferences,
           saveStateService: SaveStateService(
             gameId: game.id,
@@ -533,6 +544,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         MediaQuery.orientationOf(context) == Orientation.landscape;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
     final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
+    final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
+    final bool consoleFullscreen = snesFullscreen || gbaFullscreen;
     _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
 
     return PopScope(
@@ -542,7 +555,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       },
       child: Scaffold(
         backgroundColor: visualTheme.background,
-        appBar: snesFullscreen ? null : AppBar(
+        appBar: consoleFullscreen ? null : AppBar(
           toolbarHeight: 58,
           backgroundColor: visualTheme.appBar,
           foregroundColor: Colors.white,
@@ -569,9 +582,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(
-                          snesFullscreen ? 0 : 18,
+                          consoleFullscreen ? 0 : 18,
                         ),
-                        border: snesFullscreen ? null : Border.all(
+                        border: consoleFullscreen ? null : Border.all(
                           color: corePath != null
                               ? visualTheme.accent
                               : Theme.of(context).colorScheme.error,
@@ -580,7 +593,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(
-                          snesFullscreen ? 0 : 15,
+                          consoleFullscreen ? 0 : 15,
                         ),
                         child: corePath != null
                             ? LibretroGameView(
@@ -641,7 +654,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   buttonSelect: _buttonSelect,
                                   buttonL: _buttonL,
                                   showShoulder: true,
-                                  showSnesLogo: true,
+                                  consoleLogo:
+                                      RetroHubConsoleType.superNintendo,
                                 ),
                               ),
                             ),
@@ -669,6 +683,71 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                       Color(_preferences.snesButtonXColor),
                                   buttonYColor:
                                       Color(_preferences.snesButtonYColor),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (gbaFullscreen && landscape) {
+                      final gameWidth = (constraints.maxHeight * 3 / 2)
+                          .clamp(0.0, constraints.maxWidth)
+                          .toDouble();
+                      final sideWidth =
+                          ((constraints.maxWidth - gameWidth) / 2)
+                              .clamp(0.0, constraints.maxWidth / 2)
+                              .toDouble();
+                      return ColoredBox(
+                        color: const Color(0xFF171A2D),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: true,
+                                opacity: _preferences.controlOpacity,
+                                topColor: const Color(0xFF37325D),
+                                bottomColor: const Color(0xFF20243D),
+                                child: _LandscapeLeftControls(
+                                  controller: _gameController,
+                                  directionalControl:
+                                      _preferences.directionalControl,
+                                  buttonUp: _buttonUp,
+                                  buttonDown: _buttonDown,
+                                  buttonLeft: _buttonLeft,
+                                  buttonRight: _buttonRight,
+                                  buttonSelect: _buttonSelect,
+                                  buttonL: _buttonL,
+                                  showShoulder: true,
+                                  consoleLogo:
+                                      RetroHubConsoleType.gameBoyAdvance,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: false,
+                                opacity: _preferences.controlOpacity,
+                                topColor: const Color(0xFF37325D),
+                                bottomColor: const Color(0xFF20243D),
+                                child: _LandscapeRightControls(
+                                  controller: _gameController,
+                                  buttonA: _preferences.swapAB
+                                      ? _buttonB
+                                      : _buttonA,
+                                  buttonB: _preferences.swapAB
+                                      ? _buttonA
+                                      : _buttonB,
+                                  buttonX: _buttonX,
+                                  buttonY: _buttonY,
+                                  buttonStart: _buttonStart,
+                                  buttonR: _buttonR,
+                                  showShoulder: true,
+                                  isSnes: false,
                                 ),
                               ),
                             ),
@@ -1389,24 +1468,25 @@ class _SnesSidePanel extends StatelessWidget {
   final bool isLeft;
   final double opacity;
   final Widget child;
+  final Color topColor;
+  final Color bottomColor;
 
   const _SnesSidePanel({
     required this.isLeft,
     required this.opacity,
     required this.child,
+    this.topColor = const Color(0xFFD9D8DC),
+    this.bottomColor = const Color(0xFFB8B7BD),
   });
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: <Color>[
-            Color(0xFFD9D8DC),
-            Color(0xFFB8B7BD),
-          ],
+          colors: <Color>[topColor, bottomColor],
         ),
         border: Border(
           left: isLeft
@@ -1435,7 +1515,7 @@ class _LandscapeLeftControls extends StatelessWidget {
   final int buttonSelect;
   final int buttonL;
   final bool showShoulder;
-  final bool showSnesLogo;
+  final RetroHubConsoleType? consoleLogo;
 
   const _LandscapeLeftControls({
     required this.controller,
@@ -1447,7 +1527,7 @@ class _LandscapeLeftControls extends StatelessWidget {
     required this.buttonSelect,
     required this.buttonL,
     required this.showShoulder,
-    this.showSnesLogo = false,
+    this.consoleLogo,
   });
 
   @override
@@ -1480,13 +1560,11 @@ class _LandscapeLeftControls extends StatelessWidget {
           buttonLeft: buttonLeft,
           buttonRight: buttonRight,
         ),
-        if (showSnesLogo) ...[
+        if (consoleLogo != null) ...[
           const SizedBox(height: 14),
-          const FittedBox(
+          FittedBox(
             fit: BoxFit.scaleDown,
-            child: RetroHubConsoleLogo(
-              console: RetroHubConsoleType.superNintendo,
-            ),
+            child: RetroHubConsoleLogo(console: consoleLogo!),
           ),
         ],
       ],
