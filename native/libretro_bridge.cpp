@@ -285,11 +285,6 @@ static std::mutex frame_mutex;
 static std::deque<int16_t> audio_buffer;
 static std::mutex audio_mutex;
 static int audio_sample_rate = 48000;
-static double audio_input_sample_rate = 48000.0;
-static double audio_resample_phase = 0.0;
-static int64_t audio_resample_left_sum = 0;
-static int64_t audio_resample_right_sum = 0;
-static size_t audio_resample_sample_count = 0;
 static constexpr size_t MAX_AUDIO_SAMPLES = 48000 * 2 * 2;
 
 // ============================================================
@@ -540,35 +535,12 @@ static void video_refresh_cb(
 // Audio
 // ============================================================
 
-static void append_audio_frame_locked(int16_t left, int16_t right) {
-    // SameBoy generates its high-quality PCM at roughly 2.1 MHz. SoLoud and
-    // Android expect a conventional output rate, so average consecutive
-    // source frames down to the rate exposed to Flutter.
-    if (audio_input_sample_rate > static_cast<double>(audio_sample_rate)) {
-        audio_resample_left_sum += left;
-        audio_resample_right_sum += right;
-        audio_resample_sample_count++;
-        audio_resample_phase +=
-            static_cast<double>(audio_sample_rate) / audio_input_sample_rate;
-
-        if (audio_resample_phase < 1.0) return;
-
-        left = static_cast<int16_t>(
-            audio_resample_left_sum /
-            static_cast<int64_t>(audio_resample_sample_count)
-        );
-        right = static_cast<int16_t>(
-            audio_resample_right_sum /
-            static_cast<int64_t>(audio_resample_sample_count)
-        );
-        audio_resample_phase -= 1.0;
-        audio_resample_left_sum = 0;
-        audio_resample_right_sum = 0;
-        audio_resample_sample_count = 0;
-    }
-
-    while (audio_buffer.size() + 2 > MAX_AUDIO_SAMPLES &&
-           audio_buffer.size() >= 2) {
+static void audio_sample_cb(
+    int16_t left,
+    int16_t right
+) {
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    if (audio_buffer.size() + 2 > MAX_AUDIO_SAMPLES) {
         audio_buffer.pop_front();
         audio_buffer.pop_front();
     }
@@ -576,26 +548,18 @@ static void append_audio_frame_locked(int16_t left, int16_t right) {
     audio_buffer.push_back(right);
 }
 
-static void audio_sample_cb(
-    int16_t left,
-    int16_t right
-) {
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    append_audio_frame_locked(left, right);
-}
-
 static size_t audio_sample_batch_cb(
     const int16_t* data,
     size_t frames
 ) {
     if (!data || frames == 0) return 0;
+    const size_t sample_count = frames * 2;
     std::lock_guard<std::mutex> lock(audio_mutex);
-    for (size_t frame = 0; frame < frames; frame++) {
-        append_audio_frame_locked(
-            data[frame * 2],
-            data[frame * 2 + 1]
-        );
+    while (audio_buffer.size() + sample_count > MAX_AUDIO_SAMPLES &&
+           !audio_buffer.empty()) {
+        audio_buffer.pop_front();
     }
+    audio_buffer.insert(audio_buffer.end(), data, data + sample_count);
 
     return frames;
 }
@@ -644,11 +608,6 @@ static void reset_audio_state() {
     std::lock_guard<std::mutex> lock(audio_mutex);
     audio_buffer.clear();
     audio_sample_rate = 48000;
-    audio_input_sample_rate = 48000.0;
-    audio_resample_phase = 0.0;
-    audio_resample_left_sum = 0;
-    audio_resample_right_sum = 0;
-    audio_resample_sample_count = 0;
 }
 
 // ============================================================
@@ -1151,11 +1110,8 @@ int rh_load_game(const char* rom_path) {
     retro_system_av_info av_info{};
     retro_get_system_av_info_fn(&av_info);
     if (av_info.timing.sample_rate >= 8000.0 &&
-        av_info.timing.sample_rate <= 5000000.0) {
-        audio_input_sample_rate = av_info.timing.sample_rate;
-        audio_sample_rate = av_info.timing.sample_rate <= 192000.0
-            ? static_cast<int>(av_info.timing.sample_rate + 0.5)
-            : 48000;
+        av_info.timing.sample_rate <= 192000.0) {
+        audio_sample_rate = static_cast<int>(av_info.timing.sample_rate + 0.5);
     }
 
     return 1;
