@@ -65,5 +65,15 @@ void main() {
       expect(profile.version, PokemonGameVersion.fireRed);
       expect(profile.isGen1, isFalse);
     });
+
+    test('reconoce Rojo Fuego con guiones bajos', () {
+      final profile = PokemonGameProfile.fromGameIdentity(
+        gameTitle: 'Pokemon_Rojo_Fuego',
+        romPath: r'C:\ROMs\Pokemon_Rojo_Fuego.gba',
+      );
+
+      expect(profile.version, PokemonGameVersion.fireRed);
+      expect(profile.generation, PokemonGeneration.gen3);
+    });
   });
 }
