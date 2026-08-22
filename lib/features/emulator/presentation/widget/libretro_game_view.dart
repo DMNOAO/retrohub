@@ -238,7 +238,6 @@ class LibretroGameView extends StatefulWidget {
   final FilterQuality filterQuality;
   final bool autoLoadState;
   final double? displayAspectRatio;
-  final ValueChanged<String>? onPokemonDiagnostic;
 
   const LibretroGameView({
     super.key,
@@ -252,7 +251,6 @@ class LibretroGameView extends StatefulWidget {
     this.filterQuality = FilterQuality.none,
     this.autoLoadState = false,
     this.displayAspectRatio,
-    this.onPokemonDiagnostic,
   });
 
   @override
@@ -765,32 +763,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       _systemRamSize = status.systemRamSize;
       _pokemonStatus = status;
     });
-    widget.onPokemonDiagnostic?.call(_diagnosticText(status));
-  }
-
-  String _diagnosticText(
-    GameEngineStatus<PokemonMemorySnapshot> status,
-  ) {
-    final PokemonMemorySnapshot? snapshot = status.snapshot;
-    if (snapshot != null) {
-      int badgeCount = 0;
-      for (int mask = snapshot.badgesMask; mask != 0; mask >>= 1) {
-        badgeCount += mask & 1;
-      }
-      return <String>[
-        'POKÉMON ENGINE · ${status.gameName}',
-        'Jugador: ${snapshot.playerName}',
-        'Mapa: ${PokemonDecoder.mapName(snapshot.profile, snapshot.currentMapId)}',
-        'Equipo: ${snapshot.party.length} · Medallas: $badgeCount',
-        'Pokédex: ${snapshot.pokedexSeen}/${snapshot.pokedexCaught}',
-      ].join('\n');
-    }
-    return <String>[
-      'MEMORY ENGINE · ${status.gameName}',
-      'Estado: ${status.state.name}',
-      'RAM: ${status.systemRamSize} bytes',
-      if (status.message != null) status.message!,
-    ].join('\n');
   }
 
   Future<CrystalGsBallStatus> _inspectGsBall() async {
@@ -1250,9 +1222,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
           ),
           if (kDebugMode && !Platform.isAndroid)
             Positioned(top: 12, left: 12, child: _buildStatusBadge()),
-          if ((kDebugMode && !Platform.isAndroid) ||
-              _pokemonVersion == PokemonGameVersion.fireRed ||
-              _pokemonVersion == PokemonGameVersion.leafGreen)
+          if (kDebugMode && !Platform.isAndroid)
             Positioned(top: 12, right: 12, child: _buildMemoryBadge()),
         ],
       );
