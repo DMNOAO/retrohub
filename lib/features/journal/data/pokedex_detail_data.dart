@@ -2,6 +2,7 @@ import '../../../core/assets/game_asset_profile.dart';
 import 'blue_pokedex_generated.dart';
 import 'crystal_pokedex_generated.dart';
 import 'emerald_pokedex_generated.dart';
+import 'gen3_pokedex_mapping_fix.dart';
 import 'gold_pokedex_generated.dart';
 import 'red_pokedex_generated.dart';
 import 'ruby_pokedex_generated.dart';
@@ -34,9 +35,10 @@ class PokedexDetailData {
       case PokemonAssetGame.rubySapphire:
         final title = profile.sourceTitle ?? '';
         final isSapphire = title.contains('sapphire') || title.contains('zafiro');
-        return (isSapphire ? sapphireGeneratedSpecies : rubyGeneratedSpecies)[pokemonId] ?? const PokedexSpeciesDetail();
+        final generated = isSapphire ? sapphireGeneratedSpecies : rubyGeneratedSpecies;
+        return correctedGen3Detail(generated, pokemonId);
       case PokemonAssetGame.emerald:
-        return emeraldGeneratedSpecies[pokemonId] ?? const PokedexSpeciesDetail();
+        return correctedGen3Detail(emeraldGeneratedSpecies, pokemonId);
       default:
         return const PokedexSpeciesDetail();
     }

@@ -13,7 +13,7 @@ const List<int> hoennPokedexOrder = <int>[
   384,385,386,
 ];
 
-Set<int> pokedexIdsInOrder(Iterable<int> ids, List<int> order) {
-  final allowed = order.toSet();
-  return ids.where(allowed.contains).toSet();
+List<int> pokedexIdsInOrder(Iterable<int> ids, List<int> order) {
+  final available = ids.toSet();
+  return order.where(available.contains).toList(growable: false);
 }
