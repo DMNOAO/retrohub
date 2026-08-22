@@ -31,6 +31,7 @@ class EmulatorPreferences {
   static const _autoLoadOnStartKey = 'emulator_gb_auto_load_on_start';
   static const _confirmOverwriteKey = 'emulator_gb_confirm_overwrite';
   static const _snesFullscreenKey = 'emulator_snes_fullscreen';
+  static const _gbaFullscreenKey = 'emulator_gba_fullscreen';
   static const _snesButtonColorStyleKey = 'emulator_snes_button_color_style';
   static const _snesButtonAColorKey = 'emulator_snes_button_a_color';
   static const _snesButtonBColorKey = 'emulator_snes_button_b_color';
@@ -53,6 +54,7 @@ class EmulatorPreferences {
   final bool autoLoadOnStart;
   final bool confirmBeforeOverwrite;
   final bool snesFullscreen;
+  final bool gbaFullscreen;
   final SnesButtonColorStyle snesButtonColorStyle;
   final int snesButtonAColor;
   final int snesButtonBColor;
@@ -76,6 +78,7 @@ class EmulatorPreferences {
     this.autoLoadOnStart = false,
     this.confirmBeforeOverwrite = true,
     this.snesFullscreen = false,
+    this.gbaFullscreen = false,
     this.snesButtonColorStyle = SnesButtonColorStyle.violet,
     this.snesButtonAColor = 0xFF5E4B8B,
     this.snesButtonBColor = 0xFF8173AE,
@@ -106,6 +109,7 @@ class EmulatorPreferences {
     bool? autoLoadOnStart,
     bool? confirmBeforeOverwrite,
     bool? snesFullscreen,
+    bool? gbaFullscreen,
     SnesButtonColorStyle? snesButtonColorStyle,
     int? snesButtonAColor,
     int? snesButtonBColor,
@@ -130,6 +134,7 @@ class EmulatorPreferences {
       confirmBeforeOverwrite:
           confirmBeforeOverwrite ?? this.confirmBeforeOverwrite,
       snesFullscreen: snesFullscreen ?? this.snesFullscreen,
+      gbaFullscreen: gbaFullscreen ?? this.gbaFullscreen,
       snesButtonColorStyle:
           snesButtonColorStyle ?? this.snesButtonColorStyle,
       snesButtonAColor: snesButtonAColor ?? this.snesButtonAColor,
@@ -176,6 +181,7 @@ class EmulatorPreferences {
       autoLoadOnStart: storage.getBool(_autoLoadOnStartKey) ?? false,
       confirmBeforeOverwrite: storage.getBool(_confirmOverwriteKey) ?? true,
       snesFullscreen: storage.getBool(_snesFullscreenKey) ?? false,
+      gbaFullscreen: storage.getBool(_gbaFullscreenKey) ?? false,
       snesButtonColorStyle: SnesButtonColorStyle.values.firstWhere(
         (value) =>
             value.name == storage.getString(_snesButtonColorStyleKey),
@@ -211,6 +217,7 @@ class EmulatorPreferences {
       storage.setBool(_autoLoadOnStartKey, autoLoadOnStart),
       storage.setBool(_confirmOverwriteKey, confirmBeforeOverwrite),
       storage.setBool(_snesFullscreenKey, snesFullscreen),
+      storage.setBool(_gbaFullscreenKey, gbaFullscreen),
       storage.setString(
         _snesButtonColorStyleKey,
         snesButtonColorStyle.name,
