@@ -237,6 +237,7 @@ class LibretroGameView extends StatefulWidget {
   final BoxFit screenFit;
   final FilterQuality filterQuality;
   final bool autoLoadState;
+  final double? displayAspectRatio;
 
   const LibretroGameView({
     super.key,
@@ -249,6 +250,7 @@ class LibretroGameView extends StatefulWidget {
     this.screenFit = BoxFit.contain,
     this.filterQuality = FilterQuality.none,
     this.autoLoadState = false,
+    this.displayAspectRatio,
   });
 
   @override
@@ -1207,10 +1209,13 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         children: [
           Center(
             child: AspectRatio(
-              aspectRatio: image.width / image.height,
+              aspectRatio:
+                  widget.displayAspectRatio ?? image.width / image.height,
               child: RawImage(
                 image: image,
-                fit: widget.screenFit,
+                fit: widget.displayAspectRatio == null
+                    ? widget.screenFit
+                    : BoxFit.fill,
                 filterQuality: widget.filterQuality,
               ),
             ),
