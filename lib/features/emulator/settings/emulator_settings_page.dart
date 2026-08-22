@@ -7,6 +7,7 @@ import 'emulator_preferences.dart';
 class EmulatorSettingsPage extends StatefulWidget {
   final String gameTitle;
   final bool supportsGameBoyOptions;
+  final bool supportsSnesOptions;
   final EmulatorPreferences initialPreferences;
   final Future<void> Function() onRestart;
   final Future<bool> Function(int slot, String title) onSaveState;
@@ -19,6 +20,7 @@ class EmulatorSettingsPage extends StatefulWidget {
     super.key,
     required this.gameTitle,
     required this.supportsGameBoyOptions,
+    this.supportsSnesOptions = false,
     required this.initialPreferences,
     required this.onRestart,
     required this.onSaveState,
@@ -104,6 +106,81 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
     const defaults = EmulatorPreferences();
     await defaults.save();
     if (mounted) setState(() => _preferences = defaults);
+  }
+
+  Future<void> _setSnesColorStyle(SnesButtonColorStyle style) async {
+    final colors = switch (style) {
+      SnesButtonColorStyle.violet => const <int>[
+          0xFF5E4B8B, 0xFF8173AE, 0xFF8173AE, 0xFF5E4B8B,
+        ],
+      SnesButtonColorStyle.multicolor => const <int>[
+          0xFFC84D58, 0xFFD3B84A, 0xFF4D75C8, 0xFF58A66C,
+        ],
+      SnesButtonColorStyle.monochrome => const <int>[
+          0xFF55545B, 0xFF6D6C73, 0xFF6D6C73, 0xFF55545B,
+        ],
+      SnesButtonColorStyle.custom => <int>[
+          _preferences.snesButtonAColor,
+          _preferences.snesButtonBColor,
+          _preferences.snesButtonXColor,
+          _preferences.snesButtonYColor,
+        ],
+    };
+    await _update(_preferences.copyWith(
+      snesButtonColorStyle: style,
+      snesButtonAColor: colors[0],
+      snesButtonBColor: colors[1],
+      snesButtonXColor: colors[2],
+      snesButtonYColor: colors[3],
+    ));
+  }
+
+  Future<void> _pickSnesColor(String button) async {
+    const palette = <Color>[
+      Color(0xFF5E4B8B), Color(0xFF8173AE), Color(0xFF4D75C8),
+      Color(0xFF58A66C), Color(0xFFC84D58), Color(0xFFD3B84A),
+      Color(0xFFE778B8), Color(0xFF42A5F5), Color(0xFFF5F5F5),
+      Color(0xFF55545B),
+    ];
+    final selected = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Color del botón $button'),
+        content: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final color in palette)
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.pop(dialogContext, color),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black54, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    final value = selected.toARGB32();
+    await _update(_preferences.copyWith(
+      snesButtonColorStyle: SnesButtonColorStyle.custom,
+      snesButtonAColor:
+          button == 'A' ? value : _preferences.snesButtonAColor,
+      snesButtonBColor:
+          button == 'B' ? value : _preferences.snesButtonBColor,
+      snesButtonXColor:
+          button == 'X' ? value : _preferences.snesButtonXColor,
+      snesButtonYColor:
+          button == 'Y' ? value : _preferences.snesButtonYColor,
+    ));
   }
 
   @override
@@ -448,6 +525,109 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
               ),
             ),
             ],
+            if (widget.supportsSnesOptions) ...[
+              const SizedBox(height: 22),
+              const _SectionTitle('RetroHub Super'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.fullscreen_rounded),
+                        title: const Text('Modo pantalla completa'),
+                        subtitle: const Text(
+                          'Juego 4:3 a toda altura, sin banner y con controles en los paneles laterales',
+                        ),
+                        value: _preferences.snesFullscreen,
+                        onChanged: (value) => _update(
+                          _preferences.copyWith(snesFullscreen: value),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Opacidad de controles · '
+                        '${(_preferences.controlOpacity * 100).round()}%',
+                      ),
+                      Slider(
+                        value: _preferences.controlOpacity,
+                        min: .45,
+                        max: 1,
+                        divisions: 11,
+                        onChanged: (value) => _update(
+                          _preferences.copyWith(controlOpacity: value),
+                        ),
+                      ),
+                      const Divider(height: 28),
+                      const Text(
+                        'Colores A/B/X/Y',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<SnesButtonColorStyle>(
+                        initialValue: _preferences.snesButtonColorStyle,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: SnesButtonColorStyle.violet,
+                            child: Text('Violeta clásico'),
+                          ),
+                          DropdownMenuItem(
+                            value: SnesButtonColorStyle.multicolor,
+                            child: Text('Multicolor'),
+                          ),
+                          DropdownMenuItem(
+                            value: SnesButtonColorStyle.monochrome,
+                            child: Text('Monocromático'),
+                          ),
+                          DropdownMenuItem(
+                            value: SnesButtonColorStyle.custom,
+                            child: Text('Personalizado'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) _setSnesColorStyle(value);
+                        },
+                      ),
+                      if (_preferences.snesButtonColorStyle ==
+                          SnesButtonColorStyle.custom) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 10,
+                          children: [
+                            _SnesColorButton(
+                              label: 'A',
+                              color: Color(_preferences.snesButtonAColor),
+                              onTap: () => _pickSnesColor('A'),
+                            ),
+                            _SnesColorButton(
+                              label: 'B',
+                              color: Color(_preferences.snesButtonBColor),
+                              onTap: () => _pickSnesColor('B'),
+                            ),
+                            _SnesColorButton(
+                              label: 'X',
+                              color: Color(_preferences.snesButtonXColor),
+                              onTap: () => _pickSnesColor('X'),
+                            ),
+                            _SnesColorButton(
+                              label: 'Y',
+                              color: Color(_preferences.snesButtonYColor),
+                              onTap: () => _pickSnesColor('Y'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -470,6 +650,35 @@ class _SectionTitle extends StatelessWidget {
               letterSpacing: 1.1,
             ),
       ),
+    );
+  }
+}
+
+class _SnesColorButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SnesColorButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.black45),
+        ),
+      ),
+      label: Text('Botón $label'),
     );
   }
 }
