@@ -7,7 +7,7 @@ import '../pokemon/decoder/pokemon_decoder.dart';
 import 'pokedex_detail_page.dart';
 import 'pokedex_orders.dart';
 
-enum PokedexOrder { johto, hoenn, national }
+enum PokedexOrder { johto, kanto, hoenn, national }
 
 class PokedexGrid extends StatefulWidget {
   final GameAssetProfile profile;
@@ -24,18 +24,31 @@ class PokedexGrid extends StatefulWidget {
 class _PokedexGridState extends State<PokedexGrid> {
   late PokedexOrder _order;
   bool get _isGen2 => widget.profile.region == PokemonAssetRegion.johto;
-  bool get _isGen3 => widget.profile.region == PokemonAssetRegion.hoenn;
+  bool get _isHoenn => widget.profile.region == PokemonAssetRegion.hoenn;
+  bool get _isGen3Kanto =>
+      widget.profile.game == PokemonAssetGame.fireRedLeafGreen;
+  bool get _isGen3 => _isHoenn || _isGen3Kanto;
 
   @override
   void initState() {
     super.initState();
-    _order = _isGen3 ? PokedexOrder.hoenn : PokedexOrder.johto;
+    _order = _isHoenn
+        ? PokedexOrder.hoenn
+        : _isGen3Kanto
+        ? PokedexOrder.kanto
+        : PokedexOrder.johto;
   }
 
   @override
   Widget build(BuildContext context) {
     final national = List<int>.generate(_isGen3 ? 386 : (_isGen2 ? 251 : 151), (index) => index + 1);
-    final ids = _isGen2 && _order == PokedexOrder.johto ? _johtoOrder : _isGen3 && _order == PokedexOrder.hoenn ? hoennPokedexOrder : national;
+    final ids = _isGen2 && _order == PokedexOrder.johto
+        ? _johtoOrder
+        : _isHoenn && _order == PokedexOrder.hoenn
+        ? hoennPokedexOrder
+        : _isGen3Kanto && _order == PokedexOrder.kanto
+        ? List<int>.generate(151, (index) => index + 1)
+        : national;
     final visibleSeen = pokedexIdsInOrder(widget.seenIds, ids);
     final visibleCaught = pokedexIdsInOrder(widget.caughtIds, ids);
     final scheme = Theme.of(context).colorScheme;
@@ -46,7 +59,8 @@ class _PokedexGridState extends State<PokedexGrid> {
         child: Row(children: [
           Expanded(child: Text('${visibleSeen.length} vistos · ${visibleCaught.length} capturados', style: Theme.of(context).textTheme.titleMedium)),
           if (_isGen2) SegmentedButton<PokedexOrder>(segments: const [ButtonSegment(value: PokedexOrder.johto, label: Text('Johto')), ButtonSegment(value: PokedexOrder.national, label: Text('Nacional'))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
-          if (_isGen3) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
+          if (_isHoenn) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
+          if (_isGen3Kanto) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.kanto, label: Text('Kanto')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
         ]),
       ),
       Expanded(child: LayoutBuilder(builder: (context, constraints) {
@@ -59,7 +73,7 @@ class _PokedexGridState extends State<PokedexGrid> {
             final dexId = ids[index];
             final seen = widget.seenIds.contains(dexId);
             final caught = widget.caughtIds.contains(dexId);
-            final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isGen3 && _order == PokedexOrder.hoenn) ? index + 1 : dexId;
+            final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isHoenn && _order == PokedexOrder.hoenn) ? index + 1 : dexId;
             return InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: seen ? () {

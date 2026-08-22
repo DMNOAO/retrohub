@@ -31,14 +31,18 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
       profile.memoryMapVerified ||
       profile.version == PokemonGameVersion.emerald ||
       profile.version == PokemonGameVersion.ruby ||
-      profile.version == PokemonGameVersion.sapphire;
+      profile.version == PokemonGameVersion.sapphire ||
+      profile.version == PokemonGameVersion.fireRed ||
+      profile.version == PokemonGameVersion.leafGreen;
 
   @override
   PokemonMemorySnapshot? capture() {
     if (!isSupported) return null;
     if (profile.version == PokemonGameVersion.emerald ||
         profile.version == PokemonGameVersion.ruby ||
-        profile.version == PokemonGameVersion.sapphire) {
+        profile.version == PokemonGameVersion.sapphire ||
+        profile.version == PokemonGameVersion.fireRed ||
+        profile.version == PokemonGameVersion.leafGreen) {
       return PokemonEmeraldMemoryReader.fromBridge(
         bridge: bridge,
         profile: profile,

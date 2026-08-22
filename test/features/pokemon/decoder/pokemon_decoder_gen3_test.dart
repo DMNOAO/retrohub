@@ -34,5 +34,18 @@ void main() {
       );
       expect(PokemonDecoder.mapName(profile, 0x0010), 'Ruta 101');
     });
+
+    test('usa mapas y medallas de Kanto en Rojo Fuego', () {
+      final PokemonGameProfile profile =
+          PokemonGameProfile.fromGameIdentity(
+            gameTitle: 'Pokémon Rojo Fuego',
+            romPath: 'pokemon_rojo_fuego.gba',
+          );
+
+      expect(PokemonDecoder.mapName(profile, 0x0300), 'Pueblo Paleta');
+      expect(PokemonDecoder.mapName(profile, 0x0313), 'Ruta 1');
+      expect(PokemonDecoder.badgeName(profile, 0), 'Medalla Roca');
+      expect(PokemonDecoder.badgeName(profile, 7), 'Medalla Tierra');
+    });
   });
 }
