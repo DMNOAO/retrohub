@@ -8,6 +8,7 @@ class EmulatorSettingsPage extends StatefulWidget {
   final String gameTitle;
   final bool supportsGameBoyOptions;
   final bool supportsSnesOptions;
+  final bool supportsGbaFullscreen;
   final EmulatorPreferences initialPreferences;
   final Future<void> Function() onRestart;
   final Future<bool> Function(int slot, String title) onSaveState;
@@ -21,6 +22,7 @@ class EmulatorSettingsPage extends StatefulWidget {
     required this.gameTitle,
     required this.supportsGameBoyOptions,
     this.supportsSnesOptions = false,
+    this.supportsGbaFullscreen = false,
     required this.initialPreferences,
     required this.onRestart,
     required this.onSaveState,
@@ -374,6 +376,21 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.supportsGbaFullscreen) ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.fullscreen_rounded),
+                        title: const Text('Modo pantalla completa GBA'),
+                        subtitle: const Text(
+                          'Juego 3:2 a toda altura, sin banner y con controles en los paneles laterales',
+                        ),
+                        value: _preferences.gbaFullscreen,
+                        onChanged: (value) => _update(
+                          _preferences.copyWith(gbaFullscreen: value),
+                        ),
+                      ),
+                      const Divider(height: 28),
+                    ],
                     const Text('Escalado', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<EmulatorScreenScale>(
