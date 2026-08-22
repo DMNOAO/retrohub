@@ -44,7 +44,9 @@ class LibretroAudioPlayer {
         sampleRate: _sampleRate,
         channels: Channels.stereo,
         format: BufferType.s16le,
-        bufferingType: BufferingType.preserved,
+        // La emulación produce PCM sin fin. Liberar las muestras ya
+        // reproducidas evita que el stream alcance su capacidad y se cierre.
+        bufferingType: BufferingType.released,
         bufferingTimeNeeds: 0.08,
         maxBufferSizeDuration: const Duration(milliseconds: 250),
       );
