@@ -69,6 +69,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   bool _exitDialogOpen = false;
   Timer? _headerRefreshTimer;
   List<int> _partySpeciesIds = const <int>[];
+  String? _pokemonDiagnostic;
   EmulatorPreferences _preferences = const EmulatorPreferences();
 
   Game get game => widget.game;
@@ -539,6 +540,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final String? corePath = CoreLoader.findCorePath(game.romPath);
     final bool isGba = CoreLoader.isGbaRom(game.romPath);
     final bool isSnes = CoreLoader.isSnesRom(game.romPath);
+    final PokemonGameVersion pokemonVersion =
+        PokemonGameProfile.fromGameIdentity(
+          gameTitle: game.title,
+          romPath: game.romPath,
+        ).version;
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
@@ -623,6 +629,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 autoLoadState:
                                     _preferences.autoLoadOnStart && !isSnes,
                                 displayAspectRatio: isSnes ? 4 / 3 : null,
+                                onPokemonDiagnostic: (String diagnostic) {
+                                  if (!mounted ||
+                                      diagnostic == _pokemonDiagnostic) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    _pokemonDiagnostic = diagnostic;
+                                  });
+                                },
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -1005,6 +1020,33 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                   linkManager: _gameController.linkManager,
                 ),
               ),
+            if ((pokemonVersion == PokemonGameVersion.fireRed ||
+                    pokemonVersion == PokemonGameVersion.leafGreen) &&
+                _pokemonDiagnostic != null)
+              Positioned(
+                top: 8,
+                right: 86,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE8171717),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: visualTheme.accent),
+                  ),
+                  child: Text(
+                    _pokemonDiagnostic!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -1317,20 +1359,21 @@ class _EmulatorVisualTheme {
 
   factory _EmulatorVisualTheme.forGame(Game game) {
     final String identity = '${game.title} ${game.console}'.toLowerCase();
+    final PokemonGameVersion pokemonVersion =
+        PokemonGameProfile.fromGameIdentity(
+          gameTitle: game.title,
+          romPath: game.romPath,
+        ).version;
 
     Color primary;
     Color secondary;
     Color accent;
 
-    if (identity.contains('firered') ||
-        identity.contains('fire red') ||
-        identity.contains('rojo fuego')) {
+    if (pokemonVersion == PokemonGameVersion.fireRed) {
       primary = const Color(0xFFF05A24);
       secondary = const Color(0xFF7A260E);
       accent = const Color(0xFFFFC44F);
-    } else if (identity.contains('leafgreen') ||
-        identity.contains('leaf green') ||
-        identity.contains('verde hoja')) {
+    } else if (pokemonVersion == PokemonGameVersion.leafGreen) {
       primary = const Color(0xFF62C947);
       secondary = const Color(0xFF286A22);
       accent = const Color(0xFFD0F58F);
