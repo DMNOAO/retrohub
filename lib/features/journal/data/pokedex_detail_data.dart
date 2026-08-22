@@ -2,6 +2,7 @@ import '../../../core/assets/game_asset_profile.dart';
 import 'blue_pokedex_generated.dart';
 import 'crystal_pokedex_generated.dart';
 import 'emerald_pokedex_generated.dart';
+import 'fire_red_leaf_green_pokedex_generated.dart';
 import 'gen3_pokedex_mapping_fix.dart';
 import 'gold_pokedex_generated.dart';
 import 'red_pokedex_generated.dart';
@@ -39,6 +40,9 @@ class PokedexDetailData {
         return correctedGen3Detail(generated, pokemonId);
       case PokemonAssetGame.emerald:
         return correctedGen3Detail(emeraldGeneratedSpecies, pokemonId);
+      case PokemonAssetGame.fireRedLeafGreen:
+        return fireRedLeafGreenGeneratedSpecies[pokemonId] ??
+            const PokedexSpeciesDetail();
       default:
         return const PokedexSpeciesDetail();
     }
