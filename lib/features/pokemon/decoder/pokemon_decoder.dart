@@ -2,6 +2,7 @@ import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_location.dart';
 import 'locations/gen2/crystal_locations.g.dart';
 import 'locations/gen3/emerald_locations.dart';
+import 'locations/gen3/fire_red_leaf_green_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -133,13 +134,17 @@ class PokemonDecoder {
         return emeraldLocations[mapId];
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
+        return fireRedLeafGreenLocations[mapId];
       case PokemonGameVersion.unsupported:
         return null;
     }
   }
 
   static String badgeName(PokemonGameProfile profile, int index) {
-    final names = profile.isGen3
+    final names = profile.version == PokemonGameVersion.fireRed ||
+            profile.version == PokemonGameVersion.leafGreen
+        ? _kantoBadges
+        : profile.isGen3
         ? _gen3Badges
         : (profile.isGen2 ? _gen2Badges : _gen1Badges);
     return index >= 0 && index < names.length ? names[index] : 'Medalla';
@@ -182,6 +187,16 @@ class PokemonDecoder {
     'Medalla Pluma',
     'Medalla Mente',
     'Medalla Lluvia',
+  ];
+  static const _kantoBadges = <String>[
+    'Medalla Roca',
+    'Medalla Cascada',
+    'Medalla Trueno',
+    'Medalla Arcoíris',
+    'Medalla Alma',
+    'Medalla Pantano',
+    'Medalla Volcán',
+    'Medalla Tierra',
   ];
 
   static const Map<int, String> _characters = <int, String>{

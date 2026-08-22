@@ -133,7 +133,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                           profile: profile,
                           seenIds: _seenPokemonIds,
                           caughtIds: _caughtPokemonIds,
-                          nationalDexUnlocked: profile.game != PokemonAssetGame.emerald ||
+                          nationalDexUnlocked: profile.game != PokemonAssetGame.emerald &&
+                                  profile.game != PokemonAssetGame.fireRedLeafGreen ||
                               _nationalDexUnlocked,
                         )
                       : filtered.isEmpty

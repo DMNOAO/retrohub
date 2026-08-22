@@ -146,7 +146,9 @@ class PokemonControllerMemoryReader {
 
     if (profile.version == PokemonGameVersion.emerald ||
         profile.version == PokemonGameVersion.ruby ||
-        profile.version == PokemonGameVersion.sapphire) {
+        profile.version == PokemonGameVersion.sapphire ||
+        profile.version == PokemonGameVersion.fireRed ||
+        profile.version == PokemonGameVersion.leafGreen) {
       return PokemonEmeraldMemoryReader(
         controller: controller,
         profile: profile,

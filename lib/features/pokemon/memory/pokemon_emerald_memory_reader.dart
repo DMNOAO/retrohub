@@ -4,13 +4,18 @@ import '../models/pokemon_memory_snapshot.dart';
 import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 
-/// Primera lectura segura de Pokémon Emerald.
+/// Lector de los juegos principales de tercera generación.
 ///
 /// Emerald mantiene el progreso en dos bloques alojados dinámicamente en
 /// EWRAM. Las direcciones de los punteros globales cambian entre regiones y
 /// revisiones, por lo que se usa la dirección inglesa como ruta rápida y se
 /// recorre IWRAM como alternativa validada.
 final class PokemonEmeraldMemoryReader {
+  static const int _fireRedLeafGreenSaveBlock1Size = 0x3D68;
+  static const int _fireRedLeafGreenSaveBlock2Size = 0x0F24;
+  static const int _fireRedLeafGreenDmaPadding = 0x80;
+  static const int _fireRedLeafGreenDexSeen1Offset = 0x05F8;
+  static const int _fireRedLeafGreenDexSeen2Offset = 0x3A18;
   static const int _rubySapphireSaveBlock1Address = 0x02025734;
   static const int _rubySapphireSaveBlock2Address = 0x02024EA4;
   static const int _rubySapphireSaveBlock1Size = 0x3AC0;
@@ -69,7 +74,9 @@ final class PokemonEmeraldMemoryReader {
     if (!memoryAvailable ||
         profile.version != PokemonGameVersion.emerald &&
             profile.version != PokemonGameVersion.ruby &&
-            profile.version != PokemonGameVersion.sapphire) {
+            profile.version != PokemonGameVersion.sapphire &&
+            profile.version != PokemonGameVersion.fireRed &&
+            profile.version != PokemonGameVersion.leafGreen) {
       return null;
     }
 
@@ -92,9 +99,7 @@ final class PokemonEmeraldMemoryReader {
     final int mapNumber = _u8(saveBlock1 + 0x05);
     final int currentMapId = (mapGroup << 8) | mapNumber;
 
-    final int money = profile.version == PokemonGameVersion.emerald
-        ? _u32(saveBlock1 + 0x490) ^ _u32(saveBlock2 + 0xAC)
-        : _u32(saveBlock1 + 0x490);
+    final int money = _readMoney(saveBlock1, saveBlock2);
     final List<PokemonPartyMember> party = _readParty(saveBlock1);
     final List<int> caughtPokemonIds = _readPokedexIds(
       saveBlock2 + _pokedexOwnedOffset,
@@ -103,11 +108,25 @@ final class PokemonEmeraldMemoryReader {
       saveBlock2 + _pokedexSeenOffset,
     );
     final int badgesMask = _readBadgesMask(saveBlock1);
-    final bool nationalDexUnlocked = isNationalDexUnlocked(
-      nationalMagic: _u8(saveBlock2 + _nationalDexMagicOffset),
-      nationalDexVar: _u16(saveBlock1 + _activeNationalDexVarOffset),
-      nationalDexFlagSet: _readFlag(saveBlock1, _activeNationalDexFlag),
+    final int nationalMagic = _u8(
+      saveBlock2 +
+          (_isFireRedLeafGreen ? 0x1B : _nationalDexMagicOffset),
     );
+    final int nationalDexVar = _u16(
+      saveBlock1 + _activeNationalDexVarOffset,
+    );
+    final bool nationalDexUnlocked = _isFireRedLeafGreen
+        ? nationalMagic == 0xB9 &&
+              nationalDexVar == 0x6258 &&
+              _readFlag(saveBlock1, _activeNationalDexFlag)
+        : isNationalDexUnlocked(
+            nationalMagic: nationalMagic,
+            nationalDexVar: nationalDexVar,
+            nationalDexFlagSet: _readFlag(
+              saveBlock1,
+              _activeNationalDexFlag,
+            ),
+          );
     final _EmeraldBattleState? battle =
         profile.version == PokemonGameVersion.emerald
         ? _readBattleState()
@@ -230,13 +249,13 @@ final class PokemonEmeraldMemoryReader {
   }
 
   List<PokemonPartyMember> _readParty(int saveBlock1) {
-    final int count = _u8(saveBlock1 + _partyCountOffset);
+    final int count = _u8(saveBlock1 + _activePartyCountOffset);
     if (count < 0 || count > 6) return const <PokemonPartyMember>[];
 
     final List<PokemonPartyMember> result = <PokemonPartyMember>[];
     for (int index = 0; index < count; index++) {
       final List<int> bytes = _read(
-        saveBlock1 + _partyOffset + index * _partyMemberSize,
+        saveBlock1 + _activePartyOffset + index * _partyMemberSize,
         _partyMemberSize,
       );
       final PokemonPartyMember? member = _decodePartyMember(bytes);
@@ -485,6 +504,37 @@ final class PokemonEmeraldMemoryReader {
   ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {
+    if (_isFireRedLeafGreen) {
+      // FR/LG aplica el mismo desplazamiento aleatorio (0..0x7C) a ambos
+      // bloques. SaveBlock1 queda inmediatamente después de SaveBlock2 y su
+      // área DMA. Buscar el nombre y validar la pareja funciona también con
+      // ROMs europeas/españolas, sin depender de globals propios de una ROM.
+      final List<int> ewram = _read(_ewramStart, _ewramEnd - _ewramStart);
+      if (ewram.length != _ewramEnd - _ewramStart) return null;
+      final int saveBlockDistance =
+          _fireRedLeafGreenSaveBlock2Size + _fireRedLeafGreenDmaPadding;
+      for (
+        int saveBlock2 = _ewramStart;
+        saveBlock2 <=
+            _ewramEnd - saveBlockDistance - _fireRedLeafGreenSaveBlock1Size;
+        saveBlock2 += 4
+      ) {
+        final int localOffset = saveBlock2 - _ewramStart;
+        if (!isPlausiblePlayerName(
+          ewram.sublist(localOffset, localOffset + 8),
+        )) {
+          continue;
+        }
+        final int saveBlock1 = saveBlock2 + saveBlockDistance;
+        if (_validPair(saveBlock1, saveBlock2)) {
+          return _EmeraldSaveBlocks(
+            saveBlock1: saveBlock1,
+            saveBlock2: saveBlock2,
+          );
+        }
+      }
+      return null;
+    }
     if (profile.version == PokemonGameVersion.ruby ||
         profile.version == PokemonGameVersion.sapphire) {
       if (_validPair(
@@ -561,10 +611,14 @@ final class PokemonEmeraldMemoryReader {
     final bool rubySapphire =
         profile.version == PokemonGameVersion.ruby ||
         profile.version == PokemonGameVersion.sapphire;
-    final int saveBlock1Size = rubySapphire
+    final int saveBlock1Size = _isFireRedLeafGreen
+        ? _fireRedLeafGreenSaveBlock1Size
+        : rubySapphire
         ? _rubySapphireSaveBlock1Size
         : _saveBlock1Size;
-    final int saveBlock2Size = rubySapphire
+    final int saveBlock2Size = _isFireRedLeafGreen
+        ? _fireRedLeafGreenSaveBlock2Size
+        : rubySapphire
         ? _rubySapphireSaveBlock2Size
         : _saveBlock2Size;
     if (!_validBlock(saveBlock1, saveBlock1Size) ||
@@ -582,6 +636,10 @@ final class PokemonEmeraldMemoryReader {
     // direcciones cambian por idioma o revisión.
     if (rubySapphire &&
         !_hasConsistentRubySapphirePokedex(saveBlock1!, saveBlock2)) {
+      return false;
+    }
+    if (_isFireRedLeafGreen &&
+        !_hasConsistentFireRedLeafGreenPokedex(saveBlock1!, saveBlock2)) {
       return false;
     }
 
@@ -605,7 +663,11 @@ final class PokemonEmeraldMemoryReader {
     final int minutes = _u8(saveBlock2 + 0x10);
     final int seconds = _u8(saveBlock2 + 0x11);
     final int frames = _u8(saveBlock2 + 0x12);
-    if (hours > 9999 || minutes > 59 || seconds > 59 || frames > 59) {
+    final int maximumHours = _isFireRedLeafGreen ? 999 : 9999;
+    if (hours > maximumHours ||
+        minutes > 59 ||
+        seconds > 59 ||
+        frames > 59) {
       return false;
     }
 
@@ -622,38 +684,73 @@ final class PokemonEmeraldMemoryReader {
       return false;
     }
 
-    final int partyCount = _u8(saveBlock1 + _partyCountOffset);
+    final int partyCount = _u8(saveBlock1 + _activePartyCountOffset);
     if (partyCount > 6) return false;
     if (partyCount > 0) {
       final List<int> firstMember = _read(
-        saveBlock1 + _partyOffset,
+        saveBlock1 + _activePartyOffset,
         _partyMemberSize,
       );
       if (_decodePartyMember(firstMember) == null) return false;
     }
 
-    final int money = profile.version == PokemonGameVersion.emerald
-        ? _u32(saveBlock1 + 0x490) ^ _u32(saveBlock2 + 0xAC)
-        : _u32(saveBlock1 + 0x490);
+    final int money = _readMoney(saveBlock1, saveBlock2);
     return money >= 0 && money <= 999999;
   }
 
+  bool get _isFireRedLeafGreen =>
+      profile.version == PokemonGameVersion.fireRed ||
+      profile.version == PokemonGameVersion.leafGreen;
+
+  int get _activePartyCountOffset =>
+      _isFireRedLeafGreen ? 0x34 : _partyCountOffset;
+
+  int get _activePartyOffset => _isFireRedLeafGreen ? 0x38 : _partyOffset;
+
+  int _readMoney(int saveBlock1, int saveBlock2) {
+    if (_isFireRedLeafGreen) {
+      return _u32(saveBlock1 + 0x290) ^ _u32(saveBlock2 + 0xF20);
+    }
+    if (profile.version == PokemonGameVersion.emerald) {
+      return _u32(saveBlock1 + 0x490) ^ _u32(saveBlock2 + 0xAC);
+    }
+    return _u32(saveBlock1 + 0x490);
+  }
+
   int get _activeFlagsOffset =>
-      profile.version == PokemonGameVersion.emerald ? _flagsOffset : 0x1220;
+      _isFireRedLeafGreen
+      ? 0x0EE0
+      : profile.version == PokemonGameVersion.emerald
+      ? _flagsOffset
+      : 0x1220;
 
   int get _activeFirstBadgeFlag =>
-      profile.version == PokemonGameVersion.emerald ? _firstBadgeFlag : 0x807;
+      _isFireRedLeafGreen
+      ? 0x820
+      : profile.version == PokemonGameVersion.emerald
+      ? _firstBadgeFlag
+      : 0x807;
 
   int get _activeLastTrainerId =>
-      profile.version == PokemonGameVersion.emerald ? _lastTrainerId : 693;
+      _isFireRedLeafGreen
+      ? 767
+      : profile.version == PokemonGameVersion.emerald
+      ? _lastTrainerId
+      : 693;
 
   int get _activeNationalDexVarOffset =>
-      profile.version == PokemonGameVersion.emerald
+      _isFireRedLeafGreen
+      ? 0x109C
+      : profile.version == PokemonGameVersion.emerald
       ? _nationalDexVarOffset
       : 0x13CC;
 
   int get _activeNationalDexFlag =>
-      profile.version == PokemonGameVersion.emerald ? _nationalDexFlag : 0x836;
+      _isFireRedLeafGreen
+      ? 0x840
+      : profile.version == PokemonGameVersion.emerald
+      ? _nationalDexFlag
+      : 0x836;
 
   bool _hasConsistentRubySapphirePokedex(int saveBlock1, int saveBlock2) {
     final List<int> primarySeen = _read(
@@ -666,6 +763,26 @@ final class PokemonEmeraldMemoryReader {
     );
     final List<int> tertiarySeen = _read(
       saveBlock1 + _rubySapphireDexSeen3Offset,
+      _pokedexBytes,
+    );
+    return equalBytes(primarySeen, secondarySeen) &&
+        equalBytes(primarySeen, tertiarySeen);
+  }
+
+  bool _hasConsistentFireRedLeafGreenPokedex(
+    int saveBlock1,
+    int saveBlock2,
+  ) {
+    final List<int> primarySeen = _read(
+      saveBlock2 + _pokedexSeenOffset,
+      _pokedexBytes,
+    );
+    final List<int> secondarySeen = _read(
+      saveBlock1 + _fireRedLeafGreenDexSeen1Offset,
+      _pokedexBytes,
+    );
+    final List<int> tertiarySeen = _read(
+      saveBlock1 + _fireRedLeafGreenDexSeen2Offset,
       _pokedexBytes,
     );
     return equalBytes(primarySeen, secondarySeen) &&

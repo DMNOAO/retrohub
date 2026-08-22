@@ -42,7 +42,11 @@ class GameAssetProfile {
   }
 
   factory GameAssetProfile.fromTitle({required String title, required String console, String? savedSpriteSet}) {
-    final value = title.toLowerCase();
+    final value = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
     if (value.contains('amarillo') || value.contains('yellow')) {
       return GameAssetProfile(game: PokemonAssetGame.yellow, region: PokemonAssetRegion.kanto, pokemonSpriteSet: savedSpriteSet ?? 'gb/yellow', pokemonExtension: 'png', trainerSpriteSet: 'gb', protagonistAsset: 'assets/sprites/characters/protagonists/red_yellow.png', rivalAsset: 'assets/sprites/characters/rivals/blue_kanto_yellow.png', championAsset: 'assets/sprites/characters/champions/blue_kanto_yellow.png', sourceTitle: value);
