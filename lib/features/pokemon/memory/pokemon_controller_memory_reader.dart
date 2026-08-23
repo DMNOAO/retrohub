@@ -245,6 +245,21 @@ class PokemonControllerMemoryReader {
       );
     }
 
+    if (profile.isGen2) {
+      final List<Map<String, Object?>> diagnostics = party
+          .map(
+            (PokemonPartyMember pokemon) => <String, Object?>{
+              'name': pokemon.name,
+              'egg': pokemon.isEgg,
+              'friendship': pokemon.friendship,
+              'eggCycles': pokemon.eggCyclesRemaining,
+              'eggTotal': pokemon.eggCyclesTotal,
+            },
+          )
+          .toList(growable: false);
+      developer.log('party=$diagnostics', name: 'RetroHub.Gen2PartyDiagnostic');
+    }
+
     final int map = profile.isGen2 && a.currentMapGroup != null
         ? (byte(a.currentMapGroup!) << 8) | byte(a.currentMap)
         : byte(a.currentMap);

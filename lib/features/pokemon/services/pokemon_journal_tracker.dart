@@ -895,7 +895,8 @@ class PokemonJournalTracker {
     await _insertEvent(
       type: 'kanto_unlocked',
       title: 'Nueva región desbloqueada: Kanto',
-      description: 'La aventura continúa más allá de Johto. Las ocho medallas de Kanto ya están disponibles.',
+      description:
+          'La aventura continúa más allá de Johto. Las ocho medallas de Kanto ya están disponibles.',
       metadata: <String, dynamic>{
         ..._metadata(value),
         'region': 'kanto',
@@ -905,6 +906,15 @@ class PokemonJournalTracker {
   }
 
   Future<void> _saveSnapshot(PokemonMemorySnapshot value) async {
+    final String serializedParty = jsonEncode(
+      value.party.map((pokemon) => pokemon.toJson()).toList(),
+    );
+    if (value.profile.isGen2) {
+      developer.log(
+        'partyJson=$serializedParty',
+        name: 'RetroHub.Gen2SnapshotDiagnostic',
+      );
+    }
     await database.insertProgressSnapshot(
       GameProgressSnapshotsCompanion(
         gameId: Value(gameId),
@@ -913,9 +923,7 @@ class PokemonJournalTracker {
         currentLocation: Value(
           PokemonDecoder.mapName(value.profile, value.currentMapId),
         ),
-        partyJson: Value(
-          jsonEncode(value.party.map((pokemon) => pokemon.toJson()).toList()),
-        ),
+        partyJson: Value(serializedParty),
         badgesJson: Value(
           jsonEncode(
             List.generate(
