@@ -8,11 +8,19 @@ class PokedexEvolutionData {
     final generation = switch (profile.game) {
       PokemonAssetGame.redBlue || PokemonAssetGame.yellow => 1,
       PokemonAssetGame.gold || PokemonAssetGame.silver || PokemonAssetGame.crystal => 2,
-      PokemonAssetGame.rubySapphire || PokemonAssetGame.emerald => 3,
+      PokemonAssetGame.rubySapphire ||
+      PokemonAssetGame.emerald ||
+      PokemonAssetGame.fireRedLeafGreen => 3,
       _ => 0,
     };
     if (generation == 0) return '';
-    final rules = generation == 1 ? _gen1 : generation == 2 ? _gen2 : _gen3;
+    final rules = profile.game == PokemonAssetGame.fireRedLeafGreen
+        ? _fireRedLeafGreen
+        : generation == 1
+        ? _gen1
+        : generation == 2
+        ? _gen2
+        : _gen3;
     final rule = rules[pokemonId];
     if (rule == null) return 'No evoluciona en esta generación.';
     return rule;
@@ -36,5 +44,14 @@ class PokedexEvolutionData {
     ..._gen2,
     44:'Evoluciona a Vileplume con Piedra Hoja o a Bellossom con Piedra Solar.',64:'Evoluciona a Alakazam mediante intercambio.',67:'Evoluciona a Machamp mediante intercambio.',75:'Evoluciona a Golem mediante intercambio.',93:'Evoluciona a Gengar mediante intercambio.',
     252:_level(253,16),253:_level(254,36),255:_level(256,16),256:_level(257,36),258:_level(259,16),259:_level(260,36),261:_level(262,18),263:_level(264,20),265:_level(266,7),266:_level(267,10),267:'No evoluciona.',268:_level(269,10),270:_level(271,14),271:_stone(272,'Piedra Agua'),273:_level(274,14),274:_stone(275,'Piedra Hoja'),276:_level(277,22),278:_level(279,25),280:_level(281,20),281:_level(282,30),283:_level(284,22),285:_level(286,23),287:_level(288,18),288:_level(289,36),290:_level(291,20),293:_level(294,20),294:_level(295,40),296:_level(297,24),298:'Evoluciona a Marill con amistad alta.',299:_level(476,0),300:_stone(301,'Piedra Lunar'),304:_level(305,32),305:_level(306,42),307:_level(308,37),309:_level(310,26),315:'No evoluciona en esta generación.',316:_level(317,26),318:_level(319,30),320:_level(321,40),322:_level(323,33),325:_level(326,32),328:_level(329,35),329:_level(330,45),331:_level(332,32),333:_level(334,35),339:_level(340,30),341:_level(342,30),343:_level(344,36),345:_level(346,40),347:_level(348,40),349:'Evoluciona a Milotic al subir de nivel con Belleza alta.',353:_level(354,37),355:_level(356,37),360:_level(202,15),361:_level(362,42),363:_level(364,32),364:_level(365,44),366:'Evoluciona a Huntail o Gorebyss mediante intercambio con el objeto correspondiente.',371:_level(372,30),372:_level(373,50),374:_level(375,20),375:_level(376,45),
+  };
+
+  static final Map<int, String> _fireRedLeafGreen = {
+    ..._gen3,
+    // FR/LG no tiene reloj interno. Eevee no puede evolucionar a Espeon o
+    // Umbreon dentro de estas ediciones; esas evoluciones requieren
+    // transferirlo a Ruby, Sapphire o Emerald.
+    133:
+        'Evoluciona a Vaporeon con Piedra Agua, Jolteon con Piedra Trueno o Flareon con Piedra Fuego. Para obtener a Espeon o Umbreon debes transferirlo a Rubí, Zafiro o Esmeralda.',
   };
 }
