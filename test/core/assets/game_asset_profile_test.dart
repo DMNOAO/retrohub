@@ -26,4 +26,18 @@ void main() {
     expect(profile.game, PokemonAssetGame.fireRedLeafGreen);
     expect(profile.pokemonSpriteSet, 'gba/fire_red_leaf_green');
   });
+
+  test('habilita la bitácora únicamente para perfiles Pokémon compatibles', () {
+    final pokemon = GameAssetProfile.fromTitle(
+      title: 'Pokemon_Esmeralda',
+      console: 'GBA',
+    );
+    final mario = GameAssetProfile.fromTitle(
+      title: 'Super Mario World',
+      console: 'SNES',
+    );
+
+    expect(pokemon.supportsPokemonJournal, isTrue);
+    expect(mario.supportsPokemonJournal, isFalse);
+  });
 }

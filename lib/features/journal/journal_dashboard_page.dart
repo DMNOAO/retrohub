@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/assets/game_asset_profile.dart';
 import '../../core/utils/cover_helper.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
@@ -28,6 +29,8 @@ final journalDashboardProvider = FutureProvider.autoDispose<List<JournalGameSumm
   final summaries = <JournalGameSummary>[];
 
   for (final game in games) {
+    if (!GameAssetProfile.fromGame(game).supportsPokemonJournal) continue;
+
     final snapshot = await database.getLatestProgressSnapshot(game.id);
     final events = await database.getProgressEventsByGame(game.id);
     final entries = await database.getJournalEntriesByGame(game.id);
@@ -63,7 +66,7 @@ class JournalDashboardPage extends ConsumerWidget {
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'Todavía no hay juegos con progreso o eventos registrados.\nAbre una partida compatible y RetroHub creará su bitácora.',
+                'Todavía no hay juegos Pokémon compatibles con progreso registrado.\nAbre una partida y RetroHub creará su bitácora.',
                 textAlign: TextAlign.center,
               ),
             ),
