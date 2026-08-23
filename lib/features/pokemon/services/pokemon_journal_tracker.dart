@@ -272,9 +272,9 @@ class PokemonJournalTracker {
     }
     if (value.party.length > 6 ||
         !value.party.every(
-          (pokemon) => pokemon.isEgg
-              ? value.profile.isGen2 && pokemon.pokedexId == 0
-              : pokemon.pokedexId >= 1 && pokemon.pokedexId <= 386,
+          (pokemon) =>
+              pokemon.pokedexId >= 1 && pokemon.pokedexId <= 386 ||
+              pokemon.isEgg && value.profile.isGen2 && pokemon.pokedexId == 0,
         )) {
       return 'invalid party';
     }
@@ -909,12 +909,6 @@ class PokemonJournalTracker {
     final String serializedParty = jsonEncode(
       value.party.map((pokemon) => pokemon.toJson()).toList(),
     );
-    if (value.profile.isGen2) {
-      developer.log(
-        'partyJson=$serializedParty',
-        name: 'RetroHub.Gen2SnapshotDiagnostic',
-      );
-    }
     await database.insertProgressSnapshot(
       GameProgressSnapshotsCompanion(
         gameId: Value(gameId),
