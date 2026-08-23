@@ -25,6 +25,8 @@ class GameAssetProfile {
   final String? championAsset;
   final String? sourceTitle;
 
+  bool get supportsPokemonJournal => game != PokemonAssetGame.unsupported;
+
   const GameAssetProfile({
     required this.game,
     required this.region,

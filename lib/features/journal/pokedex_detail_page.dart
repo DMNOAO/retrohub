@@ -51,6 +51,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
   Widget build(BuildContext context) {
     final data = PokedexDetailData.forGame(widget.profile, _pokemonId);
     final evolution = PokedexEvolutionData.forGame(widget.profile, _pokemonId);
+    final evolutionOptions = evolution.split('\n');
     final name = PokemonDecoder.pokemonName(_pokemonId);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
@@ -69,7 +70,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
           const SizedBox(height: 12),
           _Section(icon: Icons.location_on_outlined, title: 'Dónde encontrarlo', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (data.encounters.isEmpty) const Text('Datos de encuentro aún no cargados para esta especie.') else ...data.encounters.map((e) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.place_outlined), title: Text(e.location), subtitle: Text('${e.method} · ${e.time}'))),
-            if (evolution.isNotEmpty) ...[const Divider(height: 24), ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.change_circle_outlined), title: const Text('Evolución'), subtitle: Text(evolution))],
+            if (evolution.isNotEmpty) ...[const Divider(height: 24), ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.change_circle_outlined), title: const Text('Evolución'), subtitle: evolutionOptions.length == 1 ? Text(evolution) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: evolutionOptions.map((option) => Padding(padding: const EdgeInsets.only(top: 4), child: Text('• $option'))).toList()))],
           ])),
           const SizedBox(height: 12),
           _LockedSection(icon: Icons.menu_book_outlined, title: 'Entrada de la Pokédex', unlocked: _caught, child: data.entry.isEmpty ? const Text('Entrada aún no cargada para esta especie.') : Text(data.entry)),
