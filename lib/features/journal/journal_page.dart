@@ -39,7 +39,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _loadSnapshot() async {
-    final currentGame = await _database.getGameById(widget.game.id) ?? widget.game;
+    final currentGame =
+        await _database.getGameById(widget.game.id) ?? widget.game;
     final snapshot = await _database.getLatestProgressSnapshot(widget.game.id);
     final events = await _database.getProgressEventsByGame(widget.game.id);
     final now = DateTime.now();
@@ -101,14 +102,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _snapshot == null
-              ? _EmptyJournal(gameTitle: game.title)
-              : _ProgressJournal(
-                  game: game,
-                  snapshot: _snapshot!,
-                  decodeList: _decodeList,
-                  decodeMap: _decodeMap,
-                  showKantoReveal: _showKantoReveal,
-                ),
+          ? _EmptyJournal(gameTitle: game.title)
+          : _ProgressJournal(
+              game: game,
+              snapshot: _snapshot!,
+              decodeList: _decodeList,
+              decodeMap: _decodeMap,
+              showKantoReveal: _showKantoReveal,
+            ),
     );
     if (journalAppearance == null) return journal;
     return Theme(data: journalAppearance.theme, child: journal);
@@ -165,9 +166,13 @@ class _ProgressJournal extends StatelessWidget {
     return int.tryParse(value?.toString() ?? '');
   }
 
-  bool _boolValue(dynamic value) => value == true || value?.toString() == 'true';
+  bool _boolValue(dynamic value) =>
+      value == true || value?.toString() == 'true';
 
-  String? _pokemonSprite(GameAssetProfile profile, Map<String, dynamic>? pokemon) {
+  String? _pokemonSprite(
+    GameAssetProfile profile,
+    Map<String, dynamic>? pokemon,
+  ) {
     if (_boolValue(pokemon?['isEgg'])) {
       return SpriteResolver.eggForGame(profile: profile);
     }
@@ -180,14 +185,13 @@ class _ProgressJournal extends StatelessWidget {
     );
   }
 
-
   static const List<int> _kantoGen2BadgeIndices = <int>[
     13, // Roca
     12, // Cascada
-    8,  // Trueno
+    8, // Trueno
     10, // Arcoíris
     11, // Alma
-    9,  // Pantano
+    9, // Pantano
     14, // Volcán
     15, // Tierra
   ];
@@ -213,8 +217,11 @@ class _ProgressJournal extends StatelessWidget {
     final isGen2 = profile.region == PokemonAssetRegion.johto;
     final johtoIndices = List<int>.generate(8, (index) => index);
     final johtoCount = _countBadges(badges, johtoIndices);
-    final kantoCount = isGen2 ? _countBadges(badges, _kantoGen2BadgeIndices) : 0;
-    final kantoUnlocked = isGen2 &&
+    final kantoCount = isGen2
+        ? _countBadges(badges, _kantoGen2BadgeIndices)
+        : 0;
+    final kantoUnlocked =
+        isGen2 &&
         (johtoCount == 8 || kantoCount > 0 || snapshot.leagueWins > 0);
     final totalBadges = isGen2 ? johtoCount + kantoCount : snapshot.badgesCount;
     final badgeMaximum = kantoUnlocked ? 16 : 8;
@@ -228,13 +235,19 @@ class _ProgressJournal extends StatelessWidget {
           snapshot: snapshot,
           profile: profile,
           leadPokemon: party.isEmpty ? null : party.first,
-          leadPokemonPath: party.isEmpty ? null : _pokemonSprite(profile, party.first),
+          leadPokemonPath: party.isEmpty
+              ? null
+              : _pokemonSprite(profile, party.first),
           badgeSummary: badgeSummary,
         ),
         const SizedBox(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 560 ? 2 : 1;
+            final columns = constraints.maxWidth >= 900
+                ? 3
+                : constraints.maxWidth >= 560
+                ? 2
+                : 1;
             return GridView.count(
               crossAxisCount: columns,
               shrinkWrap: true,
@@ -243,10 +256,29 @@ class _ProgressJournal extends StatelessWidget {
               crossAxisSpacing: 12,
               childAspectRatio: columns == 1 ? 4.2 : 3.2,
               children: [
-                _InfoCard(icon: Icons.place_outlined, title: 'Ubicación actual', value: snapshot.currentLocation ?? 'Sin ubicación detectada'),
-                _InfoCard(icon: Icons.schedule, title: 'Tiempo jugado', value: PlayTimeFormatter.fromSeconds(snapshot.playTimeMinutes * 60)),
-                _InfoCard(icon: Icons.catching_pokemon, title: 'Pokédex', value: '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados'),
-                _InfoCard(icon: Icons.emoji_events_outlined, title: 'Liga Pokémon', value: '${snapshot.leagueWins} victorias'),
+                _InfoCard(
+                  icon: Icons.place_outlined,
+                  title: 'Ubicación actual',
+                  value: snapshot.currentLocation ?? 'Sin ubicación detectada',
+                ),
+                _InfoCard(
+                  icon: Icons.schedule,
+                  title: 'Tiempo jugado',
+                  value: PlayTimeFormatter.fromSeconds(
+                    snapshot.playTimeMinutes * 60,
+                  ),
+                ),
+                _InfoCard(
+                  icon: Icons.catching_pokemon,
+                  title: 'Pokédex',
+                  value:
+                      '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados',
+                ),
+                _InfoCard(
+                  icon: Icons.emoji_events_outlined,
+                  title: 'Liga Pokémon',
+                  value: '${snapshot.leagueWins} victorias',
+                ),
                 _InfoCard(
                   icon: Icons.sports_martial_arts,
                   title: 'Último entrenador',
@@ -258,7 +290,11 @@ class _ProgressJournal extends StatelessWidget {
                           trainerClass: snapshot.lastDefeatedTrainer!,
                         ),
                 ),
-                _InfoCard(icon: Icons.workspace_premium_outlined, title: 'Medallas', value: '$totalBadges/$badgeMaximum obtenidas'),
+                _InfoCard(
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'Medallas',
+                  value: '$totalBadges/$badgeMaximum obtenidas',
+                ),
               ],
             );
           },
@@ -296,15 +332,18 @@ class _ProgressJournal extends StatelessWidget {
         ],
         const _SectionTitle(title: 'Equipo actual'),
         if (party.isEmpty)
-          const _EmptySection(icon: Icons.catching_pokemon, label: 'Sin equipo detectado.')
+          const _EmptySection(
+            icon: Icons.catching_pokemon,
+            label: 'Sin equipo detectado.',
+          )
         else
           LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth >= 900
                   ? (constraints.maxWidth - 24) / 3
                   : constraints.maxWidth >= 560
-                      ? (constraints.maxWidth - 12) / 2
-                      : constraints.maxWidth;
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -319,11 +358,31 @@ class _ProgressJournal extends StatelessWidget {
                       ? ' · PS $currentHp/$maximumHp'
                       : '';
                   final bool isEgg = _boolValue(pokemon['isEgg']);
+                  final int? friendship = int.tryParse(
+                    pokemon['friendship']?.toString() ?? '',
+                  );
+                  final String friendshipDetail = friendship == null
+                      ? ''
+                      : ' · ♥ $friendship/255';
+                  final int? eggStepsCurrent = int.tryParse(
+                    pokemon['eggStepsCurrent']?.toString() ?? '',
+                  );
+                  final int? eggStepsTotal = int.tryParse(
+                    pokemon['eggStepsTotal']?.toString() ?? '',
+                  );
+                  final String eggDetail =
+                      eggStepsCurrent != null && eggStepsTotal != null
+                      ? '🥚 $eggStepsCurrent/$eggStepsTotal pasos'
+                      : 'Pokémon por eclosionar';
                   return SizedBox(
                     width: width,
                     child: _PokemonTile(
-                      name: isEgg ? 'Huevo' : (pokemon['name']?.toString() ?? 'Pokémon'),
-                      detail: isEgg ? 'Pokémon por eclosionar' : 'Nivel ${pokemon['level'] ?? '—'}$hp',
+                      name: isEgg
+                          ? 'Huevo'
+                          : (pokemon['name']?.toString() ?? 'Pokémon'),
+                      detail: isEgg
+                          ? eggDetail
+                          : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                     ),
@@ -384,14 +443,21 @@ class _AdventureHeader extends StatelessWidget {
               color: scheme.surface,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: SpriteImage(path: profile.protagonistAsset, size: 68, fallbackIcon: Icons.person_outline),
+            child: SpriteImage(
+              path: profile.protagonistAsset,
+              size: 68,
+              fallbackIcon: Icons.person_outline,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(game.title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  game.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 5),
                 Text(snapshot.currentLocation ?? 'Aventura en progreso'),
                 const SizedBox(height: 8),
@@ -402,8 +468,15 @@ class _AdventureHeader extends StatelessWidget {
           if (leadPokemon != null)
             Column(
               children: [
-                SpriteImage(path: leadPokemonPath, size: 70, fallbackIcon: Icons.catching_pokemon),
-                Text('Nv. ${leadPokemon!['level'] ?? '—'}', style: Theme.of(context).textTheme.labelMedium),
+                SpriteImage(
+                  path: leadPokemonPath,
+                  size: 70,
+                  fallbackIcon: Icons.catching_pokemon,
+                ),
+                Text(
+                  'Nv. ${leadPokemon!['level'] ?? '—'}',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
               ],
             ),
         ],
@@ -444,9 +517,10 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
       duration: const Duration(milliseconds: 850),
     );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _scale = Tween<double>(begin: .92, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scale = Tween<double>(
+      begin: .92,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -477,7 +551,10 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
               scale: _scale,
               child: Container(
                 margin: const EdgeInsets.only(top: 24),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 28,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -486,7 +563,9 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
                     ],
                   ),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: scheme.primary.withValues(alpha: .55)),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: .55),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: scheme.primary.withValues(alpha: .18),
@@ -506,7 +585,8 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
                     const SizedBox(height: 4),
                     Text(
                       'KANTO',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: 4,
                             color: scheme.primary,
@@ -530,7 +610,9 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
                   key: const ValueKey<String>('kanto-badges'),
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _SectionTitle(title: 'Medallas de Kanto ${widget.kantoCount}/8'),
+                    _SectionTitle(
+                      title: 'Medallas de Kanto ${widget.kantoCount}/8',
+                    ),
                     _BadgeGrid(
                       region: PokemonAssetRegion.kanto,
                       badges: widget.badges,
@@ -584,7 +666,10 @@ class _BadgeGrid extends StatelessWidget {
           itemBuilder: (context, visualIndex) {
             final fullIndex = badgeIndices[visualIndex];
             final obtained = _isObtained(fullIndex);
-            final asset = BadgeAssetResolver.resolveForRegion(region, visualIndex);
+            final asset = BadgeAssetResolver.resolveForRegion(
+              region,
+              visualIndex,
+            );
             return AnimatedOpacity(
               duration: const Duration(milliseconds: 280),
               opacity: obtained ? 1 : .34,
@@ -608,10 +693,8 @@ class _BadgeGrid extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: compact
-                                ? Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      fontSize: 10.5,
-                                      height: 1.05,
-                                    )
+                                ? Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(fontSize: 10.5, height: 1.05)
                                 : null,
                           ),
                         ],
@@ -661,11 +744,7 @@ class _InfoCard extends StatelessWidget {
             if (spritePath == null)
               Icon(icon)
             else
-              SpriteImage(
-                path: spritePath,
-                size: 44,
-                fallbackIcon: icon,
-              ),
+              SpriteImage(path: spritePath, size: 44, fallbackIcon: icon),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -690,7 +769,12 @@ class _PokemonTile extends StatelessWidget {
   final String detail;
   final String? spritePath;
   final bool shiny;
-  const _PokemonTile({required this.name, required this.detail, required this.spritePath, required this.shiny});
+  const _PokemonTile({
+    required this.name,
+    required this.detail,
+    required this.spritePath,
+    required this.shiny,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -698,7 +782,11 @@ class _PokemonTile extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        leading: SpriteImage(path: spritePath, size: 58, fallbackIcon: Icons.catching_pokemon),
+        leading: SpriteImage(
+          path: spritePath,
+          size: 58,
+          fallbackIcon: Icons.catching_pokemon,
+        ),
         title: Row(
           children: [
             Expanded(child: Text(name)),
@@ -716,7 +804,9 @@ class _EmptySection extends StatelessWidget {
   final String label;
   const _EmptySection({required this.icon, required this.label});
   @override
-  Widget build(BuildContext context) => Card(child: ListTile(leading: Icon(icon), title: Text(label)));
+  Widget build(BuildContext context) => Card(
+    child: ListTile(leading: Icon(icon), title: Text(label)),
+  );
 }
 
 class _SectionTitle extends StatelessWidget {

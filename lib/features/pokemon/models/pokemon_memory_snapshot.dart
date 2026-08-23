@@ -12,8 +12,54 @@ class PokemonPartyMember {
   final int? currentHp;
   final int? maximumHp;
   final int? status;
-  const PokemonPartyMember({required this.internalSpeciesId,required this.pokedexId,required this.name,required this.level,this.isShiny=false,this.isEgg=false,this.nickname,this.currentHp,this.maximumHp,this.status});
-  Map<String,dynamic> toJson()=>{'id':pokedexId,'internalId':internalSpeciesId,'name':name,'level':level,'isShiny':isShiny,'isEgg':isEgg,'nickname':nickname,'currentHp':currentHp,'maximumHp':maximumHp,'status':status};
+  final int? friendship;
+  final int? eggCyclesRemaining;
+  final int? eggCyclesTotal;
+
+  const PokemonPartyMember({
+    required this.internalSpeciesId,
+    required this.pokedexId,
+    required this.name,
+    required this.level,
+    this.isShiny = false,
+    this.isEgg = false,
+    this.nickname,
+    this.currentHp,
+    this.maximumHp,
+    this.status,
+    this.friendship,
+    this.eggCyclesRemaining,
+    this.eggCyclesTotal,
+  });
+
+  int? get eggStepsCurrent {
+    if (eggCyclesRemaining == null || eggCyclesTotal == null) return null;
+    final int completedCycles = (eggCyclesTotal! - eggCyclesRemaining!)
+        .clamp(0, eggCyclesTotal!)
+        .toInt();
+    return completedCycles * 256;
+  }
+
+  int? get eggStepsTotal =>
+      eggCyclesTotal == null ? null : eggCyclesTotal! * 256;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': pokedexId,
+    'internalId': internalSpeciesId,
+    'name': name,
+    'level': level,
+    'isShiny': isShiny,
+    'isEgg': isEgg,
+    'nickname': nickname,
+    'currentHp': currentHp,
+    'maximumHp': maximumHp,
+    'status': status,
+    'friendship': friendship,
+    'eggCyclesRemaining': eggCyclesRemaining,
+    'eggCyclesTotal': eggCyclesTotal,
+    'eggStepsCurrent': eggStepsCurrent,
+    'eggStepsTotal': eggStepsTotal,
+  };
 }
 
 class PokemonMemorySnapshot {
@@ -34,21 +80,46 @@ class PokemonMemorySnapshot {
   final List<int> caughtPokemonIds;
   final List<PokemonPartyMember> party;
   final int? gamePlayTimeMinutes;
-  // Combate (Fase 4.2/4.3). null = no soportado en esta versión/perfil.
-  // battleState: 0 = fuera de combate, 1 = combate salvaje, 2 = combate
-  // de entrenador (mismo significado en Gen1 y Gen2, direcciones
-  // distintas ya resueltas en PokemonMemoryAddresses).
   final int? battleState;
   final int? otherTrainerClassId;
   final int? otherTrainerId;
   final int? battleResultRaw;
-  // IDs cuyas banderas de derrota ya están activas en Gen III. Permiten
-  // detectar la primera victoria sin depender de globals que cambian entre
-  // idiomas de la ROM.
   final List<int> defeatedTrainerIds;
-  const PokemonMemorySnapshot({required this.capturedAt,required this.profile,required this.memoryShift,required this.playerName,required this.trainerId,required this.currentMapId,required this.playerX,required this.playerY,required this.money,required this.badgesMask,required this.pokedexSeen,required this.pokedexCaught,this.nationalDexUnlocked=false,required this.seenPokemonIds,required this.caughtPokemonIds,required this.party,this.gamePlayTimeMinutes,this.battleState,this.otherTrainerClassId,this.otherTrainerId,this.battleResultRaw,this.defeatedTrainerIds=const <int>[]});
-  List<int> get partySpeciesIds=>party.map((e)=>e.pokedexId).toList(growable:false);
-  int get badgeCount=>PokemonDecoder.countBits(<int>[badgesMask&0xff,(badgesMask>>8)&0xff]);
-  String get currentLocation=>PokemonDecoder.mapName(profile,currentMapId);
-  String badgeName(int index)=>PokemonDecoder.badgeName(profile,index);
+
+  const PokemonMemorySnapshot({
+    required this.capturedAt,
+    required this.profile,
+    required this.memoryShift,
+    required this.playerName,
+    required this.trainerId,
+    required this.currentMapId,
+    required this.playerX,
+    required this.playerY,
+    required this.money,
+    required this.badgesMask,
+    required this.pokedexSeen,
+    required this.pokedexCaught,
+    this.nationalDexUnlocked = false,
+    required this.seenPokemonIds,
+    required this.caughtPokemonIds,
+    required this.party,
+    this.gamePlayTimeMinutes,
+    this.battleState,
+    this.otherTrainerClassId,
+    this.otherTrainerId,
+    this.battleResultRaw,
+    this.defeatedTrainerIds = const <int>[],
+  });
+
+  List<int> get partySpeciesIds =>
+      party.map((e) => e.pokedexId).toList(growable: false);
+
+  int get badgeCount => PokemonDecoder.countBits(<int>[
+    badgesMask & 0xff,
+    (badgesMask >> 8) & 0xff,
+  ]);
+
+  String get currentLocation => PokemonDecoder.mapName(profile, currentMapId);
+
+  String badgeName(int index) => PokemonDecoder.badgeName(profile, index);
 }

@@ -12,10 +12,7 @@ void main() {
         PokemonEmeraldMemoryReader.equalBytes(seen, List<int>.from(seen)),
         isTrue,
       );
-      expect(
-        PokemonEmeraldMemoryReader.equalBytes(seen, different),
-        isFalse,
-      );
+      expect(PokemonEmeraldMemoryReader.equalBytes(seen, different), isFalse);
       expect(
         PokemonEmeraldMemoryReader.equalBytes(seen, const <int>[]),
         isFalse,
@@ -24,18 +21,32 @@ void main() {
 
     test('acepta nombres legítimos con caracteres repetidos', () {
       expect(
-        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
-          <int>[0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xFF],
-        ),
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(<int>[
+          0xBB,
+          0xBB,
+          0xBB,
+          0xBB,
+          0xBB,
+          0xBB,
+          0xBB,
+          0xFF,
+        ]),
         isTrue,
       );
     });
 
     test('acepta un nombre normal terminado en FF', () {
       expect(
-        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
-          <int>[0xBE, 0xBB, 0xC7, 0xC3, 0xFF, 0x00, 0x00, 0x00],
-        ),
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(<int>[
+          0xBE,
+          0xBB,
+          0xC7,
+          0xC3,
+          0xFF,
+          0x00,
+          0x00,
+          0x00,
+        ]),
         isTrue,
       );
     });
@@ -48,9 +59,16 @@ void main() {
         isFalse,
       );
       expect(
-        PokemonEmeraldMemoryReader.isPlausiblePlayerName(
-          <int>[0x20, 0xFF, 0, 0, 0, 0, 0, 0],
-        ),
+        PokemonEmeraldMemoryReader.isPlausiblePlayerName(<int>[
+          0x20,
+          0xFF,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]),
         isFalse,
       );
     });
@@ -80,15 +98,72 @@ void main() {
   group('Equipo de Pokémon Emerald', () {
     test('usa las 24 posiciones oficiales de la subestructura Growth', () {
       const expected = <int>[
-        0, 0, 0, 0, 0, 0,
-        1, 1, 2, 3, 2, 3,
-        1, 1, 2, 3, 2, 3,
-        1, 1, 2, 3, 2, 3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        3,
+        2,
+        3,
+        1,
+        1,
+        2,
+        3,
+        2,
+        3,
+        1,
+        1,
+        2,
+        3,
+        2,
+        3,
       ];
 
       for (int personality = 0; personality < 24; personality++) {
         expect(
           PokemonEmeraldMemoryReader.growthSubstructurePosition(personality),
+          expected[personality],
+          reason: 'permutación $personality',
+        );
+      }
+    });
+
+    test('usa las 24 posiciones oficiales de la subestructura Misc', () {
+      const expected = <int>[
+        3,
+        2,
+        3,
+        2,
+        1,
+        1,
+        3,
+        2,
+        3,
+        2,
+        1,
+        1,
+        3,
+        2,
+        3,
+        2,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+      ];
+
+      for (int personality = 0; personality < 24; personality++) {
+        expect(
+          PokemonEmeraldMemoryReader.miscSubstructurePosition(personality),
           expected[personality],
           reason: 'permutación $personality',
         );
@@ -111,9 +186,9 @@ void main() {
 
         final internalId =
             PokemonEmeraldMemoryReader.internalSpeciesIdFromDecryptedData(
-          personality: pokemon.$2,
-          decryptedData: data,
-        );
+              personality: pokemon.$2,
+              decryptedData: data,
+            );
 
         expect(internalId, pokemon.$3);
         expect(
