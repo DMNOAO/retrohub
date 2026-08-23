@@ -1,4 +1,5 @@
 import '../decoder/pokemon_decoder.dart';
+import '../data/pokemon_hatch_cycles.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import '../../emulator/data/libretro_bridge.dart';
@@ -109,12 +110,9 @@ final class PokemonEmeraldMemoryReader {
     );
     final int badgesMask = _readBadgesMask(saveBlock1);
     final int nationalMagic = _u8(
-      saveBlock2 +
-          (_isFireRedLeafGreen ? 0x1B : _nationalDexMagicOffset),
+      saveBlock2 + (_isFireRedLeafGreen ? 0x1B : _nationalDexMagicOffset),
     );
-    final int nationalDexVar = _u16(
-      saveBlock1 + _activeNationalDexVarOffset,
-    );
+    final int nationalDexVar = _u16(saveBlock1 + _activeNationalDexVarOffset);
     final bool nationalDexUnlocked = _isFireRedLeafGreen
         ? nationalMagic == 0xB9 &&
               nationalDexVar == 0x6258 &&
@@ -122,10 +120,7 @@ final class PokemonEmeraldMemoryReader {
         : isNationalDexUnlocked(
             nationalMagic: nationalMagic,
             nationalDexVar: nationalDexVar,
-            nationalDexFlagSet: _readFlag(
-              saveBlock1,
-              _activeNationalDexFlag,
-            ),
+            nationalDexFlagSet: _readFlag(saveBlock1, _activeNationalDexFlag),
           );
     final _EmeraldBattleState? battle =
         profile.version == PokemonGameVersion.emerald
@@ -306,6 +301,16 @@ final class PokemonEmeraldMemoryReader {
     final int personalityLow = personality & 0xFFFF;
     final bool isShiny =
         (trainerHigh ^ trainerLow ^ personalityHigh ^ personalityLow) < 8;
+    final int growthOffset = growthSubstructurePosition(personality) * 12;
+    final int miscOffset = miscSubstructurePosition(personality) * 12;
+    final int friendshipOrEggCycles = decrypted[growthOffset + 9];
+    final int ivs = _littleEndian(
+      decrypted.sublist(miscOffset + 4, miscOffset + 8),
+    );
+    final bool isEgg = (ivs & (1 << 30)) != 0;
+    final int? eggCyclesTotal = isEgg
+        ? hatchCyclesForPokedexId(pokedexId) ?? friendshipOrEggCycles
+        : null;
 
     return PokemonPartyMember(
       internalSpeciesId: internalSpeciesId,
@@ -314,9 +319,13 @@ final class PokemonEmeraldMemoryReader {
       nickname: nickname.isEmpty ? null : nickname,
       level: level,
       isShiny: isShiny,
+      isEgg: isEgg,
       status: _littleEndian(bytes.sublist(80, 84)),
       currentHp: _littleEndian(bytes.sublist(86, 88)),
       maximumHp: _littleEndian(bytes.sublist(88, 90)),
+      friendship: isEgg ? null : friendshipOrEggCycles,
+      eggCyclesRemaining: isEgg ? friendshipOrEggCycles : null,
+      eggCyclesTotal: eggCyclesTotal,
     );
   }
 
@@ -480,6 +489,12 @@ final class PokemonEmeraldMemoryReader {
     return _growthPositions[personality % 24];
   }
 
+  /// Posición de la subestructura Misc, que contiene el flag de huevo en el
+  /// bit 30 de la palabra de IVs.
+  static int miscSubstructurePosition(int personality) {
+    return _miscPositions[personality % 24];
+  }
+
   /// Extrae la especie interna desde los datos ya descifrados y todavía
   /// permutados. Se expone para probar casos reales con distintas
   /// personalidades sin depender del puente nativo.
@@ -501,6 +516,33 @@ final class PokemonEmeraldMemoryReader {
     1, 1, 2, 3, 2, 3,
     // MGAE, MGEA, MAGE, MAEG, MEGA, MEAG
     1, 1, 2, 3, 2, 3,
+  ];
+
+  static const List<int> _miscPositions = <int>[
+    3,
+    2,
+    3,
+    2,
+    1,
+    1,
+    3,
+    2,
+    3,
+    2,
+    1,
+    1,
+    3,
+    2,
+    3,
+    2,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
   ];
 
   _EmeraldSaveBlocks? _resolveSaveBlocks() {
@@ -664,10 +706,7 @@ final class PokemonEmeraldMemoryReader {
     final int seconds = _u8(saveBlock2 + 0x11);
     final int frames = _u8(saveBlock2 + 0x12);
     final int maximumHours = _isFireRedLeafGreen ? 999 : 9999;
-    if (hours > maximumHours ||
-        minutes > 59 ||
-        seconds > 59 ||
-        frames > 59) {
+    if (hours > maximumHours || minutes > 59 || seconds > 59 || frames > 59) {
       return false;
     }
 
@@ -717,36 +756,31 @@ final class PokemonEmeraldMemoryReader {
     return _u32(saveBlock1 + 0x490);
   }
 
-  int get _activeFlagsOffset =>
-      _isFireRedLeafGreen
+  int get _activeFlagsOffset => _isFireRedLeafGreen
       ? 0x0EE0
       : profile.version == PokemonGameVersion.emerald
       ? _flagsOffset
       : 0x1220;
 
-  int get _activeFirstBadgeFlag =>
-      _isFireRedLeafGreen
+  int get _activeFirstBadgeFlag => _isFireRedLeafGreen
       ? 0x820
       : profile.version == PokemonGameVersion.emerald
       ? _firstBadgeFlag
       : 0x807;
 
-  int get _activeLastTrainerId =>
-      _isFireRedLeafGreen
+  int get _activeLastTrainerId => _isFireRedLeafGreen
       ? 767
       : profile.version == PokemonGameVersion.emerald
       ? _lastTrainerId
       : 693;
 
-  int get _activeNationalDexVarOffset =>
-      _isFireRedLeafGreen
+  int get _activeNationalDexVarOffset => _isFireRedLeafGreen
       ? 0x109C
       : profile.version == PokemonGameVersion.emerald
       ? _nationalDexVarOffset
       : 0x13CC;
 
-  int get _activeNationalDexFlag =>
-      _isFireRedLeafGreen
+  int get _activeNationalDexFlag => _isFireRedLeafGreen
       ? 0x840
       : profile.version == PokemonGameVersion.emerald
       ? _nationalDexFlag
@@ -769,10 +803,7 @@ final class PokemonEmeraldMemoryReader {
         equalBytes(primarySeen, tertiarySeen);
   }
 
-  bool _hasConsistentFireRedLeafGreenPokedex(
-    int saveBlock1,
-    int saveBlock2,
-  ) {
+  bool _hasConsistentFireRedLeafGreenPokedex(int saveBlock1, int saveBlock2) {
     final List<int> primarySeen = _read(
       saveBlock2 + _pokedexSeenOffset,
       _pokedexBytes,

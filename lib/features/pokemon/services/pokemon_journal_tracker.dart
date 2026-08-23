@@ -57,7 +57,12 @@ class PokemonJournalTracker {
   static const int _classRival1 = 0x09;
   static const int _classRival2 = 0x2A;
   static const int _classChampion = 0x10; // Lance
-  static const Set<int> _eliteFourClasses = {0x0B, 0x0D, 0x0E, 0x0F}; // Will, Bruno, Karen, Koga
+  static const Set<int> _eliteFourClasses = {
+    0x0B,
+    0x0D,
+    0x0E,
+    0x0F,
+  }; // Will, Bruno, Karen, Koga
   static const Set<int> _gymLeaderClasses = {
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // Johto
     0x11, 0x12, 0x13, 0x15, 0x1A, 0x23, 0x2E, // Kanto
@@ -216,14 +221,15 @@ class PokemonJournalTracker {
         previousPlayTime: previousPlayTime,
         currentPlayTime: currentDiagnosticPlayTime,
       );
-      final bool playtimeBackwards = previousPlayTime != null &&
+      final bool playtimeBackwards =
+          previousPlayTime != null &&
           currentDiagnosticPlayTime < previousPlayTime;
       _lastAcceptedDiagnosticPlayTime = currentDiagnosticPlayTime;
       final String snapshotState = playtimeBackwards
           ? 'Snapshot backwards'
           : changes.isEmpty
-              ? 'Snapshot frozen'
-              : 'Snapshot accepted';
+          ? 'Snapshot frozen'
+          : 'Snapshot accepted';
       RuntimeDiagnosticsLog.recordSnapshotComparison(
         '$snapshotState | ${changes.isEmpty ? 'same core state' : changes.join(', ')}',
       );
@@ -322,9 +328,11 @@ class PokemonJournalTracker {
       changes.add('badges changed');
     }
     if (previousPlayTime != currentPlayTime) {
-      changes.add(previousPlayTime != null && currentPlayTime < previousPlayTime
-          ? 'playtime backwards ($previousPlayTime -> $currentPlayTime)'
-          : 'playtime changed');
+      changes.add(
+        previousPlayTime != null && currentPlayTime < previousPlayTime
+            ? 'playtime backwards ($previousPlayTime -> $currentPlayTime)'
+            : 'playtime changed',
+      );
     }
     if (previous.otherTrainerClassId != current.otherTrainerClassId ||
         previous.otherTrainerId != current.otherTrainerId) {
@@ -370,6 +378,9 @@ class PokemonJournalTracker {
           left.currentHp != right.currentHp ||
           left.maximumHp != right.maximumHp ||
           left.status != right.status ||
+          left.friendship != right.friendship ||
+          left.eggCyclesRemaining != right.eggCyclesRemaining ||
+          left.eggCyclesTotal != right.eggCyclesTotal ||
           left.nickname != right.nickname ||
           left.isShiny != right.isShiny) {
         return false;
@@ -394,15 +405,21 @@ class PokemonJournalTracker {
       await _ensureKantoUnlockEvent(current);
     }
     if (previous.currentMapId != current.currentMapId) {
-      final PokemonLocation? location =
-          PokemonDecoder.locationFor(current.profile, current.currentMapId);
-      final String name = location?.name ??
+      final PokemonLocation? location = PokemonDecoder.locationFor(
+        current.profile,
+        current.currentMapId,
+      );
+      final String name =
+          location?.name ??
           PokemonDecoder.mapName(current.profile, current.currentMapId);
 
       final (String type, String title) = switch (location?.kind) {
         PokemonLocationKind.city => ('city_arrived', 'Llegó a $name'),
         PokemonLocationKind.route => ('route_arrived', 'Entró a $name'),
-        PokemonLocationKind.league => ('league_arrived', 'Llegó a la Liga Pokémon'),
+        PokemonLocationKind.league => (
+          'league_arrived',
+          'Llegó a la Liga Pokémon',
+        ),
         _ => ('location_changed', 'Nueva ubicación'),
       };
 
@@ -423,8 +440,10 @@ class PokemonJournalTracker {
         // Se registra primero la derrota del líder (si está confirmado el
         // nombre para esa medalla) y luego la medalla, para mantener el
         // orden cronológico real: primero el combate, después el premio.
-        final GymLeaderInfo? leader =
-            GymLeaderAssetResolver.forBadge(current.profile, index);
+        final GymLeaderInfo? leader = GymLeaderAssetResolver.forBadge(
+          current.profile,
+          index,
+        );
         if (leader != null) {
           _lastDefeatedTrainer = leader.name;
           await _insertEvent(
@@ -443,7 +462,8 @@ class PokemonJournalTracker {
         await _insertEvent(
           type: 'badge_obtained',
           title: badgeName,
-          description: 'Conseguiste $badgeName. Ahora tienes ${current.badgeCount} medalla(s).',
+          description:
+              'Conseguiste $badgeName. Ahora tienes ${current.badgeCount} medalla(s).',
           metadata: <String, dynamic>{
             ..._metadata(current),
             'newBadgesMask': newBadges,
@@ -457,7 +477,9 @@ class PokemonJournalTracker {
     final caughtIncrease = current.pokedexCaught - previous.pokedexCaught;
     if (caughtIncrease > 0) {
       final previousIds = previous.partySpeciesIds.toSet();
-      final candidates = current.party.where((pokemon) => !previousIds.contains(pokemon.pokedexId)).toList();
+      final candidates = current.party
+          .where((pokemon) => !previousIds.contains(pokemon.pokedexId))
+          .toList();
       if (candidates.isNotEmpty) {
         _lastCapturedPokemon = candidates.last;
         await _insertEvent(
@@ -479,12 +501,12 @@ class PokemonJournalTracker {
       await _insertEvent(
         type: 'party_changed',
         title: 'Equipo actualizado',
-        description: 'El equipo ahora tiene ${current.partySpeciesIds.length} Pokémon.',
+        description:
+            'El equipo ahora tiene ${current.partySpeciesIds.length} Pokémon.',
         metadata: _metadata(current),
       );
     }
   }
-
 
   /// Detecta el fin de un combate de entrenador y registra el evento
   /// correspondiente (rival, Alto Mando, Campeón, o genérico).
@@ -567,10 +589,7 @@ class PokemonJournalTracker {
     if (!won) return;
 
     if (current.profile.isGen3) {
-      await _recordGen3TrainerVictory(
-        current: current,
-        trainerId: trainerId,
-      );
+      await _recordGen3TrainerVictory(current: current, trainerId: trainerId);
       return;
     }
 
@@ -670,8 +689,8 @@ class PokemonJournalTracker {
 
     final EmeraldTrainerInfo info =
         current.profile.version == PokemonGameVersion.emerald
-            ? EmeraldTrainerResolver.forTrainerId(trainerId)
-            : RubySapphireTrainerResolver.forTrainerId(trainerId);
+        ? EmeraldTrainerResolver.forTrainerId(trainerId)
+        : RubySapphireTrainerResolver.forTrainerId(trainerId);
     if (info.kind == EmeraldTrainerKind.gymLeader) {
       // La primera victoria ya se registra al detectar la nueva medalla.
       // Así se conserva un solo evento con el orden combate -> medalla.
@@ -680,40 +699,40 @@ class PokemonJournalTracker {
 
     final (String type, String title, String description) = switch (info.kind) {
       EmeraldTrainerKind.rival => (
-          'rival_defeated',
-          'Derrotó a ${info.name}',
-          'Ganó el combate contra su rival.',
-        ),
+        'rival_defeated',
+        'Derrotó a ${info.name}',
+        'Ganó el combate contra su rival.',
+      ),
       EmeraldTrainerKind.eliteFour => (
-          'elite_four_defeated',
-          'Derrotó a ${info.name}',
-          'Venció a un miembro del Alto Mando de Hoenn.',
-        ),
+        'elite_four_defeated',
+        'Derrotó a ${info.name}',
+        'Venció a un miembro del Alto Mando de Hoenn.',
+      ),
       EmeraldTrainerKind.champion => (
-          'champion_defeated',
-          'Se convirtió en Campeón Pokémon',
-          'Derrotó al Campeón de la Liga de Hoenn.',
-        ),
+        'champion_defeated',
+        'Se convirtió en Campeón Pokémon',
+        'Derrotó al Campeón de la Liga de Hoenn.',
+      ),
       EmeraldTrainerKind.frontierBrain => (
-          'trainer_defeated',
-          'Derrotó a ${info.name}',
-          'Venció a un Cerebro de la Frontera.',
-        ),
+        'trainer_defeated',
+        'Derrotó a ${info.name}',
+        'Venció a un Cerebro de la Frontera.',
+      ),
       EmeraldTrainerKind.specialTrainer => (
-          'trainer_defeated',
-          'Derrotó a ${info.name}',
-          current.profile.version == PokemonGameVersion.emerald
-              ? 'Superó uno de los combates especiales de Pokémon Esmeralda.'
-              : 'Superó uno de los combates especiales de Pokémon Ruby/Sapphire.',
-        ),
+        'trainer_defeated',
+        'Derrotó a ${info.name}',
+        current.profile.version == PokemonGameVersion.emerald
+            ? 'Superó uno de los combates especiales de Pokémon Esmeralda.'
+            : 'Superó uno de los combates especiales de Pokémon Ruby/Sapphire.',
+      ),
       EmeraldTrainerKind.regular => (
-          'trainer_defeated',
-          'Ganó contra ${info.name}',
-          'Venció a un entrenador durante su aventura.',
-        ),
+        'trainer_defeated',
+        'Ganó contra ${info.name}',
+        'Venció a un entrenador durante su aventura.',
+      ),
       EmeraldTrainerKind.gymLeader => throw StateError(
-          'Los líderes se registran al obtener la medalla.',
-        ),
+        'Los líderes se registran al obtener la medalla.',
+      ),
     };
 
     await _insertEvent(
@@ -755,8 +774,10 @@ class PokemonJournalTracker {
         // Los eventos recuperados por versiones anteriores pueden conservar
         // una ruta nula o antigua. Migra el registro existente a la ruta
         // canónica sin alterar su fecha ni crear una segunda victoria.
-        final leader =
-            GymLeaderAssetResolver.forBadge(current.profile, badgeIndex);
+        final leader = GymLeaderAssetResolver.forBadge(
+          current.profile,
+          badgeIndex,
+        );
         if (leader != null && decoded['spritePath'] != leader.spritePath) {
           final updatedMetadata = Map<String, dynamic>.from(decoded);
           updatedMetadata['leaderName'] = leader.name;
@@ -893,9 +914,7 @@ class PokemonJournalTracker {
           PokemonDecoder.mapName(value.profile, value.currentMapId),
         ),
         partyJson: Value(
-          jsonEncode(
-            value.party.map((pokemon) => pokemon.toJson()).toList(),
-          ),
+          jsonEncode(value.party.map((pokemon) => pokemon.toJson()).toList()),
         ),
         badgesJson: Value(
           jsonEncode(
@@ -912,7 +931,9 @@ class PokemonJournalTracker {
         pokedexSeen: Value(value.pokedexSeen),
         pokedexCaught: Value(value.pokedexCaught),
         lastCapturedPokemonJson: Value(
-          _lastCapturedPokemon == null ? null : jsonEncode(_lastCapturedPokemon!.toJson()),
+          _lastCapturedPokemon == null
+              ? null
+              : jsonEncode(_lastCapturedPokemon!.toJson()),
         ),
         lastDefeatedTrainer: Value(_lastDefeatedTrainer),
         leagueWins: const Value(0),

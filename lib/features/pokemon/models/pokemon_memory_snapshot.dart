@@ -14,6 +14,7 @@ class PokemonPartyMember {
   final int? status;
   final int? friendship;
   final int? eggCyclesRemaining;
+  final int? eggCyclesTotal;
 
   const PokemonPartyMember({
     required this.internalSpeciesId,
@@ -28,27 +29,37 @@ class PokemonPartyMember {
     this.status,
     this.friendship,
     this.eggCyclesRemaining,
+    this.eggCyclesTotal,
   });
 
-  int? get eggStepsRemaining => eggCyclesRemaining == null
-      ? null
-      : eggCyclesRemaining! * 256;
+  int? get eggStepsCurrent {
+    if (eggCyclesRemaining == null || eggCyclesTotal == null) return null;
+    final int completedCycles = (eggCyclesTotal! - eggCyclesRemaining!)
+        .clamp(0, eggCyclesTotal!)
+        .toInt();
+    return completedCycles * 256;
+  }
+
+  int? get eggStepsTotal =>
+      eggCyclesTotal == null ? null : eggCyclesTotal! * 256;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': pokedexId,
-        'internalId': internalSpeciesId,
-        'name': name,
-        'level': level,
-        'isShiny': isShiny,
-        'isEgg': isEgg,
-        'nickname': nickname,
-        'currentHp': currentHp,
-        'maximumHp': maximumHp,
-        'status': status,
-        'friendship': friendship,
-        'eggCyclesRemaining': eggCyclesRemaining,
-        'eggStepsRemaining': eggStepsRemaining,
-      };
+    'id': pokedexId,
+    'internalId': internalSpeciesId,
+    'name': name,
+    'level': level,
+    'isShiny': isShiny,
+    'isEgg': isEgg,
+    'nickname': nickname,
+    'currentHp': currentHp,
+    'maximumHp': maximumHp,
+    'status': status,
+    'friendship': friendship,
+    'eggCyclesRemaining': eggCyclesRemaining,
+    'eggCyclesTotal': eggCyclesTotal,
+    'eggStepsCurrent': eggStepsCurrent,
+    'eggStepsTotal': eggStepsTotal,
+  };
 }
 
 class PokemonMemorySnapshot {
@@ -104,9 +115,9 @@ class PokemonMemorySnapshot {
       party.map((e) => e.pokedexId).toList(growable: false);
 
   int get badgeCount => PokemonDecoder.countBits(<int>[
-        badgesMask & 0xff,
-        (badgesMask >> 8) & 0xff,
-      ]);
+    badgesMask & 0xff,
+    (badgesMask >> 8) & 0xff,
+  ]);
 
   String get currentLocation => PokemonDecoder.mapName(profile, currentMapId);
 

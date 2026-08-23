@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
+import '../data/pokemon_hatch_cycles.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
@@ -38,7 +39,8 @@ abstract final class RuntimeDiagnosticsLog {
   static const int _maximumEntries = 120;
   static final List<String> journalDecisions = <String>[];
   static final List<String> snapshotComparisons = <String>[];
-  static final List<RuntimeRtcDiagnostics> rtcSamples = <RuntimeRtcDiagnostics>[];
+  static final List<RuntimeRtcDiagnostics> rtcSamples =
+      <RuntimeRtcDiagnostics>[];
   static int? _previousRtcSeconds;
 
   static RuntimeRtcDiagnostics recordRtc(List<int> bytes) {
@@ -68,10 +70,10 @@ abstract final class RuntimeDiagnosticsLog {
       state = previous == null
           ? 'RTC initial sample'
           : totalSeconds < previous
-              ? 'RTC backwards'
-              : totalSeconds == previous
-                  ? 'RTC frozen'
-                  : 'RTC advancing';
+          ? 'RTC backwards'
+          : totalSeconds == previous
+          ? 'RTC frozen'
+          : 'RTC advancing';
       _previousRtcSeconds = totalSeconds;
     }
 
@@ -94,13 +96,20 @@ abstract final class RuntimeDiagnosticsLog {
   }
 
   static void recordJournalDecision(String decision, String reason) {
-    journalDecisions.add('${DateTime.now().toIso8601String()} | $decision | Reason: $reason');
+    journalDecisions.add(
+      '${DateTime.now().toIso8601String()} | $decision | Reason: $reason',
+    );
     _trim(journalDecisions);
-    developer.log('$decision | Reason: $reason', name: 'RetroHub.RuntimeDiagnostics.Journal');
+    developer.log(
+      '$decision | Reason: $reason',
+      name: 'RetroHub.RuntimeDiagnostics.Journal',
+    );
   }
 
   static void recordSnapshotComparison(String comparison) {
-    snapshotComparisons.add('${DateTime.now().toIso8601String()} | $comparison');
+    snapshotComparisons.add(
+      '${DateTime.now().toIso8601String()} | $comparison',
+    );
     _trim(snapshotComparisons);
     developer.log(comparison, name: 'RetroHub.RuntimeDiagnostics.Snapshot');
   }
@@ -116,7 +125,10 @@ class PokemonControllerMemoryReader {
   final LibretroGameController controller;
   final PokemonGameProfile profile;
 
-  const PokemonControllerMemoryReader({required this.controller, required this.profile});
+  const PokemonControllerMemoryReader({
+    required this.controller,
+    required this.profile,
+  });
 
   PokemonMemorySnapshot? capture() {
     if (!controller.isAttached) return null;
@@ -127,7 +139,10 @@ class PokemonControllerMemoryReader {
         profile.version == PokemonGameVersion.sapphire ||
         profile.version == PokemonGameVersion.fireRed ||
         profile.version == PokemonGameVersion.leafGreen) {
-      return PokemonEmeraldMemoryReader(controller: controller, profile: profile).capture();
+      return PokemonEmeraldMemoryReader(
+        controller: controller,
+        profile: profile,
+      ).capture();
     }
 
     return _capture(
@@ -152,13 +167,13 @@ class PokemonControllerMemoryReader {
     RuntimeDiagnosticsLog.recordRtc(bytes);
   }
 
-  PokemonMemorySnapshot? _capture(List<int> Function(int offset, int length) read) {
+  PokemonMemorySnapshot? _capture(
+    List<int> Function(int offset, int length) read,
+  ) {
     if (!profile.memoryMapVerified || profile.addresses == null) return null;
 
-    final ResolvedPokemonMemoryProfile? resolved = PokemonMemoryProfileResolver.resolve(
-      profile: profile,
-      read: read,
-    );
+    final ResolvedPokemonMemoryProfile? resolved =
+        PokemonMemoryProfileResolver.resolve(profile: profile, read: read);
     if (resolved == null) return null;
 
     final PokemonMemoryAddresses a = resolved.addresses;
@@ -180,25 +195,44 @@ class PokemonControllerMemoryReader {
     for (int i = 0; i < count && i < species.length; i++) {
       final int id = species[i];
       final bool isEgg = profile.isGen2 && id == 0xFD;
-      final int dex = isEgg ? 0 : PokemonDecoder.dexId(profile, id);
-      final List<int> mon = read(a.partyMons + i * a.partyStructLength, a.partyStructLength);
+      final List<int> mon = read(
+        a.partyMons + i * a.partyStructLength,
+        a.partyStructLength,
+      );
       if (mon.length != a.partyStructLength) continue;
+      final int internalSpeciesId = isEgg ? mon[0] : id;
+      final int dex = PokemonDecoder.dexId(profile, internalSpeciesId);
 
       bool shiny = false;
-      if (!isEgg && profile.isGen2 && a.partyDvOffset != null && mon.length > a.partyDvOffset! + 1) {
-        shiny = PokemonDecoder.isGen2Shiny(mon[a.partyDvOffset!], mon[a.partyDvOffset! + 1]);
+      if (!isEgg &&
+          profile.isGen2 &&
+          a.partyDvOffset != null &&
+          mon.length > a.partyDvOffset! + 1) {
+        shiny = PokemonDecoder.isGen2Shiny(
+          mon[a.partyDvOffset!],
+          mon[a.partyDvOffset! + 1],
+        );
       }
 
-      final int level = isEgg ? 0 : (a.partyLevelOffset < mon.length ? mon[a.partyLevelOffset] : 0);
+      final int level = isEgg
+          ? 0
+          : (a.partyLevelOffset < mon.length ? mon[a.partyLevelOffset] : 0);
       // Gen II party structs store happiness at byte 27. For eggs the same
       // byte is the remaining hatch-cycle counter, so it must not be exposed
       // as friendship.
-      final int? friendship = profile.isGen2 && !isEgg && mon.length > 27 ? mon[27] : null;
-      final int? eggCyclesRemaining = profile.isGen2 && isEgg && mon.length > 27 ? mon[27] : null;
+      final int? friendship = profile.isGen2 && !isEgg && mon.length > 27
+          ? mon[27]
+          : null;
+      final int? eggCyclesRemaining = profile.isGen2 && isEgg && mon.length > 27
+          ? mon[27]
+          : null;
+      final int? eggCyclesTotal = eggCyclesRemaining == null
+          ? null
+          : hatchCyclesForPokedexId(dex) ?? eggCyclesRemaining;
 
       party.add(
         PokemonPartyMember(
-          internalSpeciesId: id,
+          internalSpeciesId: internalSpeciesId,
           pokedexId: dex,
           name: isEgg ? 'Huevo' : PokemonDecoder.pokemonName(dex),
           level: level,
@@ -206,6 +240,7 @@ class PokemonControllerMemoryReader {
           isEgg: isEgg,
           friendship: friendship,
           eggCyclesRemaining: eggCyclesRemaining,
+          eggCyclesTotal: eggCyclesTotal,
         ),
       );
     }
@@ -215,7 +250,8 @@ class PokemonControllerMemoryReader {
         : byte(a.currentMap);
 
     final int johtoBadges = byte(a.obtainedBadges);
-    final int badges = johtoBadges | ((a.kantoBadges == null ? 0 : byte(a.kantoBadges!)) << 8);
+    final int badges =
+        johtoBadges | ((a.kantoBadges == null ? 0 : byte(a.kantoBadges!)) << 8);
 
     final List<int> moneyBytes = read(a.playerMoney, 3);
     final int money = profile.isGen2
@@ -225,9 +261,15 @@ class PokemonControllerMemoryReader {
     final int? battleState = a.battleMode != null
         ? byte(a.battleMode!)
         : (a.isInBattle != null ? byte(a.isInBattle!) : null);
-    final int? otherTrainerClassId = a.otherTrainerClass != null ? byte(a.otherTrainerClass!) : null;
-    final int? otherTrainerIdValue = a.otherTrainerId != null ? byte(a.otherTrainerId!) : null;
-    final int? battleResultRaw = a.battleResult != null ? byte(a.battleResult!) : null;
+    final int? otherTrainerClassId = a.otherTrainerClass != null
+        ? byte(a.otherTrainerClass!)
+        : null;
+    final int? otherTrainerIdValue = a.otherTrainerId != null
+        ? byte(a.otherTrainerId!)
+        : null;
+    final int? battleResultRaw = a.battleResult != null
+        ? byte(a.battleResult!)
+        : null;
 
     final List<int> seenBytes = read(a.pokedexSeen, a.pokedexBytes);
     final List<int> caughtBytes = read(a.pokedexOwned, a.pokedexBytes);
@@ -238,7 +280,9 @@ class PokemonControllerMemoryReader {
       for (var byteIndex = 0; byteIndex < bytes.length; byteIndex++) {
         for (var bit = 0; bit < 8; bit++) {
           final dexId = byteIndex * 8 + bit + 1;
-          if (dexId <= maximum && (bytes[byteIndex] & (1 << bit)) != 0) result.add(dexId);
+          if (dexId <= maximum && (bytes[byteIndex] & (1 << bit)) != 0) {
+            result.add(dexId);
+          }
         }
       }
       return result;
@@ -248,7 +292,9 @@ class PokemonControllerMemoryReader {
       capturedAt: DateTime.now(),
       profile: profile,
       memoryShift: resolved.shift,
-      playerName: PokemonDecoder.decodeText(read(a.playerName, a.playerNameLength)),
+      playerName: PokemonDecoder.decodeText(
+        read(a.playerName, a.playerNameLength),
+      ),
       trainerId: word(a.playerId),
       currentMapId: map,
       playerX: byte(a.playerX),
