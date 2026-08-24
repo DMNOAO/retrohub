@@ -250,6 +250,23 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<void> updateProgressEvent({
+    required int eventId,
+    required String title,
+    required String description,
+    required String metadataJson,
+  }) async {
+    await (update(gameProgressEvents)
+          ..where((table) => table.id.equals(eventId)))
+        .write(
+      GameProgressEventsCompanion(
+        title: Value(title),
+        description: Value(description),
+        metadataJson: Value(metadataJson),
+      ),
+    );
+  }
+
 
   Future<Game?> getGameById(String id) {
     return (select(games)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
