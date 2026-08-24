@@ -228,12 +228,10 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
               child: Column(
                 children: eggMoves
                     .map(
-                      (moveId) => MoveTypeTile(
+                      (moveId) => _EggMoveTile(
                         profile: widget.profile,
+                        pokemonId: eggBaseId,
                         moveId: moveId,
-                        leadingLabel: 'Huevo',
-                        name: MoveNameResolver.resolve(moveId),
-                        type: MoveTypeResolver.resolve(moveId),
                       ),
                     )
                     .toList(),
@@ -295,4 +293,98 @@ class _AbilityCard extends StatelessWidget {
       children: [Text(ability.description)],
     ),
   );
+}
+
+class _EggMoveTile extends StatefulWidget {
+  final GameAssetProfile profile;
+  final int pokemonId;
+  final int moveId;
+
+  const _EggMoveTile({
+    required this.profile,
+    required this.pokemonId,
+    required this.moveId,
+  });
+
+  @override
+  State<_EggMoveTile> createState() => _EggMoveTileState();
+}
+
+class _EggMoveTileState extends State<_EggMoveTile> {
+  bool _showParents = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final parents = PokemonLearnsetResolver.eggMoveParents(
+      widget.profile,
+      widget.pokemonId,
+      widget.moveId,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        children: [
+          MoveTypeTile(
+            profile: widget.profile,
+            moveId: widget.moveId,
+            leadingLabel: 'Huevo',
+            name: MoveNameResolver.resolve(widget.moveId),
+            type: MoveTypeResolver.resolve(widget.moveId),
+          ),
+          if (parents.isNotEmpty) ...[
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _showParents = !_showParents),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.family_restroom, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Padres compatibles (${parents.length})',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _showParents ? Icons.expand_less : Icons.expand_more,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 180),
+              crossFadeState: _showParents
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: parents
+                      .map(
+                        (pokemonId) => Chip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(PokemonDecoder.pokemonName(pokemonId)),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

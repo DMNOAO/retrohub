@@ -20,6 +20,17 @@ void main() {
     expect(PokemonLearnsetResolver.eggMoves(fireRed, 254), treeckoMoves);
   });
 
+  test('informa padres compatibles para cada movimiento huevo', () {
+    final leechSeedParents = PokemonLearnsetResolver.eggMoveParents(
+      fireRed,
+      252,
+      73,
+    );
+
+    expect(leechSeedParents, contains(1));
+    expect(leechSeedParents, contains(357));
+  });
+
   test('ignora preevoluciones introducidas en generaciones posteriores', () {
     expect(PokemonLearnsetResolver.baseSpeciesId(fireRed, 315), 315);
   });
