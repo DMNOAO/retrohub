@@ -46,7 +46,7 @@ enum AppAppearance {
       sprite: 'assets/sprites/pokemon/nds/black_white/487origin.png'),
   shinyUmbreon(
     'Umbreon shiny',
-    0xFF092E3A,
+    0xFF080A0C,
     0xFF10171B,
     0xFF35D6E6,
     0xFF4A8DFF,
