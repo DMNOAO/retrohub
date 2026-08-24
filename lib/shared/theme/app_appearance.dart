@@ -61,6 +61,42 @@ enum AppAppearance {
     0xFFE23D3D,
     sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0384.png',
     category: AppearanceCategory.characters,
+  ),
+  gengar(
+    'Gengar',
+    0xFF522080,
+    0xFF1D1028,
+    0xFFD94CFF,
+    0xFFA98BD4,
+    sprite: 'assets/sprites/pokemon/nds/black_white/094.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyMetagross(
+    'Metagross shiny',
+    0xFF536776,
+    0xFF18232B,
+    0xFFD8E2E8,
+    0xFFD9A928,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0376.png',
+    category: AppearanceCategory.characters,
+  ),
+  mewtwo(
+    'Mewtwo',
+    0xFF8A6FB3,
+    0xFF2D2040,
+    0xFFC9B7E8,
+    0xFF7A3DB8,
+    sprite: 'assets/sprites/pokemon/nds/black_white/150.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyCelebi(
+    'Celebi shiny',
+    0xFF2F8F67,
+    0xFF17382D,
+    0xFFF28CB8,
+    0xFFF6D7A7,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0251.png',
+    category: AppearanceCategory.characters,
   );
 
   final String label;
