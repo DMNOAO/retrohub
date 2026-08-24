@@ -67,6 +67,53 @@ class MoveTypeTile extends StatelessWidget {
   }
 }
 
+class PokemonTypeIcons extends StatelessWidget {
+  final List<PokemonMoveType> types;
+  final double size;
+
+  const PokemonTypeIcons({
+    super.key,
+    required this.types,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: types
+        .map(
+          (type) => Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: PokemonTypeIcon(type: type, size: size),
+          ),
+        )
+        .toList(),
+  );
+}
+
+class PokemonTypeIcon extends StatelessWidget {
+  final PokemonMoveType type;
+  final double size;
+
+  const PokemonTypeIcon({
+    super.key,
+    required this.type,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = _MoveTypeVisual.forType(type);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: FittedBox(
+        child: _MoveTypeBadge(visual: visual),
+      ),
+    );
+  }
+}
+
 class _MoveTypeBadge extends StatelessWidget {
   final _MoveTypeVisual visual;
   const _MoveTypeBadge({required this.visual});
