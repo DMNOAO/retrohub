@@ -263,13 +263,10 @@ class _ProgressJournal extends StatelessWidget {
                   final int? currentHp = _intValue(pokemon['currentHp']);
                   final int? maximumHp = _intValue(pokemon['maximumHp']);
                   final String hp = currentHp != null && maximumHp != null
-                      ? ' · PS $currentHp/$maximumHp'
+                      ? 'PS $currentHp/$maximumHp'
                       : '';
                   final bool isEgg = _boolValue(pokemon['isEgg']);
                   final int? friendship = _intValue(pokemon['friendship']);
-                  final String friendshipDetail = friendship == null
-                      ? ''
-                      : ' · ♥ $friendship/255';
                   final int? eggStepsCurrent = _intValue(pokemon['eggStepsCurrent']);
                   final int? eggStepsTotal = _intValue(pokemon['eggStepsTotal']);
                   final String eggDetail =
@@ -284,7 +281,9 @@ class _ProgressJournal extends StatelessWidget {
                           : (pokemon['name']?.toString() ?? 'Pokémon'),
                       detail: isEgg
                           ? eggDetail
-                          : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
+                          : 'Nivel ${pokemon['level'] ?? '—'}',
+                      hpDetail: isEgg ? null : hp,
+                      friendship: isEgg ? null : friendship,
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                       types: isEgg
@@ -783,6 +782,8 @@ class _BadgeGrid extends StatelessWidget {
 class _PokemonTile extends StatelessWidget {
   final String name;
   final String detail;
+  final String? hpDetail;
+  final int? friendship;
   final String? spritePath;
   final bool shiny;
   final List<PokemonMoveType> types;
@@ -790,6 +791,8 @@ class _PokemonTile extends StatelessWidget {
   const _PokemonTile({
     required this.name,
     required this.detail,
+    this.hpDetail,
+    this.friendship,
     required this.spritePath,
     required this.shiny,
     this.types = const <PokemonMoveType>[],
@@ -815,7 +818,22 @@ class _PokemonTile extends StatelessWidget {
             if (shiny) const Text('✨', semanticsLabel: 'Shiny'),
           ],
         ),
-        subtitle: Text(detail),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(detail),
+            if (hpDetail?.isNotEmpty == true) Text(hpDetail!),
+            if (friendship != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.favorite, color: Colors.red, size: 18),
+                  const SizedBox(width: 4),
+                  Text('$friendship/255'),
+                ],
+              ),
+          ],
+        ),
         trailing: onTap == null ? null : const Icon(Icons.chevron_right),
       ),
     );

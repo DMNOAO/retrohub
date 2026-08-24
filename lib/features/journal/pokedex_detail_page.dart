@@ -164,7 +164,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
                   : MoveTypeResolver.resolve(moveId),
             );
           }).toList())),
-          _ExpandableSection(icon: Icons.album_outlined, storageKey: 'pokedex-machines', title: 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
+          _ExpandableSection(icon: Icons.album_outlined, storageKey: 'pokedex-machines', title: widget.profile.game == PokemonAssetGame.crystal ? 'MT / MO / Tutor' : 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
             final moveId = MoveNameResolver.idForName(m.name);
             final machine = moveId == null
                 ? m.machine
