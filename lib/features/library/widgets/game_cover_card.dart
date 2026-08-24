@@ -63,9 +63,11 @@ class _GameCoverCardState extends State<GameCoverCard> {
               children: [
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
+                    borderRadius: widget.coverOnly
+                        ? BorderRadius.circular(16)
+                        : const BorderRadius.vertical(
+                            top: Radius.circular(16),
+                          ),
                     child: widget.coverPath == null
                         ? Container(
                             color: Colors.black26,
