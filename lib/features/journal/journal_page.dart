@@ -911,7 +911,7 @@ class _MoveTypeVisual {
     PokemonMoveType.bug =>
       const _MoveTypeVisual(Color(0xFFA8B820), Icons.pest_control),
     PokemonMoveType.rock =>
-      const _MoveTypeVisual(Color(0xFFB8A038), Icons.terrain),
+      const _MoveTypeVisual(Color(0xFFB8A038), Icons.hexagon),
     PokemonMoveType.ghost =>
       const _MoveTypeVisual(Color(0xFF705898), Icons.blur_on),
     PokemonMoveType.dragon => const _MoveTypeVisual(
