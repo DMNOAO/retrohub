@@ -30,4 +30,18 @@ void main() {
     expect(member.eggStepsTotal, 5120);
     expect(member.toJson()['friendship'], isNull);
   });
+
+  test('serializa experiencia y movimientos del equipo', () {
+    const member = PokemonPartyMember(
+      internalSpeciesId: 25,
+      pokedexId: 25,
+      name: 'Pikachu',
+      level: 34,
+      experience: 42875,
+      moveIds: <int>[9, 86, 98, 129],
+    );
+
+    expect(member.toJson()['experience'], 42875);
+    expect(member.toJson()['moveIds'], <int>[9, 86, 98, 129]);
+  });
 }

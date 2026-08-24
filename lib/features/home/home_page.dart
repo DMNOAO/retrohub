@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/cover_helper.dart';
 import '../../data/database/app_database.dart';
-import '../../data/database/database_provider.dart';
 import '../../data/repositories/games_repository_provider.dart';
 import '../game_detail/game_detail_page.dart';
 import '../widgets/dynamic_game_banner.dart';
@@ -13,18 +12,15 @@ import '../widgets/retrohub_identity_banner.dart';
 class HomeDashboardData {
   final List<Game> games;
   final Game? lastPlayed;
-  final List<GameProgressEvent> events;
 
-  const HomeDashboardData({required this.games, required this.lastPlayed, required this.events});
+  const HomeDashboardData({required this.games, required this.lastPlayed});
 }
 
 final homeDashboardProvider = FutureProvider.autoDispose<HomeDashboardData>((ref) async {
   final repository = ref.watch(gamesRepositoryProvider);
-  final database = ref.watch(databaseProvider);
   return HomeDashboardData(
     games: await repository.getGames(),
     lastPlayed: await repository.getLastPlayedGame(),
-    events: await database.getRecentProgressEvents(limit: 6),
   );
 });
 
@@ -75,25 +71,10 @@ class HomePage extends ConsumerWidget {
                     ),
                   )),
               const SizedBox(height: 28),
-              const Text('Actividad reciente', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 14),
-              if (data.events.isEmpty)
-                const Card(child: ListTile(leading: Icon(Icons.menu_book), title: Text('La bitácora aún está vacía'), subtitle: Text('Los cambios de ubicación, equipo y medallas aparecerán aquí.')))
-              else
-                ...data.events.map((event) => Card(child: ListTile(leading: Icon(_eventIcon(event.eventType)), title: Text(event.title), subtitle: Text(event.description ?? _formatDate(event.createdAt))))),
             ],
           ),
         );
       },
     );
   }
-
-  static IconData _eventIcon(String type) {
-    if (type.contains('badge')) return Icons.workspace_premium;
-    if (type.contains('location')) return Icons.place;
-    if (type.contains('party')) return Icons.catching_pokemon;
-    return Icons.menu_book;
-  }
-
-  static String _formatDate(DateTime value) => '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 }

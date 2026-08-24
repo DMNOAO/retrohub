@@ -120,39 +120,47 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _HistoryHeader(game: widget.game, profile: profile, itemCount: _items.length),
-                _HistoryFilters(
-                  selected: _filter,
-                  onSelected: (value) => setState(() => _filter = value),
+          : NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: _HistoryHeader(
+                    game: widget.game,
+                    profile: profile,
+                    itemCount: _items.length,
+                  ),
                 ),
-                Expanded(
-                  child: _filter == 'pokemon'
-                      ? PokedexGrid(
-                          profile: profile,
-                          seenIds: _seenPokemonIds,
-                          caughtIds: _caughtPokemonIds,
-                          nationalDexUnlocked: profile.game != PokemonAssetGame.emerald &&
-                                  profile.game != PokemonAssetGame.fireRedLeafGreen ||
-                              _nationalDexUnlocked,
-                        )
-                      : filtered.isEmpty
-                          ? const _EmptyHistory()
-                          : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                              itemCount: filtered.length,
-                              itemBuilder: (context, index) {
-                                final item = filtered[index];
-                                return _TimelineCard(
-                                  item: item,
-                                  profile: profile,
-                                  isLast: index == filtered.length - 1,
-                                );
-                              },
-                            ),
+                SliverToBoxAdapter(
+                  child: _HistoryFilters(
+                    selected: _filter,
+                    onSelected: (value) => setState(() => _filter = value),
+                  ),
                 ),
               ],
+              body: _filter == 'pokemon'
+                  ? PokedexGrid(
+                      profile: profile,
+                      seenIds: _seenPokemonIds,
+                      caughtIds: _caughtPokemonIds,
+                      nationalDexUnlocked:
+                          profile.game != PokemonAssetGame.emerald &&
+                              profile.game !=
+                                  PokemonAssetGame.fireRedLeafGreen ||
+                          _nationalDexUnlocked,
+                    )
+                  : filtered.isEmpty
+                  ? const _EmptyHistory()
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final item = filtered[index];
+                        return _TimelineCard(
+                          item: item,
+                          profile: profile,
+                          isLast: index == filtered.length - 1,
+                        );
+                      },
+                    ),
             ),
     );
     if (journalAppearance == null) return history;
@@ -281,6 +289,13 @@ class _TimelineCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: scheme.primary, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: scheme.primary.withValues(alpha: .20),
+                            blurRadius: 8,
+                          ),
+                        ],
                       ),
                       child: SpriteImage(
                         path: visual.path,

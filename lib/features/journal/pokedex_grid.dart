@@ -98,8 +98,50 @@ class _PokedexGridState extends State<PokedexGrid> {
                     padding: const EdgeInsets.all(7),
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                       Align(alignment: Alignment.topLeft, child: Text('#${displayNumber.toString().padLeft(4, '0')}', style: Theme.of(context).textTheme.labelSmall)),
-                      Expanded(child: Center(child: seen ? SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: dexId), size: 62, fallbackIcon: Icons.catching_pokemon) : Icon(Icons.question_mark, size: 34, color: scheme.onSurfaceVariant.withValues(alpha: .38)))),
-                      Text(seen ? PokemonDecoder.pokemonName(dexId) : 'No visto', maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelMedium),
+                      Expanded(
+                        child: Center(
+                          child: seen
+                              ? Container(
+                                  width: 72,
+                                  height: 72,
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: scheme.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: scheme.primary,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: scheme.primary.withValues(alpha: .18),
+                                        blurRadius: 7,
+                                      ),
+                                    ],
+                                  ),
+                                  child: SpriteImage(
+                                    path: SpriteResolver.pokemonForGame(
+                                      profile: widget.profile,
+                                      pokemonId: dexId,
+                                    ),
+                                    size: 62,
+                                    fallbackIcon: Icons.catching_pokemon,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.question_mark,
+                                  size: 34,
+                                  color: scheme.onSurfaceVariant.withValues(alpha: .38),
+                                ),
+                        ),
+                      ),
+                      Text(
+                        seen ? PokemonDecoder.pokemonName(dexId) : 'No visto',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
                     ]),
                   ),
                   if (caught) Positioned(right: 7, top: 7, child: Icon(Icons.catching_pokemon, size: 18, color: scheme.primary)),

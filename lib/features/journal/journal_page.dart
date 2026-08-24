@@ -4,15 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/assets/badge_asset_resolver.dart';
-import '../../core/assets/character_asset_resolver.dart';
 import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
-import '../../core/utils/play_time_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../shared/theme/app_appearance.dart';
+import '../pokemon/decoder/move_name_resolver.dart';
+import '../pokemon/decoder/move_type_resolver.dart';
+import '../pokemon/decoder/pokemon_type_resolver.dart';
 import 'journal_history_page.dart';
+import 'widgets/move_type_tile.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
   final Game game;
@@ -72,15 +74,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return const [];
   }
 
-  Map<String, dynamic>? _decodeMap(String? jsonText) {
-    if (jsonText == null || jsonText.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(jsonText);
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    } catch (_) {}
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final game = _game ?? widget.game;
@@ -107,7 +100,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               game: game,
               snapshot: _snapshot!,
               decodeList: _decodeList,
-              decodeMap: _decodeMap,
               showKantoReveal: _showKantoReveal,
             ),
     );
@@ -150,14 +142,12 @@ class _ProgressJournal extends StatelessWidget {
   final Game game;
   final GameProgressSnapshot snapshot;
   final List<Map<String, dynamic>> Function(String?) decodeList;
-  final Map<String, dynamic>? Function(String?) decodeMap;
   final bool showKantoReveal;
 
   const _ProgressJournal({
     required this.game,
     required this.snapshot,
     required this.decodeList,
-    required this.decodeMap,
     required this.showKantoReveal,
   });
 
@@ -213,7 +203,6 @@ class _ProgressJournal extends StatelessWidget {
     final profile = GameAssetProfile.fromGame(game);
     final party = decodeList(snapshot.partyJson);
     final badges = decodeList(snapshot.badgesJson);
-    final lastCaptured = decodeMap(snapshot.lastCapturedPokemonJson);
     final isGen2 = profile.region == PokemonAssetRegion.johto;
     final johtoIndices = List<int>.generate(8, (index) => index);
     final johtoCount = _countBadges(badges, johtoIndices);
@@ -223,12 +212,13 @@ class _ProgressJournal extends StatelessWidget {
     final kantoUnlocked =
         isGen2 &&
         (johtoCount == 8 || kantoCount > 0 || snapshot.leagueWins > 0);
-    final totalBadges = isGen2 ? johtoCount + kantoCount : snapshot.badgesCount;
-    final badgeMaximum = kantoUnlocked ? 16 : 8;
-    final badgeSummary = '$totalBadges/$badgeMaximum medallas';
-
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.orientationOf(context) == Orientation.landscape
+            ? 32
+            : 24,
+        vertical: 24,
+      ),
       children: [
         _AdventureHeader(
           game: game,
@@ -238,76 +228,80 @@ class _ProgressJournal extends StatelessWidget {
           leadPokemonPath: party.isEmpty
               ? null
               : _pokemonSprite(profile, party.first),
-          badgeSummary: badgeSummary,
         ),
-        const SizedBox(height: 20),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 900
-                ? 3
-                : constraints.maxWidth >= 560
-                ? 2
-                : 1;
-            return GridView.count(
-              crossAxisCount: columns,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: columns == 1 ? 4.2 : 3.2,
-              children: [
-                _InfoCard(
-                  icon: Icons.place_outlined,
-                  title: 'Ubicación actual',
-                  value: snapshot.currentLocation ?? 'Sin ubicación detectada',
-                ),
-                _InfoCard(
-                  icon: Icons.schedule,
-                  title: 'Tiempo jugado',
-                  value: PlayTimeFormatter.fromSeconds(
-                    snapshot.playTimeMinutes * 60,
-                  ),
-                ),
-                _InfoCard(
-                  icon: Icons.catching_pokemon,
-                  title: 'Pokédex',
-                  value:
-                      '${snapshot.pokedexSeen} vistos · ${snapshot.pokedexCaught} capturados',
-                ),
-                _InfoCard(
-                  icon: Icons.emoji_events_outlined,
-                  title: 'Liga Pokémon',
-                  value: '${snapshot.leagueWins} victorias',
-                ),
-                _InfoCard(
-                  icon: Icons.sports_martial_arts,
-                  title: 'Último entrenador',
-                  value: snapshot.lastDefeatedTrainer ?? 'Sin registro',
-                  spritePath: snapshot.lastDefeatedTrainer == null
-                      ? null
-                      : CharacterAssetResolver.trainerForKnownClass(
-                          profile: profile,
-                          trainerClass: snapshot.lastDefeatedTrainer!,
-                        ),
-                ),
-                _InfoCard(
-                  icon: Icons.workspace_premium_outlined,
-                  title: 'Medallas',
-                  value: '$totalBadges/$badgeMaximum obtenidas',
-                ),
-              ],
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => JournalHistoryPage(game: game)),
             );
           },
+          icon: const Icon(Icons.auto_stories_outlined),
+          label: const Text('Ver historia completa'),
         ),
-        if (lastCaptured != null) ...[
-          const _SectionTitle(title: 'Última captura'),
-          _PokemonTile(
-            name: lastCaptured['name']?.toString() ?? 'Pokémon',
-            detail: 'Nivel ${lastCaptured['level'] ?? '—'}',
-            spritePath: _pokemonSprite(profile, lastCaptured),
-            shiny: _boolValue(lastCaptured['isShiny']),
+        const _SectionTitle(title: 'Equipo actual'),
+        if (party.isEmpty)
+          const _EmptySection(
+            icon: Icons.catching_pokemon,
+            label: 'Sin equipo detectado.',
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth >= 900
+                  ? (constraints.maxWidth - 24) / 3
+                  : constraints.maxWidth >= 560
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: party.map((pokemon) {
+                  final int? currentHp = _intValue(pokemon['currentHp']);
+                  final int? maximumHp = _intValue(pokemon['maximumHp']);
+                  final String hp = currentHp != null && maximumHp != null
+                      ? ' · PS $currentHp/$maximumHp'
+                      : '';
+                  final bool isEgg = _boolValue(pokemon['isEgg']);
+                  final int? friendship = _intValue(pokemon['friendship']);
+                  final String friendshipDetail = friendship == null
+                      ? ''
+                      : ' · ♥ $friendship/255';
+                  final int? eggStepsCurrent = _intValue(pokemon['eggStepsCurrent']);
+                  final int? eggStepsTotal = _intValue(pokemon['eggStepsTotal']);
+                  final String eggDetail =
+                      eggStepsCurrent != null && eggStepsTotal != null
+                      ? '🥚 $eggStepsCurrent/$eggStepsTotal pasos'
+                      : 'Pokémon por eclosionar';
+                  return SizedBox(
+                    width: width,
+                    child: _PokemonTile(
+                      name: isEgg
+                          ? 'Huevo'
+                          : (pokemon['name']?.toString() ?? 'Pokémon'),
+                      detail: isEgg
+                          ? eggDetail
+                          : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
+                      spritePath: _pokemonSprite(profile, pokemon),
+                      shiny: _boolValue(pokemon['isShiny']),
+                      types: isEgg
+                          ? const []
+                          : PokemonTypeResolver.resolve(
+                              profile,
+                              _intValue(pokemon['id']) ?? 0,
+                            ),
+                      onTap: () => _showPokemonDetails(
+                        context,
+                        pokemon: pokemon,
+                        spritePath: _pokemonSprite(profile, pokemon),
+                        profile: profile,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
-        ],
         if (isGen2) ...[
           _SectionTitle(title: 'Medallas de Johto $johtoCount/8'),
           _BadgeGrid(
@@ -330,78 +324,112 @@ class _ProgressJournal extends StatelessWidget {
             badgeIndices: List<int>.generate(8, (index) => index),
           ),
         ],
-        const _SectionTitle(title: 'Equipo actual'),
-        if (party.isEmpty)
-          const _EmptySection(
-            icon: Icons.catching_pokemon,
-            label: 'Sin equipo detectado.',
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth >= 900
-                  ? (constraints.maxWidth - 24) / 3
-                  : constraints.maxWidth >= 560
-                  ? (constraints.maxWidth - 12) / 2
-                  : constraints.maxWidth;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: party.map((pokemon) {
-                  final int? currentHp = int.tryParse(
-                    pokemon['currentHp']?.toString() ?? '',
-                  );
-                  final int? maximumHp = int.tryParse(
-                    pokemon['maximumHp']?.toString() ?? '',
-                  );
-                  final String hp = currentHp != null && maximumHp != null
-                      ? ' · PS $currentHp/$maximumHp'
-                      : '';
-                  final bool isEgg = _boolValue(pokemon['isEgg']);
-                  final int? friendship = int.tryParse(
-                    pokemon['friendship']?.toString() ?? '',
-                  );
-                  final String friendshipDetail = friendship == null
-                      ? ''
-                      : ' · ♥ $friendship/255';
-                  final int? eggStepsCurrent = int.tryParse(
-                    pokemon['eggStepsCurrent']?.toString() ?? '',
-                  );
-                  final int? eggStepsTotal = int.tryParse(
-                    pokemon['eggStepsTotal']?.toString() ?? '',
-                  );
-                  final String eggDetail =
-                      eggStepsCurrent != null && eggStepsTotal != null
-                      ? '🥚 $eggStepsCurrent/$eggStepsTotal pasos'
-                      : 'Pokémon por eclosionar';
-                  return SizedBox(
-                    width: width,
-                    child: _PokemonTile(
-                      name: isEgg
+        const SizedBox(height: 28),
+      ],
+    );
+  }
+
+  void _showPokemonDetails(
+    BuildContext context, {
+    required Map<String, dynamic> pokemon,
+    required String? spritePath,
+    required GameAssetProfile profile,
+  }) {
+    final bool isEgg = _boolValue(pokemon['isEgg']);
+    final List<int> moves = (pokemon['moveIds'] as List<dynamic>? ?? const [])
+        .map(_intValue)
+        .whereType<int>()
+        .where((move) => move > 0)
+        .toList();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: _ThemedSpriteFrame(
+                  spritePath: spritePath,
+                  size: 104,
+                  fallbackIcon: isEgg ? Icons.egg_outlined : Icons.catching_pokemon,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      isEgg
                           ? 'Huevo'
                           : (pokemon['name']?.toString() ?? 'Pokémon'),
-                      detail: isEgg
-                          ? eggDetail
-                          : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
-                      spritePath: _pokemonSprite(profile, pokemon),
-                      shiny: _boolValue(pokemon['isShiny']),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                  );
-                }).toList(),
-              );
-            },
+                  ),
+                  if (!isEgg)
+                    PokemonTypeIcons(
+                      types: PokemonTypeResolver.resolve(
+                        profile,
+                        _intValue(pokemon['id']) ?? 0,
+                      ),
+                      size: 26,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (!isEgg) ...[
+                _PokemonDetailRow(label: 'Nivel', value: '${pokemon['level'] ?? '—'}'),
+                _PokemonDetailRow(
+                  label: 'Experiencia',
+                  value: '${pokemon['experience'] ?? 'No disponible'}',
+                ),
+                _PokemonDetailRow(
+                  label: 'Amistad',
+                  value: pokemon['friendship'] == null
+                      ? 'No disponible'
+                      : '${pokemon['friendship']}/255',
+                ),
+                _PokemonDetailRow(
+                  label: 'Puntos de salud',
+                  value: pokemon['currentHp'] == null || pokemon['maximumHp'] == null
+                      ? 'No disponible'
+                      : '${pokemon['currentHp']}/${pokemon['maximumHp']}',
+                ),
+                if (_boolValue(pokemon['isShiny']))
+                  const _PokemonDetailRow(label: 'Variocolor', value: 'Sí ✨'),
+                if (pokemon['nickname']?.toString().trim().isNotEmpty == true)
+                  _PokemonDetailRow(
+                    label: 'Apodo',
+                    value: pokemon['nickname'].toString(),
+                  ),
+                const SizedBox(height: 16),
+                Text('Movimientos', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                if (moves.isEmpty)
+                  const Text('Se mostrarán después de volver a abrir la partida.')
+                else
+                  ...moves.map(
+                    (move) => MoveTypeTile(
+                      name: MoveNameResolver.resolve(move),
+                      type: MoveTypeResolver.resolve(move),
+                    ),
+                  ),
+              ] else
+                _PokemonDetailRow(
+                  label: 'Eclosión',
+                  value: pokemon['eggStepsCurrent'] == null || pokemon['eggStepsTotal'] == null
+                      ? 'Progreso no disponible'
+                      : '${pokemon['eggStepsCurrent']}/${pokemon['eggStepsTotal']} pasos',
+                ),
+            ],
           ),
-        const SizedBox(height: 28),
-        FilledButton.icon(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => JournalHistoryPage(game: game)),
-            );
-          },
-          icon: const Icon(Icons.auto_stories_outlined),
-          label: const Text('Ver historia completa'),
         ),
-      ],
+      ),
     );
   }
 }
@@ -412,7 +440,6 @@ class _AdventureHeader extends StatelessWidget {
   final GameAssetProfile profile;
   final Map<String, dynamic>? leadPokemon;
   final String? leadPokemonPath;
-  final String badgeSummary;
 
   const _AdventureHeader({
     required this.game,
@@ -420,7 +447,6 @@ class _AdventureHeader extends StatelessWidget {
     required this.profile,
     required this.leadPokemon,
     required this.leadPokemonPath,
-    required this.badgeSummary,
   });
 
   @override
@@ -461,7 +487,7 @@ class _AdventureHeader extends StatelessWidget {
                 const SizedBox(height: 5),
                 Text(snapshot.currentLocation ?? 'Aventura en progreso'),
                 const SizedBox(height: 8),
-                Text('$badgeSummary · ${snapshot.pokedexCaught} capturados'),
+                Text('${snapshot.pokedexCaught} capturados'),
               ],
             ),
           ),
@@ -720,60 +746,20 @@ class _BadgeGrid extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-  final String? spritePath;
-
-  const _InfoCard({
-    required this.icon,
-    required this.title,
-    required this.value,
-    this.spritePath,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            if (spritePath == null)
-              Icon(icon)
-            else
-              SpriteImage(path: spritePath, size: 44, fallbackIcon: icon),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 3),
-                  Text(value, maxLines: 2, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PokemonTile extends StatelessWidget {
   final String name;
   final String detail;
   final String? spritePath;
   final bool shiny;
+  final List<PokemonMoveType> types;
+  final VoidCallback? onTap;
   const _PokemonTile({
     required this.name,
     required this.detail,
     required this.spritePath,
     required this.shiny,
+    this.types = const <PokemonMoveType>[],
+    this.onTap,
   });
 
   @override
@@ -781,22 +767,81 @@ class _PokemonTile extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        leading: SpriteImage(
-          path: spritePath,
-          size: 58,
+        leading: _ThemedSpriteFrame(
+          spritePath: spritePath,
+          size: 62,
           fallbackIcon: Icons.catching_pokemon,
         ),
         title: Row(
           children: [
             Expanded(child: Text(name)),
+            if (types.isNotEmpty) PokemonTypeIcons(types: types, size: 22),
             if (shiny) const Text('✨', semanticsLabel: 'Shiny'),
           ],
         ),
         subtitle: Text(detail),
+        trailing: onTap == null ? null : const Icon(Icons.chevron_right),
       ),
     );
   }
+}
+
+class _ThemedSpriteFrame extends StatelessWidget {
+  final String? spritePath;
+  final double size;
+  final IconData fallbackIcon;
+
+  const _ThemedSpriteFrame({
+    required this.spritePath,
+    required this.size,
+    required this.fallbackIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: .22),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: SpriteImage(
+        path: spritePath,
+        size: size - 10,
+        fallbackIcon: fallbackIcon,
+      ),
+    );
+  }
+}
+
+class _PokemonDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _PokemonDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+    ),
+  );
 }
 
 class _EmptySection extends StatelessWidget {

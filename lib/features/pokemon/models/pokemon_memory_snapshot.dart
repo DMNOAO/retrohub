@@ -13,6 +13,8 @@ class PokemonPartyMember {
   final int? maximumHp;
   final int? status;
   final int? friendship;
+  final int? experience;
+  final List<int> moveIds;
   final int? eggCyclesRemaining;
   final int? eggCyclesTotal;
 
@@ -28,6 +30,8 @@ class PokemonPartyMember {
     this.maximumHp,
     this.status,
     this.friendship,
+    this.experience,
+    this.moveIds = const <int>[],
     this.eggCyclesRemaining,
     this.eggCyclesTotal,
   });
@@ -55,6 +59,8 @@ class PokemonPartyMember {
     'maximumHp': maximumHp,
     'status': status,
     'friendship': friendship,
+    'experience': experience,
+    'moveIds': moveIds,
     'eggCyclesRemaining': eggCyclesRemaining,
     'eggCyclesTotal': eggCyclesTotal,
     'eggStepsCurrent': eggStepsCurrent,
