@@ -2,6 +2,64 @@ abstract final class MoveNameResolver {
   static String resolve(int moveId) =>
       _spanishNames[moveId] ?? 'Movimiento #$moveId';
 
+  static int? idForName(String name) {
+    final normalized = _normalize(name);
+    final alias = _aliases[normalized];
+    if (alias != null) return alias;
+    for (final entry in _spanishNames.entries) {
+      if (_normalize(entry.value) == normalized) return entry.key;
+    }
+    return null;
+  }
+
+  static String _normalize(String value) => value
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll('ñ', 'n')
+      .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+  static const Map<String, int> _aliases = <String, int>{
+    'amortiguador': 135,
+    'armadacida': 151,
+    'atarapido': 98,
+    'autodestruc': 120,
+    'contador': 68,
+    'campanacura': 215,
+    'contoneo': 207,
+    'desenrollar': 205,
+    'dispdemora': 81,
+    'golpe': 1,
+    'hipcolmillo': 158,
+    'lanzarocas': 88,
+    'latigo': 39,
+    'movespejo': 119,
+    'movsismico': 69,
+    'maspsique': 244,
+    'pantallaluz': 113,
+    'pantallahumo': 108,
+    'patadasalta': 136,
+    'picotazoven': 40,
+    'portazo': 21,
+    'presa': 11,
+    'psicorayo': 60,
+    'rapidez': 129,
+    'repeticion': 227,
+    'retroceso': 216,
+    'solarbeam': 76,
+    'sintesis': 235,
+    'teletransp': 100,
+    'transform': 144,
+    'tirovital': 233,
+    'tormarena': 201,
+    'vcortante': 13,
+    'velextrema': 245,
+  };
+
   static const Map<int, String> _spanishNames = <int, String>{
     1: 'Destructor',
     2: 'Golpe Kárate',
@@ -359,4 +417,3 @@ abstract final class MoveNameResolver {
     354: 'Psicoataque',
   };
 }
-
