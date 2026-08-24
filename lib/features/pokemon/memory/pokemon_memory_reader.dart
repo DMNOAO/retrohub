@@ -161,7 +161,16 @@ class PokemonMemoryReader {
         ? (byte(a.currentMapGroup!) << 8) | byte(a.currentMap)
         : byte(a.currentMap);
 
-    final int johtoBadges = byte(a.obtainedBadges);
+    final int rawJohtoBadges = byte(a.obtainedBadges);
+    // Gen II almacena MINERALBADGE en el bit 4 y STORMBADGE en el bit 5,
+    // mientras la bitácora las presenta en el orden de la aventura:
+    // Tormenta (Aníbal) y luego Mineral (Yasmina). Normalizar aquí mantiene
+    // un único orden canónico para la UI, los eventos y los sprites.
+    final int johtoBadges = profile.isGen2
+        ? (rawJohtoBadges & ~0x30) |
+              ((rawJohtoBadges & 0x10) << 1) |
+              ((rawJohtoBadges & 0x20) >> 1)
+        : rawJohtoBadges;
     final int badges =
         johtoBadges | ((a.kantoBadges == null ? 0 : byte(a.kantoBadges!)) << 8);
 
