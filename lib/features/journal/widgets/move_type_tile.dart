@@ -81,8 +81,8 @@ class _MoveTypeBadge extends StatelessWidget {
       height: 38,
       decoration: BoxDecoration(color: visual.color, shape: BoxShape.circle),
       alignment: Alignment.center,
-      child: visual.emoji != null
-          ? Text(visual.emoji!, style: const TextStyle(fontSize: 21))
+      child: visual.isDragon
+          ? _DragonHeadIcon(color: foreground)
           : Icon(visual.icon, size: 22, color: foreground),
     );
   }
@@ -91,8 +91,8 @@ class _MoveTypeBadge extends StatelessWidget {
 class _MoveTypeVisual {
   final Color color;
   final IconData icon;
-  final String? emoji;
-  const _MoveTypeVisual(this.color, this.icon, {this.emoji});
+  final bool isDragon;
+  const _MoveTypeVisual(this.color, this.icon, {this.isDragon = false});
 
   static _MoveTypeVisual forType(PokemonMoveType type) => switch (type) {
     PokemonMoveType.normal => const _MoveTypeVisual(Color(0xFFA8A878), Icons.circle_outlined),
@@ -109,10 +109,74 @@ class _MoveTypeVisual {
     PokemonMoveType.bug => const _MoveTypeVisual(Color(0xFFA8B820), Icons.pest_control),
     PokemonMoveType.rock => const _MoveTypeVisual(Color(0xFFB8A038), Icons.hexagon),
     PokemonMoveType.ghost => const _MoveTypeVisual(Color(0xFF705898), Icons.blur_on),
-    PokemonMoveType.dragon => const _MoveTypeVisual(Color(0xFF7038F8), Icons.pets, emoji: '🐉'),
+    PokemonMoveType.dragon => const _MoveTypeVisual(
+      Color(0xFF7038F8),
+      Icons.pets,
+      isDragon: true,
+    ),
     PokemonMoveType.dark => const _MoveTypeVisual(Color(0xFF705848), Icons.dark_mode),
     PokemonMoveType.steel => const _MoveTypeVisual(Color(0xFFB8B8D0), Icons.settings),
     PokemonMoveType.unknown => const _MoveTypeVisual(Color(0xFF686868), Icons.question_mark),
   };
 }
 
+class _DragonHeadIcon extends StatelessWidget {
+  final Color color;
+  const _DragonHeadIcon({required this.color});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 27,
+    height: 27,
+    child: CustomPaint(painter: _DragonHeadPainter(color)),
+  );
+}
+
+class _DragonHeadPainter extends CustomPainter {
+  final Color color;
+  const _DragonHeadPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sx = size.width / 36;
+    final sy = size.height / 36;
+    canvas.save();
+    canvas.scale(sx, sy);
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final dragon = Path()
+      ..moveTo(4, 20)
+      ..lineTo(19, 4)
+      ..lineTo(17, 12)
+      ..cubicTo(25, 10, 32, 16, 32, 23)
+      ..cubicTo(32, 31, 25, 35, 18, 34)
+      ..cubicTo(11, 33, 6, 29, 4, 24)
+      ..cubicTo(8, 28, 13, 31, 19, 30)
+      ..cubicTo(24, 29, 27, 26, 27, 22)
+      ..cubicTo(27, 18, 23, 15, 18, 16)
+      ..lineTo(13, 21)
+      ..close();
+    canvas.drawPath(dragon, paint);
+
+    final cutout = Paint()
+      ..color = const Color(0xFF7038F8)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final face = Path()
+      ..moveTo(8, 18)
+      ..lineTo(15, 13)
+      ..lineTo(13, 18)
+      ..close();
+    canvas.drawPath(face, cutout);
+    canvas.drawCircle(const Offset(14.8, 13.8), 1.1, cutout);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DragonHeadPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
