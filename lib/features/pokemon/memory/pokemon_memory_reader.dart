@@ -116,6 +116,17 @@ class PokemonMemoryReader {
           : !profile.isGen2 && mon.length >= 36
           ? PokemonDecoder.decodeUnsignedBigEndian(mon.sublist(34, 36))
           : null;
+      int? statAt(int offset) => mon.length >= offset + 2
+          ? PokemonDecoder.decodeUnsignedBigEndian(
+              mon.sublist(offset, offset + 2),
+            )
+          : null;
+      final int? attack = statAt(profile.isGen2 ? 38 : 36);
+      final int? defense = statAt(profile.isGen2 ? 40 : 38);
+      final int? speed = statAt(profile.isGen2 ? 42 : 40);
+      final int? specialAttack = profile.isGen2 ? statAt(44) : null;
+      final int? specialDefense = profile.isGen2 ? statAt(46) : null;
+      final int? special = profile.isGen2 ? null : statAt(42);
 
       party.add(
         PokemonPartyMember(
@@ -130,6 +141,16 @@ class PokemonMemoryReader {
           moveIds: moveIds,
           currentHp: currentHp,
           maximumHp: maximumHp,
+          status: mon.length > (profile.isGen2 ? 32 : 4)
+              ? mon[profile.isGen2 ? 32 : 4]
+              : null,
+          attack: attack,
+          defense: defense,
+          speed: speed,
+          specialAttack: specialAttack,
+          specialDefense: specialDefense,
+          special: special,
+          heldItemId: profile.isGen2 && mon.length > 1 ? mon[1] : null,
           eggCyclesRemaining: eggCyclesRemaining,
           eggCyclesTotal: eggCyclesTotal,
         ),

@@ -379,6 +379,17 @@ class PokemonJournalTracker {
           left.maximumHp != right.maximumHp ||
           left.status != right.status ||
           left.friendship != right.friendship ||
+          left.experience != right.experience ||
+          !_sameList(left.moveIds, right.moveIds) ||
+          left.attack != right.attack ||
+          left.defense != right.defense ||
+          left.speed != right.speed ||
+          left.specialAttack != right.specialAttack ||
+          left.specialDefense != right.specialDefense ||
+          left.special != right.special ||
+          left.abilitySlot != right.abilitySlot ||
+          left.personality != right.personality ||
+          left.heldItemId != right.heldItemId ||
           left.eggCyclesRemaining != right.eggCyclesRemaining ||
           left.eggCyclesTotal != right.eggCyclesTotal ||
           left.nickname != right.nickname ||

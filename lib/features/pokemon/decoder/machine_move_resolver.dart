@@ -2,6 +2,10 @@ import '../../../core/assets/game_asset_profile.dart';
 
 abstract final class MachineMoveResolver {
   static String? label(GameAssetProfile profile, int moveId) {
+    if (profile.game == PokemonAssetGame.crystal &&
+        _crystalTutorMoves.contains(moveId)) {
+      return 'Tutor';
+    }
     final machines = switch (profile.game) {
       PokemonAssetGame.redBlue => _group1,
       PokemonAssetGame.yellow => _group2,
@@ -18,6 +22,10 @@ abstract final class MachineMoveResolver {
         ? 'MO ${(number - 100).toString().padLeft(2, '0')}'
         : 'MT ${number.toString().padLeft(2, '0')}';
   }
+
+  // En Cristal estos movimientos se enseñan en Ciudad Trigal y no
+  // corresponden a ninguna MT numerada.
+  static const Set<int> _crystalTutorMoves = <int>{53, 58, 85};
 
   static const Map<int, int> _group1 = <int, int>{
     5: 1,
@@ -438,4 +446,3 @@ abstract final class MachineMoveResolver {
     291: 108,
   };
 }
-

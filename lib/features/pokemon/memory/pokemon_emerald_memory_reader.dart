@@ -305,6 +305,9 @@ final class PokemonEmeraldMemoryReader {
     final int attacksOffset = attacksSubstructurePosition(personality) * 12;
     final int miscOffset = miscSubstructurePosition(personality) * 12;
     final int friendshipOrEggCycles = decrypted[growthOffset + 9];
+    final int heldItemId = _littleEndian(
+      decrypted.sublist(growthOffset + 2, growthOffset + 4),
+    );
     final int experience = _littleEndian(
       decrypted.sublist(growthOffset + 4, growthOffset + 8),
     );
@@ -318,6 +321,7 @@ final class PokemonEmeraldMemoryReader {
       decrypted.sublist(miscOffset + 4, miscOffset + 8),
     );
     final bool isEgg = (ivs & (1 << 30)) != 0;
+    final int abilitySlot = ((ivs >> 31) & 1) + 1;
     final int? eggCyclesTotal = isEgg
         ? hatchCyclesForPokedexId(pokedexId) ?? friendshipOrEggCycles
         : null;
@@ -333,9 +337,17 @@ final class PokemonEmeraldMemoryReader {
       status: _littleEndian(bytes.sublist(80, 84)),
       currentHp: _littleEndian(bytes.sublist(86, 88)),
       maximumHp: _littleEndian(bytes.sublist(88, 90)),
+      attack: _littleEndian(bytes.sublist(90, 92)),
+      defense: _littleEndian(bytes.sublist(92, 94)),
+      speed: _littleEndian(bytes.sublist(94, 96)),
+      specialAttack: _littleEndian(bytes.sublist(96, 98)),
+      specialDefense: _littleEndian(bytes.sublist(98, 100)),
       friendship: isEgg ? null : friendshipOrEggCycles,
       experience: experience,
       moveIds: moveIds,
+      abilitySlot: abilitySlot,
+      personality: personality,
+      heldItemId: heldItemId,
       eggCyclesRemaining: isEgg ? friendshipOrEggCycles : null,
       eggCyclesTotal: eggCyclesTotal,
     );

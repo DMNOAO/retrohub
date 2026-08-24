@@ -13,6 +13,9 @@ import '../../shared/theme/app_appearance.dart';
 import '../pokemon/decoder/move_name_resolver.dart';
 import '../pokemon/decoder/move_type_resolver.dart';
 import '../pokemon/decoder/pokemon_type_resolver.dart';
+import '../pokemon/decoder/pokemon_ability_resolver.dart';
+import '../pokemon/decoder/pokemon_item_resolver.dart';
+import '../pokemon/decoder/pokemon_nature_resolver.dart';
 import 'journal_history_page.dart';
 import 'widgets/move_type_tile.dart';
 
@@ -260,13 +263,10 @@ class _ProgressJournal extends StatelessWidget {
                   final int? currentHp = _intValue(pokemon['currentHp']);
                   final int? maximumHp = _intValue(pokemon['maximumHp']);
                   final String hp = currentHp != null && maximumHp != null
-                      ? ' · PS $currentHp/$maximumHp'
+                      ? 'PS $currentHp/$maximumHp'
                       : '';
                   final bool isEgg = _boolValue(pokemon['isEgg']);
                   final int? friendship = _intValue(pokemon['friendship']);
-                  final String friendshipDetail = friendship == null
-                      ? ''
-                      : ' · ♥ $friendship/255';
                   final int? eggStepsCurrent = _intValue(pokemon['eggStepsCurrent']);
                   final int? eggStepsTotal = _intValue(pokemon['eggStepsTotal']);
                   final String eggDetail =
@@ -281,7 +281,9 @@ class _ProgressJournal extends StatelessWidget {
                           : (pokemon['name']?.toString() ?? 'Pokémon'),
                       detail: isEgg
                           ? eggDetail
-                          : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
+                          : 'Nivel ${pokemon['level'] ?? '—'}',
+                      hpDetail: isEgg ? null : hp,
+                      friendship: isEgg ? null : friendship,
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
                       types: isEgg
@@ -341,6 +343,19 @@ class _ProgressJournal extends StatelessWidget {
         .whereType<int>()
         .where((move) => move > 0)
         .toList();
+    final pokemonId = _intValue(pokemon['id']) ?? 0;
+    final ability = PokemonAbilityResolver.current(
+      profile,
+      pokemonId,
+      _intValue(pokemon['abilitySlot']) ?? 1,
+    );
+    final personality = _intValue(pokemon['personality']);
+    final nature = personality == null
+        ? null
+        : PokemonNatureResolver.resolve(personality);
+    final heldItem = PokemonItemResolver.resolve(
+      _intValue(pokemon['heldItemId']) ?? 0,
+    );
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -407,6 +422,22 @@ class _ProgressJournal extends StatelessWidget {
                     label: 'Apodo',
                     value: pokemon['nickname'].toString(),
                   ),
+                if (ability != null)
+                  _PokemonDetailRow(label: 'Habilidad', value: ability.name),
+                if (nature != null)
+                  _PokemonDetailRow(
+                    label: 'Naturaleza',
+                    value: '${nature.name} (${nature.effect})',
+                  ),
+                if (heldItem != null)
+                  _PokemonDetailRow(label: 'Objeto', value: heldItem),
+                const SizedBox(height: 16),
+                Text(
+                  'Estadísticas',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                _PokemonStatsGrid(pokemon: pokemon),
                 const SizedBox(height: 16),
                 Text('Movimientos', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -415,6 +446,8 @@ class _ProgressJournal extends StatelessWidget {
                 else
                   ...moves.map(
                     (move) => MoveTypeTile(
+                      profile: profile,
+                      moveId: move,
                       name: MoveNameResolver.resolve(move),
                       type: MoveTypeResolver.resolve(move),
                     ),
@@ -749,6 +782,8 @@ class _BadgeGrid extends StatelessWidget {
 class _PokemonTile extends StatelessWidget {
   final String name;
   final String detail;
+  final String? hpDetail;
+  final int? friendship;
   final String? spritePath;
   final bool shiny;
   final List<PokemonMoveType> types;
@@ -756,6 +791,8 @@ class _PokemonTile extends StatelessWidget {
   const _PokemonTile({
     required this.name,
     required this.detail,
+    this.hpDetail,
+    this.friendship,
     required this.spritePath,
     required this.shiny,
     this.types = const <PokemonMoveType>[],
@@ -781,7 +818,22 @@ class _PokemonTile extends StatelessWidget {
             if (shiny) const Text('✨', semanticsLabel: 'Shiny'),
           ],
         ),
-        subtitle: Text(detail),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(detail),
+            if (hpDetail?.isNotEmpty == true) Text(hpDetail!),
+            if (friendship != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.favorite, color: Colors.red, size: 18),
+                  const SizedBox(width: 4),
+                  Text('$friendship/255'),
+                ],
+              ),
+          ],
+        ),
         trailing: onTap == null ? null : const Icon(Icons.chevron_right),
       ),
     );
@@ -838,10 +890,83 @@ class _PokemonDetailRow extends StatelessWidget {
     child: Row(
       children: [
         Expanded(child: Text(label)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Flexible(
+          flex: 2,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
       ],
     ),
   );
+}
+
+class _PokemonStatsGrid extends StatelessWidget {
+  final Map<String, dynamic> pokemon;
+  const _PokemonStatsGrid({required this.pokemon});
+
+  int? _value(String key) {
+    final value = pokemon[key];
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = <(String, int?)>[
+      ('Ataque', _value('attack')),
+      ('Defensa', _value('defense')),
+      if (_value('special') != null) ('Especial', _value('special')),
+      if (_value('specialAttack') != null)
+        ('At. Especial', _value('specialAttack')),
+      if (_value('specialDefense') != null)
+        ('Def. Especial', _value('specialDefense')),
+      ('Velocidad', _value('speed')),
+    ].where((entry) => entry.$2 != null).toList();
+    if (stats.isEmpty) {
+      return const Text('Se mostrarán después de volver a abrir la partida.');
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 8) / 2;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: stats
+              .map(
+                (entry) => Container(
+                  width: width,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(entry.$1)),
+                      Text(
+                        '${entry.$2}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
 }
 
 class _EmptySection extends StatelessWidget {
