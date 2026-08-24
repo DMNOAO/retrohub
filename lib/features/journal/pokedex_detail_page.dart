@@ -3,9 +3,13 @@ import 'package:flutter/material.dart';
 import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
+import '../pokemon/decoder/machine_move_resolver.dart';
+import '../pokemon/decoder/move_name_resolver.dart';
+import '../pokemon/decoder/move_type_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
 import 'data/pokedex_detail_data.dart';
 import 'data/pokedex_evolution_data.dart';
+import 'widgets/move_type_tile.dart';
 
 class PokedexDetailPage extends StatefulWidget {
   final GameAssetProfile profile;
@@ -75,9 +79,30 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
           const SizedBox(height: 12),
           _LockedSection(icon: Icons.menu_book_outlined, title: 'Entrada de la Pokédex', unlocked: _caught, child: data.entry.isEmpty ? const Text('Entrada aún no cargada para esta especie.') : Text(data.entry)),
           const SizedBox(height: 12),
-          _LockedSection(icon: Icons.trending_up, title: 'Movimientos por nivel', unlocked: _caught, child: data.levelMoves.isEmpty ? const Text('Movimientos aún no cargados para esta especie.') : Column(children: data.levelMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text('Nv. ${m.level}'), title: Text(m.name))).toList())),
+          _LockedSection(icon: Icons.trending_up, title: 'Movimientos por nivel', unlocked: _caught, child: data.levelMoves.isEmpty ? const Text('Movimientos aún no cargados para esta especie.') : Column(children: data.levelMoves.map((m) {
+            final moveId = MoveNameResolver.idForName(m.name);
+            return MoveTypeTile(
+              leadingLabel: 'Nv. ${m.level}',
+              name: m.name,
+              type: moveId == null
+                  ? PokemonMoveType.unknown
+                  : MoveTypeResolver.resolve(moveId),
+            );
+          }).toList())),
           const SizedBox(height: 12),
-          _LockedSection(icon: Icons.album_outlined, title: 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) => ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Text(m.machine), title: Text(m.name))).toList())),
+          _LockedSection(icon: Icons.album_outlined, title: 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
+            final moveId = MoveNameResolver.idForName(m.name);
+            final machine = moveId == null
+                ? m.machine
+                : MachineMoveResolver.label(widget.profile, moveId) ?? m.machine;
+            return MoveTypeTile(
+              leadingLabel: machine,
+              name: m.name,
+              type: moveId == null
+                  ? PokemonMoveType.unknown
+                  : MoveTypeResolver.resolve(moveId),
+            );
+          }).toList())),
         ]),
       ),
     );
