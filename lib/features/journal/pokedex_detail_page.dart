@@ -6,6 +6,7 @@ import '../../core/assets/sprite_resolver.dart';
 import '../pokemon/decoder/machine_move_resolver.dart';
 import '../pokemon/decoder/move_name_resolver.dart';
 import '../pokemon/decoder/move_type_resolver.dart';
+import '../pokemon/decoder/pokemon_type_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
 import 'data/pokedex_detail_data.dart';
 import 'data/pokedex_evolution_data.dart';
@@ -68,7 +69,15 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
             Text('#${_displayNumber.toString().padLeft(3, '0')}', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)), child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId, isShiny: _supportsShiny && _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon)),
-            const SizedBox(height: 12), Text(name, style: Theme.of(context).textTheme.headlineSmall), const SizedBox(height: 8),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text(name, style: Theme.of(context).textTheme.headlineSmall),
+              PokemonTypeIcons(
+                types: PokemonTypeResolver.resolve(widget.profile, _pokemonId),
+                size: 27,
+              ),
+            ]),
+            const SizedBox(height: 8),
             Wrap(spacing: 8, alignment: WrapAlignment.center, children: [Chip(avatar: Icon(_caught ? Icons.catching_pokemon : Icons.visibility_outlined, size: 18), label: Text(_caught ? 'Capturado' : 'Visto')), if (_caught && _supportsShiny) FilterChip(selected: _showShiny, avatar: const Icon(Icons.auto_awesome, size: 18), label: const Text('Shiny'), onSelected: (value) => setState(() => _showShiny = value))]),
           ]))),
           const SizedBox(height: 12),
