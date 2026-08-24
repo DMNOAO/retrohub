@@ -17,7 +17,6 @@ class AppTheme {
     final brightness = ThemeData.estimateBrightnessForColor(surface);
     final onSurface = _foregroundFor(surface);
     final onBackground = _foregroundFor(background);
-    final border = onSurface.withValues(alpha: 0.55);
     final scheme = ColorScheme(
       brightness: brightness,
       primary: primary,
@@ -26,6 +25,8 @@ class AppTheme {
       onSecondary: _foregroundFor(secondary),
       surface: surface,
       onSurface: onSurface,
+      outline: primary,
+      outlineVariant: primary.withValues(alpha: 0.48),
       error: const Color(0xFFFF6B7A),
       onError: Colors.white,
     );
@@ -63,10 +64,15 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: surface,
-        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: secondary.withValues(alpha: 0.42),
+        elevation: 3,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: border),
+          side: BorderSide(
+            color: primary.withValues(alpha: 0.78),
+            width: 1.2,
+          ),
         ),
       ),
       dividerColor: primary.withValues(alpha: 0.18),

@@ -240,8 +240,6 @@ class _AppearanceOption extends StatelessWidget {
                 Brightness.dark
             ? Colors.white
             : Colors.black;
-    final tileBorder = tileForeground.withValues(alpha: 0.75);
-
     return Semantics(
       button: true,
       selected: selected,
@@ -256,17 +254,25 @@ class _AppearanceOption extends StatelessWidget {
             color: appearance.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? appearance.primary : tileBorder,
-              width: selected ? 2.5 : 1,
+              color: appearance.primary.withValues(
+                alpha: selected ? 1 : 0.72,
+              ),
+              width: selected ? 2.5 : 1.2,
             ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: appearance.primary.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
+            boxShadow: [
+              BoxShadow(
+                color: appearance.primary.withValues(
+                  alpha: selected ? 0.34 : 0.12,
+                ),
+                blurRadius: selected ? 12 : 6,
+              ),
+              if (selected)
+                BoxShadow(
+                  color: appearance.secondary.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+            ],
           ),
           child: Column(
             children: [
