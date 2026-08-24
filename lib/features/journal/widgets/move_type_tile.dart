@@ -1,25 +1,37 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/assets/game_asset_profile.dart';
 import '../../pokemon/decoder/move_type_resolver.dart';
+import '../../pokemon/decoder/move_metadata_resolver.dart';
 
 class MoveTypeTile extends StatelessWidget {
   final String name;
   final PokemonMoveType type;
   final String? leadingLabel;
+  final int? moveId;
+  final GameAssetProfile? profile;
 
   const MoveTypeTile({
     super.key,
     required this.name,
     required this.type,
     this.leadingLabel,
+    this.moveId,
+    this.profile,
   });
 
   @override
   Widget build(BuildContext context) {
     final visual = _MoveTypeVisual.forType(type);
     final hasLabel = leadingLabel != null;
+    final metadata = moveId == null
+        ? null
+        : MoveMetadataResolver.resolve(moveId!, profile: profile);
+    final category = metadata == null
+        ? null
+        : _historicalCategory(type, metadata);
     return Container(
-      height: 64,
+      height: metadata == null ? 64 : 86,
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -49,6 +61,7 @@ class MoveTypeTile extends StatelessWidget {
             padding: EdgeInsets.only(
               left: hasLabel ? 120 : 62,
               right: hasLabel ? 18 : 62,
+              bottom: metadata == null ? 0 : 22,
             ),
             child: SizedBox(
               width: double.infinity,
@@ -61,10 +74,67 @@ class MoveTypeTile extends StatelessWidget {
               ),
             ),
           ),
+          if (metadata != null && category != null)
+            Positioned(
+              left: hasLabel ? 120 : 62,
+              right: hasLabel ? 18 : 62,
+              bottom: 8,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Pot. ${metadata.power ?? '—'}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Prec. ${metadata.accuracy == null ? '—' : '${metadata.accuracy}%'}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(width: 10),
+                  Tooltip(
+                    message: _categoryName(category),
+                    child: Icon(_categoryIcon(category), size: 17),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
+
+  static HistoricalMoveCategory _historicalCategory(
+    PokemonMoveType type,
+    MoveMetadata metadata,
+  ) {
+    if (metadata.isStatus) return HistoricalMoveCategory.status;
+    return switch (type) {
+      PokemonMoveType.fire ||
+      PokemonMoveType.water ||
+      PokemonMoveType.electric ||
+      PokemonMoveType.grass ||
+      PokemonMoveType.ice ||
+      PokemonMoveType.psychic ||
+      PokemonMoveType.dragon ||
+      PokemonMoveType.dark => HistoricalMoveCategory.special,
+      _ => HistoricalMoveCategory.physical,
+    };
+  }
+
+  static IconData _categoryIcon(HistoricalMoveCategory category) =>
+      switch (category) {
+        HistoricalMoveCategory.physical => Icons.sports_mma,
+        HistoricalMoveCategory.special => Icons.auto_awesome,
+        HistoricalMoveCategory.status => Icons.shield_outlined,
+      };
+
+  static String _categoryName(HistoricalMoveCategory category) =>
+      switch (category) {
+        HistoricalMoveCategory.physical => 'Físico',
+        HistoricalMoveCategory.special => 'Especial',
+        HistoricalMoveCategory.status => 'Estado',
+      };
 }
 
 class PokemonTypeIcons extends StatelessWidget {

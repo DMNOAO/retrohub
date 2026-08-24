@@ -7,6 +7,7 @@ import '../pokemon/decoder/machine_move_resolver.dart';
 import '../pokemon/decoder/move_name_resolver.dart';
 import '../pokemon/decoder/move_type_resolver.dart';
 import '../pokemon/decoder/pokemon_type_resolver.dart';
+import '../pokemon/decoder/pokemon_ability_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
 import 'data/pokedex_detail_data.dart';
 import 'data/pokedex_evolution_data.dart';
@@ -57,6 +58,10 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
     final data = PokedexDetailData.forGame(widget.profile, _pokemonId);
     final evolution = PokedexEvolutionData.forGame(widget.profile, _pokemonId);
     final evolutionOptions = evolution.split('\n');
+    final abilities = PokemonAbilityResolver.possible(
+      widget.profile,
+      _pokemonId,
+    );
     final name = PokemonDecoder.pokemonName(_pokemonId);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
@@ -81,16 +86,77 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
             Wrap(spacing: 8, alignment: WrapAlignment.center, children: [Chip(avatar: Icon(_caught ? Icons.catching_pokemon : Icons.visibility_outlined, size: 18), label: Text(_caught ? 'Capturado' : 'Visto')), if (_caught && _supportsShiny) FilterChip(selected: _showShiny, avatar: const Icon(Icons.auto_awesome, size: 18), label: const Text('Shiny'), onSelected: (value) => setState(() => _showShiny = value))]),
           ]))),
           const SizedBox(height: 12),
-          _Section(icon: Icons.location_on_outlined, title: 'Dónde encontrarlo', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (data.encounters.isEmpty) const Text('Datos de encuentro aún no cargados para esta especie.') else ...data.encounters.map((e) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.place_outlined), title: Text(e.location), subtitle: Text('${e.method} · ${e.time}'))),
-            if (evolution.isNotEmpty) ...[const Divider(height: 24), ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.change_circle_outlined), title: const Text('Evolución'), subtitle: evolutionOptions.length == 1 ? Text(evolution) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: evolutionOptions.map((option) => Padding(padding: const EdgeInsets.only(top: 4), child: Text('• $option'))).toList()))],
-          ])),
-          const SizedBox(height: 12),
-          _LockedSection(icon: Icons.menu_book_outlined, title: 'Entrada de la Pokédex', unlocked: _caught, child: data.entry.isEmpty ? const Text('Entrada aún no cargada para esta especie.') : Text(data.entry)),
-          const SizedBox(height: 12),
-          _LockedSection(icon: Icons.trending_up, title: 'Movimientos por nivel', unlocked: _caught, child: data.levelMoves.isEmpty ? const Text('Movimientos aún no cargados para esta especie.') : Column(children: data.levelMoves.map((m) {
+          _ExpandableSection(
+            storageKey: 'pokedex-entry',
+            icon: Icons.menu_book_outlined,
+            title: 'Entrada de la Pokédex',
+            unlocked: _caught,
+            child: data.entry.isEmpty
+                ? const Text('Entrada aún no cargada para esta especie.')
+                : Text(data.entry),
+          ),
+          _ExpandableSection(
+            storageKey: 'pokedex-evolution',
+            icon: Icons.change_circle_outlined,
+            title: 'Evolución',
+            child: evolution.isEmpty
+                ? const Text('Este Pokémon no tiene una evolución registrada.')
+                : evolutionOptions.length == 1
+                ? Text(evolution)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: evolutionOptions
+                        .map(
+                          (option) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('• $option'),
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+          if (PokemonAbilityResolver.supports(widget.profile))
+            _ExpandableSection(
+              storageKey: 'pokedex-abilities',
+              icon: Icons.auto_awesome_outlined,
+              title: 'Habilidades posibles',
+              unlocked: _caught,
+              child: abilities.isEmpty
+                  ? const Text('No hay habilidades cargadas para esta especie.')
+                  : Column(
+                      children: abilities
+                          .map(
+                            (ability) => _AbilityCard(ability: ability),
+                          )
+                          .toList(),
+                    ),
+            ),
+          _ExpandableSection(
+            storageKey: 'pokedex-encounters',
+            icon: Icons.location_on_outlined,
+            title: 'Dónde encontrarlo',
+            child: data.encounters.isEmpty
+                ? const Text(
+                    'Datos de encuentro aún no cargados para esta especie.',
+                  )
+                : Column(
+                    children: data.encounters
+                        .map(
+                          (e) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.place_outlined),
+                            title: Text(e.location),
+                            subtitle: Text('${e.method} · ${e.time}'),
+                          ),
+                        )
+                        .toList(),
+                  ),
+          ),
+          _ExpandableSection(icon: Icons.trending_up, storageKey: 'pokedex-level', title: 'Movimientos por nivel', unlocked: _caught, child: data.levelMoves.isEmpty ? const Text('Movimientos aún no cargados para esta especie.') : Column(children: data.levelMoves.map((m) {
             final moveId = MoveNameResolver.idForName(m.name);
             return MoveTypeTile(
+              profile: widget.profile,
+              moveId: moveId,
               leadingLabel: 'Nv. ${m.level}',
               name: m.name,
               type: moveId == null
@@ -98,13 +164,14 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
                   : MoveTypeResolver.resolve(moveId),
             );
           }).toList())),
-          const SizedBox(height: 12),
-          _LockedSection(icon: Icons.album_outlined, title: 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
+          _ExpandableSection(icon: Icons.album_outlined, storageKey: 'pokedex-machines', title: 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
             final moveId = MoveNameResolver.idForName(m.name);
             final machine = moveId == null
                 ? m.machine
                 : MachineMoveResolver.label(widget.profile, moveId) ?? m.machine;
             return MoveTypeTile(
+              profile: widget.profile,
+              moveId: moveId,
               leadingLabel: machine,
               name: m.name,
               type: moveId == null
@@ -118,16 +185,54 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
   }
 }
 
-class _Section extends StatelessWidget {
-  final IconData icon; final String title; final Widget child;
-  const _Section({required this.icon, required this.title, required this.child});
+class _ExpandableSection extends StatelessWidget {
+  final String storageKey;
+  final IconData icon;
+  final String title;
+  final bool unlocked;
+  final Widget child;
+
+  const _ExpandableSection({
+    required this.storageKey,
+    required this.icon,
+    required this.title,
+    this.unlocked = true,
+    required this.child,
+  });
+
   @override
-  Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Icon(icon), const SizedBox(width: 10), Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium))]), const SizedBox(height: 12), child])));
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 12),
+    clipBehavior: Clip.antiAlias,
+    child: ExpansionTile(
+      key: PageStorageKey<String>(storageKey),
+      leading: Icon(unlocked ? icon : Icons.lock_outline),
+      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        unlocked
+            ? child
+            : const Text(
+                'Captura este Pokémon para desbloquear esta información.',
+              ),
+      ],
+    ),
+  );
 }
 
-class _LockedSection extends StatelessWidget {
-  final IconData icon; final String title; final bool unlocked; final Widget child;
-  const _LockedSection({required this.icon, required this.title, required this.unlocked, required this.child});
+class _AbilityCard extends StatelessWidget {
+  final PokemonAbilityInfo ability;
+  const _AbilityCard({required this.ability});
+
   @override
-  Widget build(BuildContext context) => _Section(icon: unlocked ? icon : Icons.lock_outline, title: title, child: unlocked ? child : const Text('Captura este Pokémon para desbloquear esta información.'));
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(top: 8),
+    child: ExpansionTile(
+      leading: const Icon(Icons.auto_awesome),
+      title: Text(ability.name),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [Text(ability.description)],
+    ),
+  );
 }

@@ -15,6 +15,15 @@ class PokemonPartyMember {
   final int? friendship;
   final int? experience;
   final List<int> moveIds;
+  final int? attack;
+  final int? defense;
+  final int? speed;
+  final int? specialAttack;
+  final int? specialDefense;
+  final int? special;
+  final int? abilitySlot;
+  final int? personality;
+  final int? heldItemId;
   final int? eggCyclesRemaining;
   final int? eggCyclesTotal;
 
@@ -32,6 +41,15 @@ class PokemonPartyMember {
     this.friendship,
     this.experience,
     this.moveIds = const <int>[],
+    this.attack,
+    this.defense,
+    this.speed,
+    this.specialAttack,
+    this.specialDefense,
+    this.special,
+    this.abilitySlot,
+    this.personality,
+    this.heldItemId,
     this.eggCyclesRemaining,
     this.eggCyclesTotal,
   });
@@ -61,6 +79,15 @@ class PokemonPartyMember {
     'friendship': friendship,
     'experience': experience,
     'moveIds': moveIds,
+    'attack': attack,
+    'defense': defense,
+    'speed': speed,
+    'specialAttack': specialAttack,
+    'specialDefense': specialDefense,
+    'special': special,
+    'abilitySlot': abilitySlot,
+    'personality': personality,
+    'heldItemId': heldItemId,
     'eggCyclesRemaining': eggCyclesRemaining,
     'eggCyclesTotal': eggCyclesTotal,
     'eggStepsCurrent': eggStepsCurrent,
