@@ -161,7 +161,7 @@ class _AppearanceCard extends ConsumerWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              'Elige una paleta inspirada en una edición de Pokémon.',
+              'Elige una paleta inspirada en un juego o personaje.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -178,21 +178,40 @@ class _AppearanceCard extends ConsumerWidget {
                 final width =
                     (constraints.maxWidth - spacing * (columns - 1)) / columns;
 
-                return Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: AppAppearance.values.map((appearance) {
-                    return SizedBox(
-                      width: width,
-                      child: _AppearanceOption(
-                        appearance: appearance,
-                        selected: selected == appearance,
-                        onTap: () => ref
-                            .read(appearanceProvider.notifier)
-                            .select(appearance),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final category in AppearanceCategory.values) ...[
+                      Text(
+                        category.label,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: AppAppearance.values
+                            .where((appearance) =>
+                                appearance.category == category)
+                            .map((appearance) {
+                          return SizedBox(
+                            width: width,
+                            child: _AppearanceOption(
+                              appearance: appearance,
+                              selected: selected == appearance,
+                              onTap: () => ref
+                                  .read(appearanceProvider.notifier)
+                                  .select(appearance),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      if (category != AppearanceCategory.values.last)
+                        const SizedBox(height: 22),
+                    ],
+                  ],
                 );
               },
             ),

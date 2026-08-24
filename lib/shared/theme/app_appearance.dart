@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 
+enum AppearanceCategory {
+  games('Juegos'),
+  characters('Personajes');
+
+  final String label;
+
+  const AppearanceCategory(this.label);
+}
+
 enum AppAppearance {
   blue('Azul', 0xFF1677D2, 0xFF0B3158, 0xFF65B5FF, 0xFFA8DCFF,
       sprite: 'assets/sprites/pokemon/nds/black_white/009.png'),
@@ -28,7 +37,31 @@ enum AppAppearance {
   white('Blanco', 0xFFFFFFFF, 0xFFDDE2E7, 0xFF20252B, 0xFF54718A,
       sprite: 'assets/sprites/pokemon/nds/black_white/644.png'),
   black('Negro', 0xFF000000, 0xFF121212, 0xFFFFFFFF, 0xFF9EA7B3,
-      sprite: 'assets/sprites/pokemon/nds/black_white/643.png');
+      sprite: 'assets/sprites/pokemon/nds/black_white/643.png'),
+  diamond('Diamante', 0xFF246BB2, 0xFF102B4F, 0xFF58D9E8, 0xFFC7D5E0,
+      sprite: 'assets/sprites/pokemon/nds/black_white/483.png'),
+  pearl('Perla', 0xFFC64A91, 0xFF4B183A, 0xFFF4EEF5, 0xFFD9A4CF,
+      sprite: 'assets/sprites/pokemon/nds/black_white/484.png'),
+  platinum('Platino', 0xFF3A353D, 0xFF17151A, 0xFFD5A62E, 0xFFB92E35,
+      sprite: 'assets/sprites/pokemon/nds/black_white/487origin.png'),
+  shinyUmbreon(
+    'Umbreon shiny',
+    0xFF092E3A,
+    0xFF10171B,
+    0xFF35D6E6,
+    0xFF4A8DFF,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0197.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyRayquaza(
+    'Rayquaza shiny',
+    0xFF26332D,
+    0xFF111514,
+    0xFFF2C230,
+    0xFFE23D3D,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0384.png',
+    category: AppearanceCategory.characters,
+  );
 
   final String label;
   final int _backgroundValue;
@@ -37,6 +70,7 @@ enum AppAppearance {
   final int _secondaryValue;
   final String? spriteAsset;
   final IconData? fallbackIcon;
+  final AppearanceCategory category;
 
   const AppAppearance(
     this.label,
@@ -46,6 +80,7 @@ enum AppAppearance {
     int secondary, {
     String? sprite,
     IconData? icon,
+    this.category = AppearanceCategory.games,
   })  : _backgroundValue = background,
         _surfaceValue = surface,
         _primaryValue = primary,
@@ -98,6 +133,15 @@ enum AppAppearance {
     }
     if (normalized.contains('cristal') || normalized.contains('crystal')) {
       return AppAppearance.crystal;
+    }
+    if (normalized.contains('diamante') || normalized.contains('diamond')) {
+      return AppAppearance.diamond;
+    }
+    if (normalized.contains('perla') || normalized.contains('pearl')) {
+      return AppAppearance.pearl;
+    }
+    if (normalized.contains('platino') || normalized.contains('platinum')) {
+      return AppAppearance.platinum;
     }
     if (normalized.contains('plata') || normalized.contains('silver')) {
       return AppAppearance.silver;
