@@ -192,9 +192,7 @@ class _AppearanceCard extends ConsumerWidget {
                       Wrap(
                         spacing: spacing,
                         runSpacing: spacing,
-                        children: AppAppearance.values
-                            .where((appearance) =>
-                                appearance.category == category)
+                        children: AppAppearance.forCategory(category)
                             .map((appearance) {
                           return SizedBox(
                             width: width,

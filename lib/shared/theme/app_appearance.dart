@@ -97,6 +97,33 @@ enum AppAppearance {
     0xFFF6D7A7,
     sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0251.png',
     category: AppearanceCategory.characters,
+  ),
+  cresselia(
+    'Cresselia',
+    0xFF4C4B9B,
+    0xFF1B1938,
+    0xFFF1D45C,
+    0xFFE889C2,
+    sprite: 'assets/sprites/pokemon/nds/black_white/488.png',
+    category: AppearanceCategory.characters,
+  ),
+  darkrai(
+    'Darkrai',
+    0xFF17121F,
+    0xFF0B0910,
+    0xFFD9344E,
+    0xFFB8D7F0,
+    sprite: 'assets/sprites/pokemon/nds/black_white/491.png',
+    category: AppearanceCategory.characters,
+  ),
+  arceus(
+    'Arceus',
+    0xFFE9E2CF,
+    0xFF2B2A27,
+    0xFFD8B13E,
+    0xFF69A987,
+    sprite: 'assets/sprites/pokemon/nds/black_white/493.png',
+    category: AppearanceCategory.characters,
   );
 
   final String label;
@@ -129,6 +156,34 @@ enum AppAppearance {
   Color get primary => Color(_primaryValue);
   Color get secondary => Color(_secondaryValue);
 
+  int get catalogOrder => switch (this) {
+        AppAppearance.red => 100,
+        AppAppearance.blue => 110,
+        AppAppearance.yellow => 120,
+        AppAppearance.gold => 200,
+        AppAppearance.silver => 210,
+        AppAppearance.crystal => 220,
+        AppAppearance.ruby => 300,
+        AppAppearance.sapphire => 310,
+        AppAppearance.emerald => 320,
+        AppAppearance.fireRed => 330,
+        AppAppearance.leafGreen => 340,
+        AppAppearance.diamond => 400,
+        AppAppearance.pearl => 410,
+        AppAppearance.platinum => 420,
+        AppAppearance.black => 500,
+        AppAppearance.white => 510,
+        AppAppearance.gengar => 1094,
+        AppAppearance.mewtwo => 1150,
+        AppAppearance.shinyUmbreon => 2197,
+        AppAppearance.shinyCelebi => 2251,
+        AppAppearance.shinyMetagross => 3376,
+        AppAppearance.shinyRayquaza => 3384,
+        AppAppearance.cresselia => 4488,
+        AppAppearance.darkrai => 4491,
+        AppAppearance.arceus => 4493,
+      };
+
   ThemeData get theme => AppTheme.fromPalette(
         background: background,
         surface: surface,
@@ -140,6 +195,15 @@ enum AppAppearance {
         (appearance) => appearance.name == value,
         orElse: () => AppAppearance.crystal,
       );
+
+  static List<AppAppearance> forCategory(AppearanceCategory category) {
+    final appearances = AppAppearance.values
+        .where((appearance) => appearance.category == category)
+        .toList()
+      ..sort((first, second) =>
+          first.catalogOrder.compareTo(second.catalogOrder));
+    return appearances;
+  }
 
   static AppAppearance? forGameTitle(String title) {
     final normalized = title
