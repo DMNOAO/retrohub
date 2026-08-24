@@ -9,6 +9,7 @@ import '../pokemon/decoder/move_type_resolver.dart';
 import '../pokemon/decoder/pokemon_type_resolver.dart';
 import '../pokemon/decoder/pokemon_ability_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
+import '../pokemon/decoder/pokemon_learnset_resolver.dart';
 import 'data/pokedex_detail_data.dart';
 import 'data/pokedex_evolution_data.dart';
 import 'widgets/move_type_tile.dart';
@@ -62,6 +63,23 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
       widget.profile,
       _pokemonId,
     );
+    final tutorMoves = PokemonLearnsetResolver.tutorMoves(
+      widget.profile,
+      _pokemonId,
+    );
+    final eggMoves = PokemonLearnsetResolver.eggMoves(
+      widget.profile,
+      _pokemonId,
+    );
+    final eggBaseId = PokemonLearnsetResolver.baseSpeciesId(
+      widget.profile,
+      _pokemonId,
+    );
+    final machineMoves = data.machineMoves.where((move) {
+      final moveId = MoveNameResolver.idForName(move.name);
+      return moveId == null ||
+          MachineMoveResolver.label(widget.profile, moveId) != 'Tutor';
+    }).toList(growable: false);
     final name = PokemonDecoder.pokemonName(_pokemonId);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
@@ -164,7 +182,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
                   : MoveTypeResolver.resolve(moveId),
             );
           }).toList())),
-          _ExpandableSection(icon: Icons.album_outlined, storageKey: 'pokedex-machines', title: widget.profile.game == PokemonAssetGame.crystal ? 'MT / MO / Tutor' : 'MT / MO', unlocked: _caught, child: data.machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: data.machineMoves.map((m) {
+          _ExpandableSection(icon: Icons.album_outlined, storageKey: 'pokedex-machines', title: 'MT / MO', unlocked: _caught, child: machineMoves.isEmpty ? const Text('MT/MO aún no cargadas para esta especie.') : Column(children: machineMoves.map((m) {
             final moveId = MoveNameResolver.idForName(m.name);
             final machine = moveId == null
                 ? m.machine
@@ -179,6 +197,48 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
                   : MoveTypeResolver.resolve(moveId),
             );
           }).toList())),
+          if (tutorMoves.isNotEmpty)
+            _ExpandableSection(
+              icon: Icons.school_outlined,
+              storageKey: 'pokedex-tutor',
+              title: 'Movimientos de tutor',
+              unlocked: _caught,
+              child: Column(
+                children: tutorMoves
+                    .map(
+                      (moveId) => MoveTypeTile(
+                        profile: widget.profile,
+                        moveId: moveId,
+                        leadingLabel: 'Tutor',
+                        name: MoveNameResolver.resolve(moveId),
+                        type: MoveTypeResolver.resolve(moveId),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          if (eggMoves.isNotEmpty)
+            _ExpandableSection(
+              icon: Icons.egg_outlined,
+              storageKey: 'pokedex-egg-moves',
+              title: eggBaseId == _pokemonId
+                  ? 'Movimientos huevo'
+                  : 'Movimientos huevo de ${PokemonDecoder.pokemonName(eggBaseId)}',
+              unlocked: _caught,
+              child: Column(
+                children: eggMoves
+                    .map(
+                      (moveId) => MoveTypeTile(
+                        profile: widget.profile,
+                        moveId: moveId,
+                        leadingLabel: 'Huevo',
+                        name: MoveNameResolver.resolve(moveId),
+                        type: MoveTypeResolver.resolve(moveId),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
         ]),
       ),
     );
