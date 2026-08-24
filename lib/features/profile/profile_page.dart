@@ -161,7 +161,7 @@ class _AppearanceCard extends ConsumerWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              'Elige una paleta inspirada en una edición de Pokémon.',
+              'Elige una paleta inspirada en un juego o personaje.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -178,21 +178,38 @@ class _AppearanceCard extends ConsumerWidget {
                 final width =
                     (constraints.maxWidth - spacing * (columns - 1)) / columns;
 
-                return Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: AppAppearance.values.map((appearance) {
-                    return SizedBox(
-                      width: width,
-                      child: _AppearanceOption(
-                        appearance: appearance,
-                        selected: selected == appearance,
-                        onTap: () => ref
-                            .read(appearanceProvider.notifier)
-                            .select(appearance),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final category in AppearanceCategory.values) ...[
+                      Text(
+                        category.label,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: AppAppearance.forCategory(category)
+                            .map((appearance) {
+                          return SizedBox(
+                            width: width,
+                            child: _AppearanceOption(
+                              appearance: appearance,
+                              selected: selected == appearance,
+                              onTap: () => ref
+                                  .read(appearanceProvider.notifier)
+                                  .select(appearance),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      if (category != AppearanceCategory.values.last)
+                        const SizedBox(height: 22),
+                    ],
+                  ],
                 );
               },
             ),
@@ -221,8 +238,6 @@ class _AppearanceOption extends StatelessWidget {
                 Brightness.dark
             ? Colors.white
             : Colors.black;
-    final tileBorder = tileForeground.withValues(alpha: 0.75);
-
     return Semantics(
       button: true,
       selected: selected,
@@ -237,17 +252,25 @@ class _AppearanceOption extends StatelessWidget {
             color: appearance.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? appearance.primary : tileBorder,
-              width: selected ? 2.5 : 1,
+              color: appearance.primary.withValues(
+                alpha: selected ? 1 : 0.72,
+              ),
+              width: selected ? 2.5 : 1.2,
             ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: appearance.primary.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
+            boxShadow: [
+              BoxShadow(
+                color: appearance.primary.withValues(
+                  alpha: selected ? 0.34 : 0.12,
+                ),
+                blurRadius: selected ? 12 : 6,
+              ),
+              if (selected)
+                BoxShadow(
+                  color: appearance.secondary.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+            ],
           ),
           child: Column(
             children: [

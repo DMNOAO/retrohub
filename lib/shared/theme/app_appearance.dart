@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 
+enum AppearanceCategory {
+  games('Juegos'),
+  characters('Personajes');
+
+  final String label;
+
+  const AppearanceCategory(this.label);
+}
+
 enum AppAppearance {
   blue('Azul', 0xFF1677D2, 0xFF0B3158, 0xFF65B5FF, 0xFFA8DCFF,
       sprite: 'assets/sprites/pokemon/nds/black_white/009.png'),
@@ -28,7 +37,94 @@ enum AppAppearance {
   white('Blanco', 0xFFFFFFFF, 0xFFDDE2E7, 0xFF20252B, 0xFF54718A,
       sprite: 'assets/sprites/pokemon/nds/black_white/644.png'),
   black('Negro', 0xFF000000, 0xFF121212, 0xFFFFFFFF, 0xFF9EA7B3,
-      sprite: 'assets/sprites/pokemon/nds/black_white/643.png');
+      sprite: 'assets/sprites/pokemon/nds/black_white/643.png'),
+  diamond('Diamante', 0xFF246BB2, 0xFF102B4F, 0xFF58D9E8, 0xFFC7D5E0,
+      sprite: 'assets/sprites/pokemon/nds/black_white/483.png'),
+  pearl('Perla', 0xFFC64A91, 0xFF4B183A, 0xFFF4EEF5, 0xFFD9A4CF,
+      sprite: 'assets/sprites/pokemon/nds/black_white/484.png'),
+  platinum('Platino', 0xFF3A353D, 0xFF17151A, 0xFFD5A62E, 0xFFB92E35,
+      sprite: 'assets/sprites/pokemon/nds/black_white/487origin.png'),
+  shinyUmbreon(
+    'Umbreon shiny',
+    0xFF080A0C,
+    0xFF10171B,
+    0xFF35D6E6,
+    0xFF4A8DFF,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0197.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyRayquaza(
+    'Rayquaza shiny',
+    0xFF26332D,
+    0xFF111514,
+    0xFFF2C230,
+    0xFFE23D3D,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0384.png',
+    category: AppearanceCategory.characters,
+  ),
+  gengar(
+    'Gengar',
+    0xFF522080,
+    0xFF1D1028,
+    0xFFD94CFF,
+    0xFFA98BD4,
+    sprite: 'assets/sprites/pokemon/nds/black_white/094.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyMetagross(
+    'Metagross shiny',
+    0xFF536776,
+    0xFF18232B,
+    0xFFD8E2E8,
+    0xFFD9A928,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0376.png',
+    category: AppearanceCategory.characters,
+  ),
+  mewtwo(
+    'Mewtwo',
+    0xFF8A6FB3,
+    0xFF2D2040,
+    0xFFC9B7E8,
+    0xFF7A3DB8,
+    sprite: 'assets/sprites/pokemon/nds/black_white/150.png',
+    category: AppearanceCategory.characters,
+  ),
+  shinyCelebi(
+    'Celebi shiny',
+    0xFF2F8F67,
+    0xFF17382D,
+    0xFFF28CB8,
+    0xFFF6D7A7,
+    sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0251.png',
+    category: AppearanceCategory.characters,
+  ),
+  cresselia(
+    'Cresselia',
+    0xFF4C4B9B,
+    0xFF1B1938,
+    0xFFF1D45C,
+    0xFFE889C2,
+    sprite: 'assets/sprites/pokemon/nds/black_white/488.png',
+    category: AppearanceCategory.characters,
+  ),
+  darkrai(
+    'Darkrai',
+    0xFF17121F,
+    0xFF0B0910,
+    0xFFD9344E,
+    0xFFB8D7F0,
+    sprite: 'assets/sprites/pokemon/nds/black_white/491.png',
+    category: AppearanceCategory.characters,
+  ),
+  arceus(
+    'Arceus',
+    0xFFE9E2CF,
+    0xFF2B2A27,
+    0xFFD8B13E,
+    0xFF69A987,
+    sprite: 'assets/sprites/pokemon/nds/black_white/493.png',
+    category: AppearanceCategory.characters,
+  );
 
   final String label;
   final int _backgroundValue;
@@ -37,6 +133,7 @@ enum AppAppearance {
   final int _secondaryValue;
   final String? spriteAsset;
   final IconData? fallbackIcon;
+  final AppearanceCategory category;
 
   const AppAppearance(
     this.label,
@@ -46,6 +143,7 @@ enum AppAppearance {
     int secondary, {
     String? sprite,
     IconData? icon,
+    this.category = AppearanceCategory.games,
   })  : _backgroundValue = background,
         _surfaceValue = surface,
         _primaryValue = primary,
@@ -58,6 +156,34 @@ enum AppAppearance {
   Color get primary => Color(_primaryValue);
   Color get secondary => Color(_secondaryValue);
 
+  int get catalogOrder => switch (this) {
+        AppAppearance.red => 100,
+        AppAppearance.blue => 110,
+        AppAppearance.yellow => 120,
+        AppAppearance.gold => 200,
+        AppAppearance.silver => 210,
+        AppAppearance.crystal => 220,
+        AppAppearance.ruby => 300,
+        AppAppearance.sapphire => 310,
+        AppAppearance.emerald => 320,
+        AppAppearance.fireRed => 330,
+        AppAppearance.leafGreen => 340,
+        AppAppearance.diamond => 400,
+        AppAppearance.pearl => 410,
+        AppAppearance.platinum => 420,
+        AppAppearance.black => 500,
+        AppAppearance.white => 510,
+        AppAppearance.gengar => 1094,
+        AppAppearance.mewtwo => 1150,
+        AppAppearance.shinyUmbreon => 2197,
+        AppAppearance.shinyCelebi => 2251,
+        AppAppearance.shinyMetagross => 3376,
+        AppAppearance.shinyRayquaza => 3384,
+        AppAppearance.cresselia => 4488,
+        AppAppearance.darkrai => 4491,
+        AppAppearance.arceus => 4493,
+      };
+
   ThemeData get theme => AppTheme.fromPalette(
         background: background,
         surface: surface,
@@ -69,6 +195,15 @@ enum AppAppearance {
         (appearance) => appearance.name == value,
         orElse: () => AppAppearance.crystal,
       );
+
+  static List<AppAppearance> forCategory(AppearanceCategory category) {
+    final appearances = AppAppearance.values
+        .where((appearance) => appearance.category == category)
+        .toList()
+      ..sort((first, second) =>
+          first.catalogOrder.compareTo(second.catalogOrder));
+    return appearances;
+  }
 
   static AppAppearance? forGameTitle(String title) {
     final normalized = title
@@ -98,6 +233,15 @@ enum AppAppearance {
     }
     if (normalized.contains('cristal') || normalized.contains('crystal')) {
       return AppAppearance.crystal;
+    }
+    if (normalized.contains('diamante') || normalized.contains('diamond')) {
+      return AppAppearance.diamond;
+    }
+    if (normalized.contains('perla') || normalized.contains('pearl')) {
+      return AppAppearance.pearl;
+    }
+    if (normalized.contains('platino') || normalized.contains('platinum')) {
+      return AppAppearance.platinum;
     }
     if (normalized.contains('plata') || normalized.contains('silver')) {
       return AppAppearance.silver;
