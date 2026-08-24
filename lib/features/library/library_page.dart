@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/cover_helper.dart';
-import '../../core/utils/play_time_formatter.dart';
 import '../widgets/dynamic_game_banner.dart';
 import '../../data/repositories/games_repository_provider.dart';
 import '../game_detail/game_detail_page.dart';
@@ -198,11 +197,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Mis juegos',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 14),
           Expanded(
             child: gamesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -271,9 +265,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     ));
                 final recentGame = playedGames.isEmpty ? null : playedGames.first;
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                return Scrollbar(
+                  controller: _gridScrollController,
+                  thumbVisibility: true,
+                  child: ListView(
+                    controller: _gridScrollController,
+                    padding: const EdgeInsets.only(bottom: 20),
+                    children: [
                     if (recentGame != null) DynamicGameBanner(
                       game: recentGame,
                       coverPath: CoverHelper.getCover(recentGame.title, recentGame.console),
@@ -446,23 +444,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Expanded(
-                      child: filteredGames.isEmpty
-                          ? const Center(
-                              child: Text('No se encontraron juegos'),
-                            )
-                          : Scrollbar(
-                              controller: _gridScrollController,
-                              thumbVisibility: true,
-                              child: GridView.builder(
-                                controller: _gridScrollController,
+                    if (filteredGames.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: Text('No se encontraron juegos')),
+                      )
+                    else
+                      GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
                               itemCount: filteredGames.length,
                               gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 250,
-                                mainAxisSpacing: 24,
-                                crossAxisSpacing: 24,
-                                childAspectRatio: 0.72,
+                                  SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: isCompact ? 180 : 230,
+                                mainAxisSpacing: isCompact ? 12 : 20,
+                                crossAxisSpacing: isCompact ? 12 : 20,
+                                childAspectRatio: 0.70,
                               ),
                               itemBuilder: (context, index) {
                                 final game = filteredGames[index];
@@ -476,9 +473,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                     Positioned.fill(
                                       child: GameCoverCard(
                                         title: game.title,
-                                        console:
-                                            '${game.console} • ${PlayTimeFormatter.fromSeconds(game.playTimeSeconds)}',
+                                        console: '',
                                         coverPath: cover,
+                                        coverOnly: true,
                                         onTap: () async {
                                           await Navigator.of(context).push(
                                             MaterialPageRoute(
@@ -531,10 +528,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                 );
                               },
                             ),
-                            ),
-                    ),
                   ],
-                );
+                ));
               },
             ),
           ),
@@ -543,4 +538,3 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     );
   }
 }
-

@@ -302,8 +302,18 @@ final class PokemonEmeraldMemoryReader {
     final bool isShiny =
         (trainerHigh ^ trainerLow ^ personalityHigh ^ personalityLow) < 8;
     final int growthOffset = growthSubstructurePosition(personality) * 12;
+    final int attacksOffset = attacksSubstructurePosition(personality) * 12;
     final int miscOffset = miscSubstructurePosition(personality) * 12;
     final int friendshipOrEggCycles = decrypted[growthOffset + 9];
+    final int experience = _littleEndian(
+      decrypted.sublist(growthOffset + 4, growthOffset + 8),
+    );
+    final List<int> moveIds = List<int>.generate(
+      4,
+      (index) => _littleEndian(
+        decrypted.sublist(attacksOffset + index * 2, attacksOffset + index * 2 + 2),
+      ),
+    ).where((move) => move > 0).toList();
     final int ivs = _littleEndian(
       decrypted.sublist(miscOffset + 4, miscOffset + 8),
     );
@@ -324,6 +334,8 @@ final class PokemonEmeraldMemoryReader {
       currentHp: _littleEndian(bytes.sublist(86, 88)),
       maximumHp: _littleEndian(bytes.sublist(88, 90)),
       friendship: isEgg ? null : friendshipOrEggCycles,
+      experience: experience,
+      moveIds: moveIds,
       eggCyclesRemaining: isEgg ? friendshipOrEggCycles : null,
       eggCyclesTotal: eggCyclesTotal,
     );
@@ -488,6 +500,17 @@ final class PokemonEmeraldMemoryReader {
   static int growthSubstructurePosition(int personality) {
     return _growthPositions[personality % 24];
   }
+
+  static int attacksSubstructurePosition(int personality) {
+    return _substructureOrders[personality % 24].indexOf('A');
+  }
+
+  static const List<String> _substructureOrders = <String>[
+    'GAEM', 'GAME', 'GEAM', 'GEMA', 'GMAE', 'GMEA',
+    'AGEM', 'AGME', 'AEGM', 'AEMG', 'AMGE', 'AMEG',
+    'EGAM', 'EGMA', 'EAGM', 'EAMG', 'EMGA', 'EMAG',
+    'MGAE', 'MGEA', 'MAGE', 'MAEG', 'MEGA', 'MEAG',
+  ];
 
   /// Posición de la subestructura Misc, que contiene el flag de huevo en el
   /// bit 30 de la palabra de IVs.

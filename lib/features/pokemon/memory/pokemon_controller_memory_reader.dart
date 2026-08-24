@@ -229,6 +229,26 @@ class PokemonControllerMemoryReader {
       final int? eggCyclesTotal = eggCyclesRemaining == null
           ? null
           : hatchCyclesForPokedexId(dex) ?? eggCyclesRemaining;
+      final int movesOffset = profile.isGen2 ? 2 : 8;
+      final int experienceOffset = profile.isGen2 ? 8 : 14;
+      final List<int> moveIds = mon.length >= movesOffset + 4
+          ? mon.sublist(movesOffset, movesOffset + 4).where((move) => move > 0).toList()
+          : const <int>[];
+      final int? experience = mon.length >= experienceOffset + 3
+          ? PokemonDecoder.decodeUnsignedBigEndian(
+              mon.sublist(experienceOffset, experienceOffset + 3),
+            )
+          : null;
+      final int? currentHp = profile.isGen2 && mon.length >= 36
+          ? PokemonDecoder.decodeUnsignedBigEndian(mon.sublist(34, 36))
+          : !profile.isGen2 && mon.length >= 3
+          ? PokemonDecoder.decodeUnsignedBigEndian(mon.sublist(1, 3))
+          : null;
+      final int? maximumHp = profile.isGen2 && mon.length >= 38
+          ? PokemonDecoder.decodeUnsignedBigEndian(mon.sublist(36, 38))
+          : !profile.isGen2 && mon.length >= 36
+          ? PokemonDecoder.decodeUnsignedBigEndian(mon.sublist(34, 36))
+          : null;
 
       party.add(
         PokemonPartyMember(
@@ -239,6 +259,10 @@ class PokemonControllerMemoryReader {
           isShiny: shiny,
           isEgg: isEgg,
           friendship: friendship,
+          experience: experience,
+          moveIds: moveIds,
+          currentHp: currentHp,
+          maximumHp: maximumHp,
           eggCyclesRemaining: eggCyclesRemaining,
           eggCyclesTotal: eggCyclesTotal,
         ),
