@@ -4,10 +4,8 @@ import '../../core/assets/game_asset_profile.dart';
 import '../../core/assets/sprite_image.dart';
 import '../../core/assets/sprite_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
-import '../pokemon/decoder/pokemon_type_resolver.dart';
 import 'pokedex_detail_page.dart';
 import 'pokedex_orders.dart';
-import 'widgets/move_type_tile.dart';
 
 enum PokedexOrder { johto, kanto, hoenn, national }
 
@@ -137,29 +135,12 @@ class _PokedexGridState extends State<PokedexGrid> {
                                 ),
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              seen
-                                  ? PokemonDecoder.pokemonName(dexId)
-                                  : 'No visto',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.labelMedium,
-                            ),
-                          ),
-                          if (seen)
-                            PokemonTypeIcons(
-                              types: PokemonTypeResolver.resolve(
-                                widget.profile,
-                                dexId,
-                              ),
-                              size: 15,
-                            ),
-                        ],
+                      Text(
+                        seen ? PokemonDecoder.pokemonName(dexId) : 'No visto',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelMedium,
                       ),
                     ]),
                   ),
