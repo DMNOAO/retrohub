@@ -10,6 +10,7 @@ import '../../core/assets/sprite_resolver.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../shared/theme/app_appearance.dart';
+import '../pokemon/decoder/move_name_resolver.dart';
 import 'journal_history_page.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
