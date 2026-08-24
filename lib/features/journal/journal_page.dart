@@ -12,6 +12,7 @@ import '../../data/database/database_provider.dart';
 import '../../shared/theme/app_appearance.dart';
 import '../pokemon/decoder/move_name_resolver.dart';
 import '../pokemon/decoder/move_type_resolver.dart';
+import '../pokemon/decoder/pokemon_type_resolver.dart';
 import 'journal_history_page.dart';
 import 'widgets/move_type_tile.dart';
 
@@ -283,10 +284,17 @@ class _ProgressJournal extends StatelessWidget {
                           : 'Nivel ${pokemon['level'] ?? '—'}$hp$friendshipDetail',
                       spritePath: _pokemonSprite(profile, pokemon),
                       shiny: _boolValue(pokemon['isShiny']),
+                      types: isEgg
+                          ? const []
+                          : PokemonTypeResolver.resolve(
+                              profile,
+                              _intValue(pokemon['id']) ?? 0,
+                            ),
                       onTap: () => _showPokemonDetails(
                         context,
                         pokemon: pokemon,
                         spritePath: _pokemonSprite(profile, pokemon),
+                        profile: profile,
                       ),
                     ),
                   );
@@ -325,6 +333,7 @@ class _ProgressJournal extends StatelessWidget {
     BuildContext context, {
     required Map<String, dynamic> pokemon,
     required String? spritePath,
+    required GameAssetProfile profile,
   }) {
     final bool isEgg = _boolValue(pokemon['isEgg']);
     final List<int> moves = (pokemon['moveIds'] as List<dynamic>? ?? const [])
@@ -350,10 +359,27 @@ class _ProgressJournal extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
-                isEgg ? 'Huevo' : (pokemon['name']?.toString() ?? 'Pokémon'),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      isEgg
+                          ? 'Huevo'
+                          : (pokemon['name']?.toString() ?? 'Pokémon'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  if (!isEgg)
+                    PokemonTypeIcons(
+                      types: PokemonTypeResolver.resolve(
+                        profile,
+                        _intValue(pokemon['id']) ?? 0,
+                      ),
+                      size: 26,
+                    ),
+                ],
               ),
               const SizedBox(height: 20),
               if (!isEgg) ...[
@@ -725,12 +751,14 @@ class _PokemonTile extends StatelessWidget {
   final String detail;
   final String? spritePath;
   final bool shiny;
+  final List<PokemonMoveType> types;
   final VoidCallback? onTap;
   const _PokemonTile({
     required this.name,
     required this.detail,
     required this.spritePath,
     required this.shiny,
+    this.types = const <PokemonMoveType>[],
     this.onTap,
   });
 
@@ -749,6 +777,7 @@ class _PokemonTile extends StatelessWidget {
         title: Row(
           children: [
             Expanded(child: Text(name)),
+            if (types.isNotEmpty) PokemonTypeIcons(types: types, size: 22),
             if (shiny) const Text('✨', semanticsLabel: 'Shiny'),
           ],
         ),
