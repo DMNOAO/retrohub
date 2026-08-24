@@ -459,7 +459,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                 maxCrossAxisExtent: isCompact ? 180 : 230,
                                 mainAxisSpacing: isCompact ? 12 : 20,
                                 crossAxisSpacing: isCompact ? 12 : 20,
-                                childAspectRatio: 0.70,
+                                // Sin el bloque de título, la tarjeta ya no
+                                // necesita reservar su antigua altura total.
+                                // En Android conserva el tamaño que tenía la
+                                // imagen antes, evitando ampliarla y recortarla.
+                                childAspectRatio: isCompact ? 1.02 : 0.78,
                               ),
                               itemBuilder: (context, index) {
                                 final game = filteredGames[index];
