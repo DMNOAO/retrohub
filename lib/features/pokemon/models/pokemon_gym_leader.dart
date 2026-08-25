@@ -33,6 +33,16 @@ class GymLeaderAssetResolver {
         return badgeIndex < _hoennGba.length ? _hoennGba[badgeIndex] : null;
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
+        return null;
+      case PokemonGameVersion.diamond:
+      case PokemonGameVersion.pearl:
+        return badgeIndex < _sinnohDiamondPearl.length
+            ? _sinnohDiamondPearl[badgeIndex]
+            : null;
+      case PokemonGameVersion.platinum:
+        return badgeIndex < _sinnohPlatinum.length
+            ? _sinnohPlatinum[badgeIndex]
+            : null;
       case PokemonGameVersion.unsupported:
         return null;
     }
@@ -70,6 +80,79 @@ class GymLeaderAssetResolver {
     GymLeaderInfo(
       'Juan',
       'assets/sprites/characters/gym_leaders/gba/Hoenn/juan_hoenn.png',
+    ),
+  ];
+
+  // Platino cambia el orden de Fantina, Brega y Mananti. Los nombres y las
+  // rutas quedan listos ahora; los archivos visuales se agregan en la fase
+  // de sprites sin tocar la lógica de progreso.
+  static const List<GymLeaderInfo> _sinnohDiamondPearl = <GymLeaderInfo>[
+    GymLeaderInfo(
+      'Roco',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/roark_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Gardenia',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/gardenia_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Brega',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/maylene_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Mananti',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/crasher_wake_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Fantina',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/fantina_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Acerón',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/byron_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Inverna',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/candice_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Lectro',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/volkner_sinnoh.png',
+    ),
+  ];
+
+  static const List<GymLeaderInfo> _sinnohPlatinum = <GymLeaderInfo>[
+    GymLeaderInfo(
+      'Roco',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/roark_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Gardenia',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/gardenia_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Fantina',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/fantina_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Brega',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/maylene_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Mananti',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/crasher_wake_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Acerón',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/byron_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Inverna',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/candice_sinnoh.png',
+    ),
+    GymLeaderInfo(
+      'Lectro',
+      'assets/sprites/characters/gym_leaders/nds/Sinnoh/volkner_sinnoh.png',
     ),
   ];
 

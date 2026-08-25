@@ -275,8 +275,12 @@ class PokemonJournalTracker {
     if (value.party.length > 6 ||
         !value.party.every(
           (pokemon) =>
-              pokemon.pokedexId >= 1 && pokemon.pokedexId <= 386 ||
-              pokemon.isEgg && value.profile.isGen2 && pokemon.pokedexId == 0,
+              (pokemon.pokedexId >= 1 &&
+                  pokemon.pokedexId <=
+                      (value.profile.isGen4 ? 493 : 386)) ||
+              (pokemon.isEgg &&
+                  value.profile.isGen2 &&
+                  pokemon.pokedexId == 0),
         )) {
       return 'invalid party';
     }
@@ -410,7 +414,9 @@ class PokemonJournalTracker {
       await _insertEvent(
         type: 'national_pokedex_unlocked',
         title: 'Pokédex Nacional desbloqueada',
-        description: 'Ya puedes consultar las 386 especies conocidas.',
+        description: current.profile.isGen4
+            ? 'Ya puedes consultar las 493 especies conocidas.'
+            : 'Ya puedes consultar las 386 especies conocidas.',
         metadata: _metadata(current),
       );
     }

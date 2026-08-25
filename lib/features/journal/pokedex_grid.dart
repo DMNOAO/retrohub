@@ -28,11 +28,14 @@ class _PokedexGridState extends State<PokedexGrid> {
   bool get _isGen3Kanto =>
       widget.profile.game == PokemonAssetGame.fireRedLeafGreen;
   bool get _isGen3 => _isHoenn || _isGen3Kanto;
+  bool get _isSinnoh => widget.profile.region == PokemonAssetRegion.sinnoh;
 
   @override
   void initState() {
     super.initState();
-    _order = _isHoenn
+    _order = _isSinnoh
+        ? PokedexOrder.national
+        : _isHoenn
         ? PokedexOrder.hoenn
         : _isGen3Kanto
         ? PokedexOrder.kanto
@@ -41,7 +44,7 @@ class _PokedexGridState extends State<PokedexGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final national = List<int>.generate(_isGen3 ? 386 : (_isGen2 ? 251 : 151), (index) => index + 1);
+    final national = List<int>.generate(_isSinnoh ? 493 : (_isGen3 ? 386 : (_isGen2 ? 251 : 151)), (index) => index + 1);
     final ids = _isGen2 && _order == PokedexOrder.johto
         ? _johtoOrder
         : _isHoenn && _order == PokedexOrder.hoenn
