@@ -881,12 +881,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                               constraints.maxWidth) *
                                           255)
                                       .round()
-                                      .clamp(0, 255),
+                                      .clamp(0, 255)
+                                      .toInt(),
                                   y: ((event.localPosition.dy /
                                               (constraints.maxWidth * .75)) *
                                           191)
                                       .round()
-                                      .clamp(0, 191),
+                                      .clamp(0, 191)
+                                      .toInt(),
                                   pressed: true,
                                 );
                               },
@@ -897,12 +899,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                               constraints.maxWidth) *
                                           255)
                                       .round()
-                                      .clamp(0, 255),
+                                      .clamp(0, 255)
+                                      .toInt(),
                                   y: ((event.localPosition.dy /
                                               (constraints.maxWidth * .75)) *
                                           191)
                                       .round()
-                                      .clamp(0, 191),
+                                      .clamp(0, 191)
+                                      .toInt(),
                                   pressed: true,
                                 );
                               },
