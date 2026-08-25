@@ -159,6 +159,11 @@ struct retro_memory_map {
 #define RETRO_HW_FRAME_BUFFER_VALID ((void*)-1)
 
 #define RETRO_DEVICE_JOYPAD 1
+#define RETRO_DEVICE_POINTER 6
+
+#define RETRO_DEVICE_ID_POINTER_X 0
+#define RETRO_DEVICE_ID_POINTER_Y 1
+#define RETRO_DEVICE_ID_POINTER_PRESSED 2
 
 #define RETRO_DEVICE_ID_JOYPAD_B 0
 #define RETRO_DEVICE_ID_JOYPAD_Y 1
@@ -309,6 +314,10 @@ static constexpr size_t MAX_AUDIO_SAMPLES = 48000 * 2 * 2;
 // atomic permite que Flutter actualice el input mientras el core ejecuta frames.
 static std::array<std::atomic<int16_t>, RETROHUB_BUTTON_COUNT>
     joypad_state{};
+
+static std::atomic<int16_t> pointer_x{0};
+static std::atomic<int16_t> pointer_y{0};
+static std::atomic<int16_t> pointer_pressed{0};
 
 // ============================================================
 // Utilidades de color
@@ -671,19 +680,29 @@ static int16_t input_state_cb(
     unsigned index,
     unsigned id
 ) {
-    // Por ahora RetroHub expone un solo mando: jugador 1, puerto 0.
-    if (
-        port != 0 ||
-        device != RETRO_DEVICE_JOYPAD ||
-        index != 0 ||
-        id >= RETROHUB_BUTTON_COUNT
-    ) {
+    if (port != 0 || index != 0) {
         return 0;
     }
 
-    return joypad_state[id].load(
-        std::memory_order_relaxed
-    );
+    if (device == RETRO_DEVICE_JOYPAD) {
+        if (id >= RETROHUB_BUTTON_COUNT) return 0;
+        return joypad_state[id].load(std::memory_order_relaxed);
+    }
+
+    if (device == RETRO_DEVICE_POINTER) {
+        switch (id) {
+            case RETRO_DEVICE_ID_POINTER_X:
+                return pointer_x.load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_Y:
+                return pointer_y.load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_PRESSED:
+                return pointer_pressed.load(std::memory_order_relaxed);
+            default:
+                return 0;
+        }
+    }
+
+    return 0;
 }
 
 static void reset_input_state() {
@@ -693,6 +712,9 @@ static void reset_input_state() {
             std::memory_order_relaxed
         );
     }
+    pointer_x.store(0, std::memory_order_relaxed);
+    pointer_y.store(0, std::memory_order_relaxed);
+    pointer_pressed.store(0, std::memory_order_relaxed);
 }
 
 static void reset_audio_state() {
@@ -761,6 +783,34 @@ void rh_set_button_state(
     }
 
     joypad_state[static_cast<size_t>(button_id)].store(
+        pressed != 0 ? 1 : 0,
+        std::memory_order_relaxed
+    );
+}
+
+RH_EXPORT
+void rh_set_touch_state(int x, int y, int pressed) {
+    const int clamped_x = std::clamp(x, 0, 255);
+    const int clamped_y = std::clamp(y, 0, 191);
+
+    // RETRO_DEVICE_POINTER usa el viewport completo en el rango
+    // [-32768, 32767]. El frame NDS es 256x384 y la pantalla táctil
+    // ocupa su mitad inferior (filas 192..383).
+    const int normalized_x =
+        -32768 + ((clamped_x * 65535) / 255);
+    const int combined_y = 192 + clamped_y;
+    const int normalized_y =
+        -32768 + ((combined_y * 65535) / 383);
+
+    pointer_x.store(
+        static_cast<int16_t>(normalized_x),
+        std::memory_order_relaxed
+    );
+    pointer_y.store(
+        static_cast<int16_t>(normalized_y),
+        std::memory_order_relaxed
+    );
+    pointer_pressed.store(
         pressed != 0 ? 1 : 0,
         std::memory_order_relaxed
     );
