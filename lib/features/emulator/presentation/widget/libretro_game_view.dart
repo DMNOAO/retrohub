@@ -25,6 +25,7 @@ import '../../link/link_transport_factory.dart';
 class LibretroGameController {
   bool hapticsEnabled = false;
   void Function(int buttonId, bool pressed)? _setButtonState;
+  void Function(int x, int y, bool pressed)? _setTouchState;
   VoidCallback? _resetInput;
   Future<bool> Function(int slot, String title)? _saveState;
   Future<bool> Function(int slot)? _loadState;
@@ -77,6 +78,16 @@ class LibretroGameController {
   }
 
   void releaseButton(int buttonId) => _setButtonState?.call(buttonId, false);
+
+  void setTouchState({
+    required int x,
+    required int y,
+    required bool pressed,
+  }) {
+    _setTouchState?.call(x, y, pressed);
+  }
+
+  void releaseTouch() => _setTouchState?.call(0, 0, false);
 
   void resetInput() => _resetInput?.call();
 
@@ -155,6 +166,7 @@ class LibretroGameController {
 
   void _attach({
     required void Function(int buttonId, bool pressed) setButtonState,
+    required void Function(int x, int y, bool pressed) setTouchState,
     required VoidCallback resetInput,
     required Future<bool> Function(int slot, String title) saveState,
     required Future<bool> Function(int slot) loadState,
@@ -182,6 +194,7 @@ class LibretroGameController {
     required LinkManager linkManager,
   }) {
     _setButtonState = setButtonState;
+    _setTouchState = setTouchState;
     _resetInput = resetInput;
     _saveState = saveState;
     _loadState = loadState;
@@ -205,6 +218,7 @@ class LibretroGameController {
 
   void _detach() {
     _setButtonState = null;
+    _setTouchState = null;
     _resetInput = null;
     _saveState = null;
     _loadState = null;
@@ -238,6 +252,7 @@ class LibretroGameView extends StatefulWidget {
   final FilterQuality filterQuality;
   final bool autoLoadState;
   final double? displayAspectRatio;
+  final bool splitNdsScreens;
 
   const LibretroGameView({
     super.key,
@@ -251,6 +266,7 @@ class LibretroGameView extends StatefulWidget {
     this.filterQuality = FilterQuality.none,
     this.autoLoadState = false,
     this.displayAspectRatio,
+    this.splitNdsScreens = false,
   });
 
   @override
@@ -360,6 +376,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void _attachController() {
     widget.controller?._attach(
       setButtonState: _setButtonPressed,
+      setTouchState: _setTouchState,
       resetInput: _releaseAllButtons,
       saveState: _saveState,
       loadState: _loadState,
@@ -486,6 +503,16 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       final bridge = LibretroBridge();
       _bridge = bridge;
 
+      // Los cores consultan estas rutas durante retro_init(), por lo que deben
+      // quedar configuradas antes de cargar la biblioteca nativa.
+      final persistencePaths = _persistencePaths;
+      if (persistencePaths != null) {
+        Directory(persistencePaths.sramDirectory).createSync(recursive: true);
+        Directory(persistencePaths.systemDirectory).createSync(recursive: true);
+        bridge.setSaveDirectory(persistencePaths.sramDirectory);
+        bridge.setSystemDirectory(persistencePaths.systemDirectory);
+      }
+
       setState(() {
         _statusMessage = 'Cargando core libretro...';
       });
@@ -502,14 +529,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       setState(() {
         _statusMessage = 'Core cargado: $coreName $coreVersion';
       });
-
-      final persistencePaths = _persistencePaths;
-      if (persistencePaths != null) {
-        Directory(persistencePaths.sramDirectory).createSync(recursive: true);
-
-        bridge.setSaveDirectory(persistencePaths.sramDirectory);
-        bridge.setSystemDirectory(persistencePaths.sramDirectory);
-      }
 
       final gameLoaded = bridge.loadGame(widget.romPath);
 
@@ -1059,6 +1078,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     return null;
   }
 
+  void _setTouchState(int x, int y, bool pressed) {
+    final bridge = _bridge;
+
+    if (bridge == null ||
+        !_isRunning ||
+        _disposed ||
+        _persistenceOperationInProgress) {
+      return;
+    }
+
+    bridge.setTouchState(x: x, y: y, pressed: pressed);
+  }
+
   void _setButtonPressed(int buttonId, bool pressed) {
     final bridge = _bridge;
 
@@ -1208,17 +1240,25 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         fit: StackFit.expand,
         children: [
           Center(
-            child: AspectRatio(
-              aspectRatio:
-                  widget.displayAspectRatio ?? image.width / image.height,
-              child: RawImage(
-                image: image,
-                fit: widget.displayAspectRatio == null
-                    ? widget.screenFit
-                    : BoxFit.fill,
-                filterQuality: widget.filterQuality,
-              ),
-            ),
+            child: widget.splitNdsScreens
+                ? CustomPaint(
+                    painter: _NdsDualScreenPainter(
+                      image: image,
+                      filterQuality: widget.filterQuality,
+                    ),
+                    child: const SizedBox.expand(),
+                  )
+                : AspectRatio(
+                    aspectRatio:
+                        widget.displayAspectRatio ?? image.width / image.height,
+                    child: RawImage(
+                      image: image,
+                      fit: widget.displayAspectRatio == null
+                          ? widget.screenFit
+                          : BoxFit.fill,
+                      filterQuality: widget.filterQuality,
+                    ),
+                  ),
           ),
           if (kDebugMode && !Platform.isAndroid)
             Positioned(top: 12, left: 12, child: _buildStatusBadge()),
@@ -1416,5 +1456,76 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         ),
       ),
     );
+  }
+}
+
+
+class _NdsDualScreenPainter extends CustomPainter {
+  static const double _topWidthFactor = 1;
+  static const double _bottomWidthFactor = 1;
+  static const double _screenAspectRatio = 4 / 3;
+  static const double _gap = 4;
+
+  final ui.Image image;
+  final FilterQuality filterQuality;
+
+  const _NdsDualScreenPainter({
+    required this.image,
+    required this.filterQuality,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (image.width <= 0 || image.height < 2) return;
+
+    final double availableHeight = size.height - _gap;
+    final double widthFromHeight = availableHeight /
+        ((_topWidthFactor / _screenAspectRatio) +
+            (_bottomWidthFactor / _screenAspectRatio));
+    final double layoutWidth = widthFromHeight.clamp(0, size.width).toDouble();
+
+    final double topWidth = layoutWidth * _topWidthFactor;
+    final double bottomWidth = layoutWidth * _bottomWidthFactor;
+    final double topHeight = topWidth / _screenAspectRatio;
+    final double bottomHeight = bottomWidth / _screenAspectRatio;
+    final double contentHeight = topHeight + _gap + bottomHeight;
+    final double top = (size.height - contentHeight) / 2;
+
+    final Rect topDestination = Rect.fromLTWH(
+      (size.width - topWidth) / 2,
+      top,
+      topWidth,
+      topHeight,
+    );
+    final Rect bottomDestination = Rect.fromLTWH(
+      (size.width - bottomWidth) / 2,
+      top + topHeight + _gap,
+      bottomWidth,
+      bottomHeight,
+    );
+
+    final double sourceHeight = image.height / 2;
+    final Paint paint = Paint()
+      ..filterQuality = filterQuality
+      ..isAntiAlias = false;
+
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), sourceHeight),
+      topDestination,
+      paint,
+    );
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, sourceHeight, image.width.toDouble(), sourceHeight),
+      bottomDestination,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _NdsDualScreenPainter oldDelegate) {
+    return oldDelegate.image != image ||
+        oldDelegate.filterQuality != filterQuality;
   }
 }

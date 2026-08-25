@@ -40,6 +40,8 @@ typedef _RhVoidDart = void Function();
 
 typedef _RhSetButtonStateNative = Void Function(Int32, Int32);
 typedef _RhSetButtonStateDart = void Function(int, int);
+typedef _RhSetTouchStateNative = Void Function(Int32, Int32, Int32);
+typedef _RhSetTouchStateDart = void Function(int, int, int);
 
 typedef _RhGetButtonStateNative = Int32 Function(Int32);
 typedef _RhGetButtonStateDart = int Function(int);
@@ -202,6 +204,7 @@ class LibretroBridge {
   late final _RhVoidDart _unload;
 
   late final _RhSetButtonStateDart _setButtonState;
+  _RhSetTouchStateDart? _setTouchState;
   late final _RhGetButtonStateDart _getButtonState;
   late final _RhVoidDart _resetInput;
 
@@ -377,6 +380,15 @@ class LibretroBridge {
     _setButtonState = _lib.lookupFunction<
         _RhSetButtonStateNative,
         _RhSetButtonStateDart>('rh_set_button_state');
+
+    try {
+      _setTouchState = _lib.lookupFunction<
+          _RhSetTouchStateNative,
+          _RhSetTouchStateDart>('rh_set_touch_state');
+    } on ArgumentError {
+      _setTouchState = null;
+      print('Touch bridge no disponible (rh_set_touch_state)');
+    }
 
     _getButtonState = _lib.lookupFunction<
         _RhGetButtonStateNative,
@@ -1142,6 +1154,24 @@ class LibretroBridge {
 
     _setButtonState(
       buttonId,
+      pressed ? 1 : 0,
+    );
+  }
+
+  void setTouchState({
+    required int x,
+    required int y,
+    required bool pressed,
+  }) {
+    _ensureNotDisposed();
+
+    if (!_coreLoaded || !_gameLoaded) {
+      return;
+    }
+
+    _setTouchState?.call(
+      x.clamp(0, 255).toInt(),
+      y.clamp(0, 191).toInt(),
       pressed ? 1 : 0,
     );
   }

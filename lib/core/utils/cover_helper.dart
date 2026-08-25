@@ -51,6 +51,38 @@ class CoverHelper {
     'red rescue team': 'assets/covers/gba/pokemon_mystery_dungeon_red_rescue_team.png',
     'equipo de rescate rojo': 'assets/covers/gba/pokemon_mystery_dungeon_red_rescue_team.png',
 
+    // Pokémon - Nintendo DS
+    'pokemon diamante': 'assets/covers/nds/Pokémon_Diamante.png',
+    'pokemon diamond': 'assets/covers/nds/Pokémon_Diamante.png',
+
+    'pokemon perla': 'assets/covers/nds/Pokémon_Perla.png',
+    'pokemon pearl': 'assets/covers/nds/Pokémon_Perla.png',
+
+    'pokemon platino': 'assets/covers/nds/Pokémon_Platino.png',
+    'pokemon platinum': 'assets/covers/nds/Pokémon_Platino.png',
+
+    'pokemon edicion oro heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
+    'pokemon oro heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
+    'pokemon heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
+
+    'pokemon edicion plata soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
+    'pokemon plata soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
+    'pokemon soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
+
+    'pokemon edicion blanca': 'assets/covers/nds/Pokémon_Edición_Blanca.png',
+    'pokemon blanca': 'assets/covers/nds/Pokémon_Edición_Blanca.png',
+    'pokemon white': 'assets/covers/nds/Pokémon_Edición_Blanca.png',
+
+    'pokemon edicion negra': 'assets/covers/nds/Pokémon_Edición_Negra.png',
+    'pokemon negra': 'assets/covers/nds/Pokémon_Edición_Negra.png',
+    'pokemon black': 'assets/covers/nds/Pokémon_Edición_Negra.png',
+
+    'pokemon blanco 2': 'assets/covers/nds/Pokémon_Blanco_2.png',
+    'pokemon white 2': 'assets/covers/nds/Pokémon_Blanco_2.png',
+
+    'pokemon negro 2': 'assets/covers/nds/Pokémon_Negro_2.png',
+    'pokemon black 2': 'assets/covers/nds/Pokémon_Negro_2.png',
+
     // SNES
     'contra iii': 'assets/covers/snes/contra_3.png',
     'contra 3': 'assets/covers/snes/contra_3.png',

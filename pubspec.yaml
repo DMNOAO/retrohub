@@ -53,6 +53,7 @@ flutter:
     - assets/covers/gbc/
     - assets/covers/gba/
     - assets/covers/snes/
+    - assets/covers/nds/
 
     - assets/frames/gb/
     - assets/frames/gbc/

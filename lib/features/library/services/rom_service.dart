@@ -20,6 +20,9 @@ class RomService {
       case 'sfc':
         console = 'SNES';
         break;
+      case 'nds':
+        console = 'NDS';
+        break;
     }
 
     if (console == null) return null;

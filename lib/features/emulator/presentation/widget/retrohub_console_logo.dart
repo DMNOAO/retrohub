@@ -5,6 +5,7 @@ enum RetroHubConsoleType {
   gameBoyColor,
   gameBoyAdvance,
   superNintendo,
+  nintendoDs,
 }
 
 class RetroHubConsoleLogo extends StatelessWidget {
@@ -29,7 +30,44 @@ class RetroHubConsoleLogo extends StatelessWidget {
 
       case RetroHubConsoleType.superNintendo:
         return _superNintendo();
+
+      case RetroHubConsoleType.nintendoDs:
+        return _nintendoDs();
     }
+  }
+
+  Widget _nintendoDs() {
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'RETROHUB',
+          style: TextStyle(
+            color: Color(0xFFE9EEF7),
+            fontSize: 25,
+            fontWeight: FontWeight.w900,
+            fontStyle: FontStyle.italic,
+            letterSpacing: -1,
+            shadows: [
+              Shadow(
+                color: Colors.black54,
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          'DUAL',
+          style: TextStyle(
+            color: Color(0xFF8EA4C2),
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 6,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _superNintendo() {

@@ -55,7 +55,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   Future<void> _importRom(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['gb', 'gbc', 'gba', 'smc', 'sfc'],
+      allowedExtensions: ['gb', 'gbc', 'gba', 'smc', 'sfc', 'nds'],
     );
 
     if (result == null || result.files.single.path == null) return;

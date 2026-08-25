@@ -3,6 +3,7 @@ enum ConsoleType {
   gbc,
   gba,
   snes,
+  nds,
 }
 
 class Game {
@@ -33,6 +34,9 @@ class Game {
 
       case ConsoleType.snes:
         return 'SNES';
+
+      case ConsoleType.nds:
+        return 'NDS';
     }
   }
 }
