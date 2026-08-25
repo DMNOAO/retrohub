@@ -26,7 +26,7 @@ class AppTheme {
       surface: surface,
       onSurface: onSurface,
       outline: primary,
-      outlineVariant: primary.withValues(alpha: 0.48),
+      outlineVariant: secondary.withValues(alpha: 0.62),
       error: const Color(0xFFFF6B7A),
       onError: Colors.white,
     );
@@ -44,7 +44,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        indicatorColor: primary.withValues(alpha: 0.25),
+        indicatorColor: secondary.withValues(alpha: 0.32),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
@@ -75,7 +75,7 @@ class AppTheme {
           ),
         ),
       ),
-      dividerColor: primary.withValues(alpha: 0.18),
+      dividerColor: secondary.withValues(alpha: 0.32),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: primary),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
