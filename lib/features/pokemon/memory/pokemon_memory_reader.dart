@@ -167,7 +167,7 @@ class PokemonMemoryReader {
     // Tormenta (Aníbal) y luego Mineral (Yasmina). Normalizar aquí mantiene
     // un único orden canónico para la UI, los eventos y los sprites.
     final int johtoBadges = profile.isGen2
-        ? normalizeGen2JohtoBadges(rawJohtoBadges)
+        ? PokemonDecoder.normalizeGen2JohtoBadges(rawJohtoBadges)
         : rawJohtoBadges;
     final int badges =
         johtoBadges | ((a.kantoBadges == null ? 0 : byte(a.kantoBadges!)) << 8);
@@ -233,9 +233,7 @@ class PokemonMemoryReader {
   }
 
   static int normalizeGen2JohtoBadges(int rawBadges) =>
-      (rawBadges & ~0x30) |
-      ((rawBadges & 0x10) << 1) |
-      ((rawBadges & 0x20) >> 1);
+      PokemonDecoder.normalizeGen2JohtoBadges(rawBadges);
 
   int _safeBcd(List<int> bytes) {
     final int value = PokemonDecoder.decodeBcd(bytes);
