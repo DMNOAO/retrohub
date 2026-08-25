@@ -1433,8 +1433,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
 
 class _NdsDualScreenPainter extends CustomPainter {
-  static const double _topWidthFactor = .78;
-  static const double _bottomWidthFactor = .96;
+  static const double _topWidthFactor = 1;
+  static const double _bottomWidthFactor = 1;
   static const double _screenAspectRatio = 4 / 3;
   static const double _gap = 4;
 
