@@ -69,6 +69,11 @@ class PokemonDecoder {
     return result;
   }
 
+  static int normalizeGen2JohtoBadges(int rawBadges) =>
+      (rawBadges & ~0x30) |
+      ((rawBadges & 0x10) << 1) |
+      ((rawBadges & 0x20) >> 1);
+
   static int countBits(List<int> bytes) {
     int count = 0;
     for (int value in bytes) {
