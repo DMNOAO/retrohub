@@ -1165,8 +1165,8 @@ class LibretroBridge {
     }
 
     _setTouchState(
-      x.clamp(0, 255),
-      y.clamp(0, 191),
+      x.clamp(0, 255).toInt(),
+      y.clamp(0, 191).toInt(),
       pressed ? 1 : 0,
     );
   }
