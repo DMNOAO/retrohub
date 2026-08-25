@@ -18,6 +18,7 @@
 #include <deque>
 #include <exception>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ============================================================
@@ -110,6 +111,11 @@ struct retro_system_av_info {
     retro_system_timing timing;
 };
 
+struct retro_variable {
+    const char* key;
+    const char* value;
+};
+
 // Descriptores publicados por RETRO_ENVIRONMENT_SET_MEMORY_MAPS.
 // mGBA usa este mecanismo para exponer EWRAM (0x02000000) e IWRAM
 // (0x03000000), en vez de RETRO_MEMORY_SYSTEM_RAM.
@@ -136,7 +142,12 @@ struct retro_memory_map {
 #define RETRO_ENVIRONMENT_GET_CAN_DUPE 3
 #define RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY 9
 #define RETRO_ENVIRONMENT_SET_PIXEL_FORMAT 10
+#define RETRO_ENVIRONMENT_GET_VARIABLE 15
+#define RETRO_ENVIRONMENT_SET_VARIABLES 16
+#define RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE 17
 #define RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY 31
+#define RETRO_ENVIRONMENT_SET_GEOMETRY 37
+#define RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION 52
 #define RETRO_ENVIRONMENT_EXPERIMENTAL 0x10000
 #define RETRO_ENVIRONMENT_SET_MEMORY_MAPS \
     (36 | RETRO_ENVIRONMENT_EXPERIMENTAL)
@@ -265,6 +276,9 @@ static std::mutex memory_map_mutex;
 
 static std::string system_directory = ".";
 static std::string save_directory = ".";
+static std::unordered_map<std::string, std::string> core_variables;
+static bool core_variables_updated = false;
+static retro_game_geometry current_geometry{};
 
 static unsigned current_pixel_format =
     RETRO_PIXEL_FORMAT_0RGB1555;
@@ -360,6 +374,83 @@ static bool environment_cb(
                     return false;
             }
         }
+
+        case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
+            if (!data) {
+                return false;
+            }
+
+            // RetroHub implementa por ahora la API clásica (V0). Es suficiente
+            // para que los cores publiquen y consulten sus valores por defecto.
+            *static_cast<unsigned*>(data) = 0;
+            return true;
+
+        case RETRO_ENVIRONMENT_SET_VARIABLES: {
+            if (!data) {
+                return false;
+            }
+
+            core_variables.clear();
+            const auto* variable = static_cast<const retro_variable*>(data);
+
+            while (variable->key != nullptr) {
+                std::string definition = variable->value != nullptr
+                    ? variable->value
+                    : "";
+                const size_t separator = definition.find(';');
+                std::string choices = separator == std::string::npos
+                    ? definition
+                    : definition.substr(separator + 1);
+                const size_t first_non_space = choices.find_first_not_of(" \t");
+                if (first_non_space != std::string::npos) {
+                    choices.erase(0, first_non_space);
+                }
+                const size_t next_choice = choices.find('|');
+                core_variables[variable->key] = choices.substr(0, next_choice);
+                ++variable;
+            }
+
+            core_variables_updated = false;
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_GET_VARIABLE: {
+            if (!data) {
+                return false;
+            }
+
+            auto* variable = static_cast<retro_variable*>(data);
+            if (!variable->key) {
+                variable->value = nullptr;
+                return false;
+            }
+
+            const auto found = core_variables.find(variable->key);
+            if (found == core_variables.end()) {
+                variable->value = nullptr;
+                return false;
+            }
+
+            variable->value = found->second.c_str();
+            return true;
+        }
+
+        case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
+            if (!data) {
+                return false;
+            }
+
+            *static_cast<bool*>(data) = core_variables_updated;
+            core_variables_updated = false;
+            return true;
+
+        case RETRO_ENVIRONMENT_SET_GEOMETRY:
+            if (!data) {
+                return false;
+            }
+
+            current_geometry = *static_cast<const retro_game_geometry*>(data);
+            return true;
 
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             if (!data) {

@@ -541,6 +541,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final String? corePath = CoreLoader.findCorePath(game.romPath);
     final bool isGba = CoreLoader.isGbaRom(game.romPath);
     final bool isSnes = CoreLoader.isSnesRom(game.romPath);
+    final bool isNds = CoreLoader.isNdsRom(game.romPath);
     final bool isGbc =
         game.console.toLowerCase().contains('gbc') ||
         game.console.toLowerCase().contains('game boy color');
@@ -790,7 +791,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 buttonRight: _buttonRight,
                                 buttonSelect: _buttonSelect,
                                 buttonL: _buttonL,
-                                showShoulder: isGba || isSnes,
+                                showShoulder: isGba || isSnes || isNds,
+                                consoleLogo: isNds
+                                    ? RetroHubConsoleType.nintendoDs
+                                    : null,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -799,7 +803,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 child: AspectRatio(
                                   aspectRatio: isSnes
                                       ? 4 / 3
-                                      : (isGba ? 3 / 2 : 10 / 9),
+                                      : isGba
+                                      ? 3 / 2
+                                      : isNds
+                                      ? 2 / 3
+                                      : 10 / 9,
                                   child: gameView,
                                 ),
                               ),
@@ -815,8 +823,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 buttonY: _buttonY,
                                 buttonStart: _buttonStart,
                                 buttonR: _buttonR,
-                                showShoulder: isGba || isSnes,
-                                isSnes: isSnes,
+                                showShoulder: isGba || isSnes || isNds,
+                                isSnes: isSnes || isNds,
                                 buttonAColor: Color(
                                   _preferences.snesButtonAColor,
                                 ),
@@ -883,7 +891,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             child: AspectRatio(
                               aspectRatio: isSnes
                                   ? 4 / 3
-                                  : (isGba ? 3 / 2 : 10 / 9),
+                                  : isGba
+                                  ? 3 / 2
+                                  : isNds
+                                  ? 2 / 3
+                                  : 10 / 9,
                               child: gameView,
                             ),
                           ),
@@ -918,6 +930,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             RetroHubConsoleLogo(
                               console: isSnes
                                   ? RetroHubConsoleType.superNintendo
+                                  : isNds
+                                  ? RetroHubConsoleType.nintendoDs
                                   : isGba
                                   ? RetroHubConsoleType.gameBoyAdvance
                                   : isGbc
@@ -939,7 +953,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     GameBoyControlLayout.classic,
                             sizeScale: isSnes ? 1 : _preferences.sizeScale,
                             opacity: _preferences.controlOpacity,
-                            swapLabels: !isSnes && _preferences.swapAB,
+                            swapLabels:
+                                !isSnes && !isNds && _preferences.swapAB,
                             controller: _gameController,
                             directionalControl:
                                 _preferences.directionalControl,
@@ -947,10 +962,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             buttonDown: _buttonDown,
                             buttonLeft: _buttonLeft,
                             buttonRight: _buttonRight,
-                            buttonA: !isSnes && _preferences.swapAB
+                            buttonA: !isSnes &&
+                                    !isNds &&
+                                    _preferences.swapAB
                                 ? _buttonB
                                 : _buttonA,
-                            buttonB: !isSnes && _preferences.swapAB
+                            buttonB: !isSnes &&
+                                    !isNds &&
+                                    _preferences.swapAB
                                 ? _buttonA
                                 : _buttonB,
                             buttonX: _buttonX,
@@ -960,10 +979,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             buttonL: _buttonL,
                             buttonR: _buttonR,
                             showShoulder: isSnes ||
+                                isNds ||
                                 (isGba &&
                                     _preferences.layout !=
                                         GameBoyControlLayout.classic),
-                            isSnes: isSnes,
+                            isSnes: isSnes || isNds,
                             buttonAColor:
                                 Color(_preferences.snesButtonAColor),
                             buttonBColor:

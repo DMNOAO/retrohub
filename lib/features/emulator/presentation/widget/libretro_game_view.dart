@@ -486,6 +486,16 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       final bridge = LibretroBridge();
       _bridge = bridge;
 
+      // Los cores consultan estas rutas durante retro_init(), por lo que deben
+      // quedar configuradas antes de cargar la biblioteca nativa.
+      final persistencePaths = _persistencePaths;
+      if (persistencePaths != null) {
+        Directory(persistencePaths.sramDirectory).createSync(recursive: true);
+        Directory(persistencePaths.systemDirectory).createSync(recursive: true);
+        bridge.setSaveDirectory(persistencePaths.sramDirectory);
+        bridge.setSystemDirectory(persistencePaths.systemDirectory);
+      }
+
       setState(() {
         _statusMessage = 'Cargando core libretro...';
       });
@@ -502,17 +512,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       setState(() {
         _statusMessage = 'Core cargado: $coreName $coreVersion';
       });
-
-      final persistencePaths = _persistencePaths;
-      if (persistencePaths != null) {
-        Directory(persistencePaths.sramDirectory).createSync(recursive: true);
-
-        bridge.setSaveDirectory(persistencePaths.sramDirectory);
-        // Los archivos de sistema (por ejemplo BIOS/firmware de Nintendo DS)
-        // son compartidos por consola y no deben mezclarse con la SRAM de
-        // una partida concreta.
-        bridge.setSystemDirectory(persistencePaths.systemDirectory);
-      }
 
       final gameLoaded = bridge.loadGame(widget.romPath);
 
