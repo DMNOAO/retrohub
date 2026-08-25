@@ -238,6 +238,7 @@ class LibretroGameView extends StatefulWidget {
   final FilterQuality filterQuality;
   final bool autoLoadState;
   final double? displayAspectRatio;
+  final bool splitNdsScreens;
 
   const LibretroGameView({
     super.key,
@@ -251,6 +252,7 @@ class LibretroGameView extends StatefulWidget {
     this.filterQuality = FilterQuality.none,
     this.autoLoadState = false,
     this.displayAspectRatio,
+    this.splitNdsScreens = false,
   });
 
   @override
@@ -1210,17 +1212,25 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         fit: StackFit.expand,
         children: [
           Center(
-            child: AspectRatio(
-              aspectRatio:
-                  widget.displayAspectRatio ?? image.width / image.height,
-              child: RawImage(
-                image: image,
-                fit: widget.displayAspectRatio == null
-                    ? widget.screenFit
-                    : BoxFit.fill,
-                filterQuality: widget.filterQuality,
-              ),
-            ),
+            child: widget.splitNdsScreens
+                ? CustomPaint(
+                    painter: _NdsDualScreenPainter(
+                      image: image,
+                      filterQuality: widget.filterQuality,
+                    ),
+                    child: const SizedBox.expand(),
+                  )
+                : AspectRatio(
+                    aspectRatio:
+                        widget.displayAspectRatio ?? image.width / image.height,
+                    child: RawImage(
+                      image: image,
+                      fit: widget.displayAspectRatio == null
+                          ? widget.screenFit
+                          : BoxFit.fill,
+                      filterQuality: widget.filterQuality,
+                    ),
+                  ),
           ),
           if (kDebugMode && !Platform.isAndroid)
             Positioned(top: 12, left: 12, child: _buildStatusBadge()),
@@ -1418,5 +1428,76 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         ),
       ),
     );
+  }
+}
+
+
+class _NdsDualScreenPainter extends CustomPainter {
+  static const double _topWidthFactor = .78;
+  static const double _bottomWidthFactor = .96;
+  static const double _screenAspectRatio = 4 / 3;
+  static const double _gap = 4;
+
+  final ui.Image image;
+  final FilterQuality filterQuality;
+
+  const _NdsDualScreenPainter({
+    required this.image,
+    required this.filterQuality,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (image.width <= 0 || image.height < 2) return;
+
+    final double availableHeight = size.height - _gap;
+    final double widthFromHeight = availableHeight /
+        ((_topWidthFactor / _screenAspectRatio) +
+            (_bottomWidthFactor / _screenAspectRatio));
+    final double layoutWidth = widthFromHeight.clamp(0, size.width).toDouble();
+
+    final double topWidth = layoutWidth * _topWidthFactor;
+    final double bottomWidth = layoutWidth * _bottomWidthFactor;
+    final double topHeight = topWidth / _screenAspectRatio;
+    final double bottomHeight = bottomWidth / _screenAspectRatio;
+    final double contentHeight = topHeight + _gap + bottomHeight;
+    final double top = (size.height - contentHeight) / 2;
+
+    final Rect topDestination = Rect.fromLTWH(
+      (size.width - topWidth) / 2,
+      top,
+      topWidth,
+      topHeight,
+    );
+    final Rect bottomDestination = Rect.fromLTWH(
+      (size.width - bottomWidth) / 2,
+      top + topHeight + _gap,
+      bottomWidth,
+      bottomHeight,
+    );
+
+    final double sourceHeight = image.height / 2;
+    final Paint paint = Paint()
+      ..filterQuality = filterQuality
+      ..isAntiAlias = false;
+
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), sourceHeight),
+      topDestination,
+      paint,
+    );
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, sourceHeight, image.width.toDouble(), sourceHeight),
+      bottomDestination,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _NdsDualScreenPainter oldDelegate) {
+    return oldDelegate.image != image ||
+        oldDelegate.filterQuality != filterQuality;
   }
 }
