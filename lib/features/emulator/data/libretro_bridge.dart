@@ -204,7 +204,7 @@ class LibretroBridge {
   late final _RhVoidDart _unload;
 
   late final _RhSetButtonStateDart _setButtonState;
-  late final _RhSetTouchStateDart _setTouchState;
+  _RhSetTouchStateDart? _setTouchState;
   late final _RhGetButtonStateDart _getButtonState;
   late final _RhVoidDart _resetInput;
 
@@ -381,9 +381,14 @@ class LibretroBridge {
         _RhSetButtonStateNative,
         _RhSetButtonStateDart>('rh_set_button_state');
 
-    _setTouchState = _lib.lookupFunction<
-        _RhSetTouchStateNative,
-        _RhSetTouchStateDart>('rh_set_touch_state');
+    try {
+      _setTouchState = _lib.lookupFunction<
+          _RhSetTouchStateNative,
+          _RhSetTouchStateDart>('rh_set_touch_state');
+    } on ArgumentError {
+      _setTouchState = null;
+      print('Touch bridge no disponible (rh_set_touch_state)');
+    }
 
     _getButtonState = _lib.lookupFunction<
         _RhGetButtonStateNative,
@@ -1164,7 +1169,7 @@ class LibretroBridge {
       return;
     }
 
-    _setTouchState(
+    _setTouchState?.call(
       x.clamp(0, 255).toInt(),
       y.clamp(0, 191).toInt(),
       pressed ? 1 : 0,
