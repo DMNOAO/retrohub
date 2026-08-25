@@ -845,6 +845,153 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       );
                     }
 
+                    if (isNds) {
+                      final double screenHeight =
+                          constraints.maxWidth * 1.5;
+                      final double touchScreenTop =
+                          (constraints.maxWidth * .75) + 4;
+                      final double controlOpacity =
+                          (_preferences.controlOpacity * .82)
+                              .clamp(0.35, .82)
+                              .toDouble();
+
+                      return Stack(
+                        clipBehavior: Clip.hardEdge,
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: screenHeight,
+                            child: gameView,
+                          ),
+                          Positioned(
+                            top: 8,
+                            left: 10,
+                            child: Opacity(
+                              opacity: .72,
+                              child: SizedBox(
+                                width: 92,
+                                height: 32,
+                                child: SpeedButton(
+                                  speedMultiplier:
+                                      _gameController.speedMultiplier,
+                                  onTap: _gameController.cycleSpeed,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 6,
+                            right: 10,
+                            child: Opacity(
+                              opacity: .68,
+                              child: RetroHubQuickMenu(
+                                onAction: (String value) =>
+                                    _handleMenuAction(context, value),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: touchScreenTop + 10,
+                            left: 10,
+                            right: 10,
+                            child: Opacity(
+                              opacity: controlOpacity,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _GameBoyShoulderButton(
+                                    label: 'L',
+                                    buttonId: _buttonL,
+                                    controller: _gameController,
+                                  ),
+                                  _GameBoyShoulderButton(
+                                    label: 'R',
+                                    buttonId: _buttonR,
+                                    controller: _gameController,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: touchScreenTop + 56,
+                            left: 0,
+                            right: 0,
+                            child: Opacity(
+                              opacity: controlOpacity,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _GameBoySystemButton(
+                                    width: 72,
+                                    height: 25,
+                                    label: 'SELECT',
+                                    buttonId: _buttonSelect,
+                                    controller: _gameController,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _GameBoySystemButton(
+                                    width: 72,
+                                    height: 25,
+                                    label: 'START',
+                                    buttonId: _buttonStart,
+                                    controller: _gameController,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 12,
+                            right: 12,
+                            bottom: 10,
+                            child: Opacity(
+                              opacity: controlOpacity,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  _DirectionalControl(
+                                    type: _preferences.directionalControl,
+                                    keySize: 36,
+                                    controller: _gameController,
+                                    buttonUp: _buttonUp,
+                                    buttonDown: _buttonDown,
+                                    buttonLeft: _buttonLeft,
+                                    buttonRight: _buttonRight,
+                                  ),
+                                  _SnesActionPad(
+                                    size: 38,
+                                    controller: _gameController,
+                                    buttonA: _buttonA,
+                                    buttonB: _buttonB,
+                                    buttonX: _buttonX,
+                                    buttonY: _buttonY,
+                                    buttonAColor: Color(
+                                      _preferences.snesButtonAColor,
+                                    ),
+                                    buttonBColor: Color(
+                                      _preferences.snesButtonBColor,
+                                    ),
+                                    buttonXColor: Color(
+                                      _preferences.snesButtonXColor,
+                                    ),
+                                    buttonYColor: Color(
+                                      _preferences.snesButtonYColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
                     return Padding(
                       padding: EdgeInsets.all(padding),
                       child: Column(
