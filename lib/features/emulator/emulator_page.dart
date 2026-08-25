@@ -895,7 +895,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   : isGba
                                   ? 3 / 2
                                   : isNds
-                                  ? 2 / 3
+                                  ? 1 / 1.305
                                   : 10 / 9,
                               child: gameView,
                             ),
