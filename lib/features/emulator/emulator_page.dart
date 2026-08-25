@@ -626,6 +626,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 autoLoadState:
                                     _preferences.autoLoadOnStart && !isSnes,
                                 displayAspectRatio: isSnes ? 4 / 3 : null,
+                                splitNdsScreens: isNds,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -806,7 +807,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                       : isGba
                                       ? 3 / 2
                                       : isNds
-                                      ? 2 / 3
+                                      ? 1 / 1.305
                                       : 10 / 9,
                                   child: gameView,
                                 ),
@@ -926,7 +927,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 ),
                               ],
                             )
-                          else if (isSnes || _preferences.showConsoleIdentity)
+                          else if (!isNds &&
+                              (isSnes || _preferences.showConsoleIdentity))
                             RetroHubConsoleLogo(
                               console: isSnes
                                   ? RetroHubConsoleType.superNintendo
@@ -939,9 +941,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   : RetroHubConsoleType.gameBoy,
                             ),
                           SizedBox(
-                            height: !isSnes &&
-                                    !isGba &&
-                                    !_preferences.showConsoleIdentity
+                            height: isNds ||
+                                    (!isSnes &&
+                                        !isGba &&
+                                        !_preferences.showConsoleIdentity)
                                 ? 2
                                 : 10,
                           ),
