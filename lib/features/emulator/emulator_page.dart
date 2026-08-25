@@ -848,7 +848,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
 
                     if (isNds) {
                       final double screenHeight =
-                          constraints.maxWidth * 1.5;
+                          (constraints.maxWidth * 1.5) + 4;
                       final double touchScreenTop =
                           (constraints.maxWidth * .75) + 4;
                       final double controlOpacity =
