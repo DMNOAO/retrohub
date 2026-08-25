@@ -158,8 +158,25 @@ class _Cover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (path == null) return const Icon(Icons.videogame_asset, size: 48);
-    return Image.asset(path!, fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(Icons.videogame_asset, size: 48));
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary, width: 2),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: path == null
+            ? const Icon(Icons.videogame_asset, size: 48)
+            : Image.asset(
+                path!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.videogame_asset, size: 48),
+              ),
+      ),
+    );
   }
 }

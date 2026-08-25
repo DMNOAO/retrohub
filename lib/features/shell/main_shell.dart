@@ -18,6 +18,12 @@ class _MainShellState extends State<MainShell> {
   String? _libraryConsoleFilter;
 
   static const titles = ['Inicio', 'Biblioteca', 'Bitácora', 'Perfil'];
+  static const titleIcons = [
+    Icons.home_rounded,
+    Icons.videogame_asset_rounded,
+    Icons.auto_stories_rounded,
+    Icons.person_rounded,
+  ];
 
   void _openConsole(String console) {
     setState(() {
@@ -49,7 +55,38 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_selectedIndex])),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              titleIcons[_selectedIndex],
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              titles[_selectedIndex],
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: .4,
+              ),
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: Container(
+            height: 3,
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+        ),
+      ),
       body: _currentPage(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
