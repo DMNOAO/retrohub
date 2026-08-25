@@ -947,7 +947,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                           Positioned(
                             left: 12,
                             right: 12,
-                            bottom: 10,
+                            bottom: 30,
                             child: Opacity(
                               opacity: controlOpacity,
                               child: Row(
@@ -985,6 +985,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 16,
+                            child: IgnorePointer(
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: RetroHubConsoleLogo(
+                                    console: RetroHubConsoleType.nintendoDs,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -1499,7 +1514,54 @@ class _EmulatorVisualTheme {
     Color secondary;
     Color accent;
 
-    if (pokemonVersion == PokemonGameVersion.fireRed) {
+    if (identity.contains('platinum') ||
+        identity.contains('platino')) {
+      primary = const Color(0xFF241C24);
+      secondary = const Color(0xFF4C2730);
+      accent = const Color(0xFFE0B85A);
+    } else if (identity.contains('diamond') ||
+        identity.contains('diamante')) {
+      primary = const Color(0xFF102A46);
+      secondary = const Color(0xFF176B88);
+      accent = const Color(0xFF7DE8FF);
+    } else if (identity.contains('pearl') ||
+        identity.contains('perla')) {
+      primary = const Color(0xFF3D1839);
+      secondary = const Color(0xFF7B3B71);
+      accent = const Color(0xFFFFA7E3);
+    } else if (identity.contains('heartgold') ||
+        identity.contains('heart gold')) {
+      primary = const Color(0xFF3A2A10);
+      secondary = const Color(0xFF77551A);
+      accent = const Color(0xFFFFD86A);
+    } else if (identity.contains('soulsilver') ||
+        identity.contains('soul silver')) {
+      primary = const Color(0xFF17283A);
+      secondary = const Color(0xFF49647A);
+      accent = const Color(0xFFDCEBFA);
+    } else if (identity.contains('black 2') ||
+        identity.contains('negro 2')) {
+      primary = const Color(0xFF111318);
+      secondary = const Color(0xFF263A54);
+      accent = const Color(0xFF64B5F6);
+    } else if (identity.contains('white 2') ||
+        identity.contains('blanco 2')) {
+      primary = const Color(0xFF34343A);
+      secondary = const Color(0xFF6D7180);
+      accent = const Color(0xFFF2F4FF);
+    } else if (identity.contains('black') ||
+        identity.contains('negra') ||
+        identity.contains('negro')) {
+      primary = const Color(0xFF0D0E12);
+      secondary = const Color(0xFF252832);
+      accent = const Color(0xFFB9C6DD);
+    } else if (identity.contains('white') ||
+        identity.contains('blanca') ||
+        identity.contains('blanco')) {
+      primary = const Color(0xFF3B3B40);
+      secondary = const Color(0xFF72737A);
+      accent = const Color(0xFFF5F5F2);
+    } else if (pokemonVersion == PokemonGameVersion.fireRed) {
       primary = const Color(0xFFF05A24);
       secondary = const Color(0xFF7A260E);
       accent = const Color(0xFFFFC44F);
