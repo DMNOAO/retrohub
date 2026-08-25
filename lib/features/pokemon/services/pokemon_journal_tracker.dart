@@ -32,6 +32,7 @@ class PokemonJournalTracker {
   String? _lastDefeatedTrainer;
   bool _persistentStateRestored = false;
   bool _gymLeaderEventsRepaired = false;
+  bool _gen2BadgeEventsRepaired = false;
   bool _busy = false;
   int? _lastAcceptedDiagnosticPlayTime;
 
@@ -154,6 +155,7 @@ class PokemonJournalTracker {
       }
 
       await _ensureEmeraldGymLeaderEvents(current);
+      await _repairGen2StormMineralEvents(current);
 
       final PokemonMemorySnapshot? previousRaw = _lastRawSnapshot;
       _lastRawSnapshot = current;
@@ -466,6 +468,7 @@ class PokemonJournalTracker {
               'leaderName': leader.name,
               'spritePath': leader.spritePath,
               'badgeIndex': index,
+              if (current.profile.isGen2) 'gen2BadgeOrder': 'canonical',
             },
           );
         }
@@ -480,6 +483,7 @@ class PokemonJournalTracker {
             'newBadgesMask': newBadges,
             'badgeIndex': index,
             'badgeName': badgeName,
+            if (current.profile.isGen2) 'gen2BadgeOrder': 'canonical',
           },
         );
       }
@@ -758,6 +762,69 @@ class PokemonJournalTracker {
       },
     );
     await _rememberLastDefeatedTrainer(info.name, current);
+  }
+
+  Future<void> _repairGen2StormMineralEvents(
+    PokemonMemorySnapshot current,
+  ) async {
+    if (_gen2BadgeEventsRepaired || !current.profile.isGen2) return;
+    _gen2BadgeEventsRepaired = true;
+
+    final events = await database.getProgressEventsByGame(gameId);
+    for (final event in events) {
+      if (event.eventType != 'gym_leader_defeated' &&
+          event.eventType != 'badge_obtained') {
+        continue;
+      }
+      final rawMetadata = event.metadataJson;
+      if (rawMetadata == null || rawMetadata.trim().isEmpty) continue;
+
+      try {
+        final decoded = jsonDecode(rawMetadata);
+        if (decoded is! Map ||
+            decoded['badgeIndex'] is! num ||
+            decoded['gen2BadgeOrder'] == 'canonical') {
+          continue;
+        }
+
+        final oldIndex = (decoded['badgeIndex'] as num).toInt();
+        if (oldIndex != 4 && oldIndex != 5) continue;
+        final correctedIndex = oldIndex == 4 ? 5 : 4;
+        final correctedMetadata = Map<String, dynamic>.from(decoded)
+          ..['badgeIndex'] = correctedIndex
+          ..['gen2BadgeOrder'] = 'canonical';
+
+        if (event.eventType == 'gym_leader_defeated') {
+          final leader = GymLeaderAssetResolver.forBadge(
+            current.profile,
+            correctedIndex,
+          );
+          if (leader == null) continue;
+          correctedMetadata['leaderName'] = leader.name;
+          correctedMetadata['spritePath'] = leader.spritePath;
+          await database.updateProgressEvent(
+            eventId: event.id,
+            title: 'Derrotó a ${leader.name}',
+            description: 'Venció al líder de gimnasio ${leader.name}.',
+            metadataJson: jsonEncode(correctedMetadata),
+          );
+          _lastDefeatedTrainer = leader.name;
+        } else {
+          final badgeName = PokemonDecoder.badgeName(
+            current.profile,
+            correctedIndex,
+          );
+          correctedMetadata['badgeName'] = badgeName;
+          await database.updateProgressEvent(
+            eventId: event.id,
+            title: badgeName,
+            description:
+                'Conseguiste $badgeName. Ahora tienes ${current.badgeCount} medalla(s).',
+            metadataJson: jsonEncode(correctedMetadata),
+          );
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> _ensureEmeraldGymLeaderEvents(

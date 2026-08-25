@@ -294,7 +294,10 @@ class PokemonControllerMemoryReader {
         ? (byte(a.currentMapGroup!) << 8) | byte(a.currentMap)
         : byte(a.currentMap);
 
-    final int johtoBadges = byte(a.obtainedBadges);
+    final int rawJohtoBadges = byte(a.obtainedBadges);
+    final int johtoBadges = profile.isGen2
+        ? PokemonDecoder.normalizeGen2JohtoBadges(rawJohtoBadges)
+        : rawJohtoBadges;
     final int badges =
         johtoBadges | ((a.kantoBadges == null ? 0 : byte(a.kantoBadges!)) << 8);
 
