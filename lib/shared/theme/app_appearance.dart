@@ -48,7 +48,7 @@ enum AppAppearance {
     'Umbreon shiny',
     0xFF080A0C,
     0xFF10171B,
-    0xFF35D6E6,
+    0xFFF2D33D,
     0xFF4A8DFF,
     sprite: 'assets/sprites/pokemon/gba/ruby_sapphire/shiny/0197.png',
     category: AppearanceCategory.characters,
