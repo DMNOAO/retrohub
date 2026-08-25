@@ -508,7 +508,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         Directory(persistencePaths.sramDirectory).createSync(recursive: true);
 
         bridge.setSaveDirectory(persistencePaths.sramDirectory);
-        bridge.setSystemDirectory(persistencePaths.sramDirectory);
+        // Los archivos de sistema (por ejemplo BIOS/firmware de Nintendo DS)
+        // son compartidos por consola y no deben mezclarse con la SRAM de
+        // una partida concreta.
+        bridge.setSystemDirectory(persistencePaths.systemDirectory);
       }
 
       final gameLoaded = bridge.loadGame(widget.romPath);

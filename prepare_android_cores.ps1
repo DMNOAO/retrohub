@@ -7,8 +7,10 @@ New-Item -ItemType Directory -Force -Path $temp | Out-Null
 $targets = @(
     @{ Abi = 'arm64-v8a'; Core = 'SameBoy'; Package = 'sameboy_libretro_android.so.zip'; Output = 'libsameboy_libretro.so' },
     @{ Abi = 'arm64-v8a'; Core = 'mGBA'; Package = 'mgba_libretro_android.so.zip'; Output = 'libmgba_libretro.so' },
+    @{ Abi = 'arm64-v8a'; Core = 'melonDS DS'; Package = 'melondsds_libretro_android.so.zip'; Output = 'libmelondsds_libretro.so' },
     @{ Abi = 'x86_64'; Core = 'SameBoy'; Package = 'sameboy_libretro_android.so.zip'; Output = 'libsameboy_libretro.so' },
-    @{ Abi = 'x86_64'; Core = 'mGBA'; Package = 'mgba_libretro_android.so.zip'; Output = 'libmgba_libretro.so' }
+    @{ Abi = 'x86_64'; Core = 'mGBA'; Package = 'mgba_libretro_android.so.zip'; Output = 'libmgba_libretro.so' },
+    @{ Abi = 'x86_64'; Core = 'melonDS DS'; Package = 'melondsds_libretro_android.so.zip'; Output = 'libmelondsds_libretro.so' }
 )
 
 try {
@@ -38,4 +40,4 @@ finally {
     Remove-Item -Recurse -Force $temp -ErrorAction SilentlyContinue
 }
 
-Write-Host 'SameBoy y mGBA para Android preparados correctamente.'
+Write-Host 'SameBoy, mGBA y melonDS DS para Android preparados correctamente.'

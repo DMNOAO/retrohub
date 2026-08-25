@@ -43,7 +43,9 @@ class _ConsoleIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    if (console.contains('SNES') || console.contains('SUPER')) {
+    if (console.contains('NDS') || console.contains('NINTENDO DS')) {
+      _paintNintendoDs(canvas, size, paint);
+    } else if (console.contains('SNES') || console.contains('SUPER')) {
       _paintSnesPad(canvas, size, paint);
     } else if (console.contains('GBA') || console.contains('ADVANCE')) {
       _paintGba(canvas, size, paint);
@@ -52,6 +54,27 @@ class _ConsoleIconPainter extends CustomPainter {
     } else {
       _paintGameBoy(canvas, size, paint, colorModel: false);
     }
+  }
+
+  void _paintNintendoDs(Canvas canvas, Size s, Paint p) {
+    final outer = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s.width * .20, s.height * .04, s.width * .60, s.height * .92),
+      Radius.circular(s.width * .08),
+    );
+    canvas.drawRRect(outer, p);
+    canvas.drawLine(
+      Offset(s.width * .20, s.height * .50),
+      Offset(s.width * .80, s.height * .50),
+      p,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(s.width * .29, s.height * .13, s.width * .42, s.height * .27),
+      p,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(s.width * .29, s.height * .60, s.width * .42, s.height * .27),
+      p,
+    );
   }
 
   void _paintGameBoy(Canvas canvas, Size s, Paint p, {required bool colorModel}) {

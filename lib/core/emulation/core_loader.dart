@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 class GamePersistencePaths {
+  final String systemDirectory;
   final String gameDirectory;
   final String sramDirectory;
   final String statesDirectory;
@@ -10,6 +11,7 @@ class GamePersistencePaths {
   final String stateFile;
 
   const GamePersistencePaths({
+    required this.systemDirectory,
     required this.gameDirectory,
     required this.sramDirectory,
     required this.statesDirectory,
@@ -55,6 +57,13 @@ class CoreLoader {
     windowsRelativePath: 'cores/snes9x/snes9x_libretro.dll',
   );
 
+  static const EmulationCore melonDs = EmulationCore(
+    id: 'melondsds',
+    displayName: 'Nintendo DS (melonDS DS)',
+    androidLibraryName: 'libmelondsds_libretro.so',
+    windowsRelativePath: 'cores/melondsds/melondsds_libretro.dll',
+  );
+
   static const String _windowsBridgeFileName = 'libretro_bridge.dll';
   static const String _androidBridgeName = 'libretro_bridge.so';
 
@@ -73,7 +82,13 @@ class CoreLoader {
     return normalized.endsWith('.gb') || normalized.endsWith('.gbc');
   }
 
+  static bool isNdsRom(String romPath) {
+    final String normalized = romPath.trim().toLowerCase();
+    return normalized.endsWith('.nds');
+  }
+
   static EmulationCore coreForRom(String romPath) {
+    if (isNdsRom(romPath)) return melonDs;
     if (isSnesRom(romPath)) return snes;
     if (isGbaRom(romPath)) return mGba;
     return sameBoy;
@@ -208,6 +223,10 @@ class CoreLoader {
       '${_documentsDirectory.path}${Platform.pathSeparator}'
       'RetroHub${Platform.pathSeparator}saves',
     );
+    final Directory systemDirectory = Directory(
+      '${_documentsDirectory.path}${Platform.pathSeparator}'
+      'RetroHub${Platform.pathSeparator}system',
+    );
     final Directory gameDirectory = Directory(
       '${root.path}${Platform.pathSeparator}$safeGameId',
     );
@@ -222,6 +241,7 @@ class CoreLoader {
     );
 
     return GamePersistencePaths(
+      systemDirectory: systemDirectory.path,
       gameDirectory: gameDirectory.path,
       sramDirectory: sramDirectory.path,
       statesDirectory: statesDirectory.path,
@@ -241,6 +261,7 @@ class CoreLoader {
     );
 
     Directory(paths.sramDirectory).createSync(recursive: true);
+    Directory(paths.systemDirectory).createSync(recursive: true);
     Directory(paths.statesDirectory).createSync(recursive: true);
     Directory(paths.screenshotsDirectory).createSync(recursive: true);
     return paths;

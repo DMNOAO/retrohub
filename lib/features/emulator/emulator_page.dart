@@ -339,7 +339,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       MaterialPageRoute(
         builder: (_) => EmulatorSettingsPage(
           gameTitle: game.title,
-          supportsGameBoyOptions: !CoreLoader.isSnesRom(game.romPath),
+          supportsGameBoyOptions:
+              CoreLoader.isGameBoyRom(game.romPath) ||
+              CoreLoader.isGbaRom(game.romPath),
           supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
           supportsGbaFullscreen: CoreLoader.isGbaRom(game.romPath),
           initialPreferences: _preferences,

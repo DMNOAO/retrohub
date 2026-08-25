@@ -15,4 +15,20 @@ void main() {
       expect(CoreLoader.coreForRom('game.gbc').id, 'sameboy');
     });
   });
+
+  group('CoreLoader Nintendo DS', () {
+    test('reconoce ROMs NDS sin importar mayúsculas', () {
+      expect(CoreLoader.isNdsRom('/roms/Pokemon HeartGold.NDS'), isTrue);
+      expect(CoreLoader.isNdsRom('/roms/Pokemon Platinum.nds'), isTrue);
+      expect(CoreLoader.isNdsRom('/roms/Pokemon Emerald.gba'), isFalse);
+    });
+
+    test('selecciona melonDS DS sólo para ROMs NDS', () {
+      expect(CoreLoader.coreForRom('game.nds').id, 'melondsds');
+      expect(
+        CoreLoader.coreForRom('game.nds').androidLibraryName,
+        'libmelondsds_libretro.so',
+      );
+    });
+  });
 }
