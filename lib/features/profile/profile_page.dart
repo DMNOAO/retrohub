@@ -302,11 +302,11 @@ class _AppearanceOption extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  _PaletteDot(color: appearance.background),
+                  const SizedBox(width: 5),
                   _PaletteDot(color: appearance.primary),
                   const SizedBox(width: 5),
                   _PaletteDot(color: appearance.secondary),
-                  const SizedBox(width: 5),
-                  _PaletteDot(color: appearance.background),
                 ],
               ),
             ],
