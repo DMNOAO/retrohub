@@ -61,9 +61,11 @@ class CoverHelper {
     'pokemon platino': 'assets/covers/nds/Pokémon_Platino.png',
     'pokemon platinum': 'assets/covers/nds/Pokémon_Platino.png',
 
+    'pokemon edicion oro heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
     'pokemon oro heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
     'pokemon heartgold': 'assets/covers/nds/Pokémon_Edición_Oro_HeartGold.png',
 
+    'pokemon edicion plata soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
     'pokemon plata soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
     'pokemon soulsilver': 'assets/covers/nds/Pokémon_Edición_Plata_SoulSilver.png',
 
