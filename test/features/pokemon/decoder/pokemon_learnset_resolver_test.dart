@@ -7,6 +7,10 @@ void main() {
     title: 'Pokémon Rojo Fuego',
     console: 'GBA',
   );
+  final crystal = GameAssetProfile.fromTitle(
+    title: 'Pokémon Cristal',
+    console: 'GBC',
+  );
 
   test('incluye Planta Feroz entre los tutores de Venusaur', () {
     expect(PokemonLearnsetResolver.tutorMoves(fireRed, 3), contains(338));
@@ -33,5 +37,27 @@ void main() {
 
   test('ignora preevoluciones introducidas en generaciones posteriores', () {
     expect(PokemonLearnsetResolver.baseSpeciesId(fireRed, 315), 315);
+  });
+
+  test('Elekid usa el grupo huevo de Electabuzz y no el de Magby', () {
+    expect(
+      PokemonLearnsetResolver.eggMoveParents(crystal, 239, 112),
+      <int>[122],
+    );
+    expect(
+      PokemonLearnsetResolver.eggMoveParents(crystal, 239, 238),
+      <int>[66],
+    );
+  });
+
+  test('reduce los padres a la primera fuente válida de cada familia', () {
+    expect(
+      PokemonLearnsetResolver.eggMoveParents(crystal, 239, 96),
+      <int>[96, 106, 122],
+    );
+    expect(
+      PokemonLearnsetResolver.eggMoveParents(crystal, 239, 27),
+      <int>[106, 237],
+    );
   });
 }

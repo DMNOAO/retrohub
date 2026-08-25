@@ -42,10 +42,8 @@ class _GameCoverCardState extends State<GameCoverCard> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: _hovered
-                    ? colors.primary
-                    : colors.onSurface.withValues(alpha: 0.35),
-                width: _hovered ? 2 : 1,
+                color: colors.primary.withValues(alpha: _hovered ? 1 : .82),
+                width: 2,
               ),
               boxShadow: _hovered
                   ? [
@@ -62,25 +60,28 @@ class _GameCoverCardState extends State<GameCoverCard> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: ClipRRect(
-                    borderRadius: widget.coverOnly
-                        ? BorderRadius.circular(16)
-                        : const BorderRadius.vertical(
-                            top: Radius.circular(16),
-                          ),
-                    child: widget.coverPath == null
-                        ? Container(
-                            color: Colors.black26,
-                            child: Icon(
-                              Icons.videogame_asset,
-                              size: 48,
-                              color: colors.onSurface.withValues(alpha: 0.38),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: ClipRRect(
+                      borderRadius: widget.coverOnly
+                          ? BorderRadius.circular(14)
+                          : const BorderRadius.vertical(
+                              top: Radius.circular(14),
                             ),
-                          )
-                        : Image.asset(
-                            widget.coverPath!,
-                            fit: BoxFit.cover,
-                          ),
+                      child: widget.coverPath == null
+                          ? Container(
+                              color: Colors.black26,
+                              child: Icon(
+                                Icons.videogame_asset,
+                                size: 48,
+                                color: colors.onSurface.withValues(alpha: 0.38),
+                              ),
+                            )
+                          : Image.asset(
+                              widget.coverPath!,
+                              fit: BoxFit.cover,
+                            ),
+                    ),
                   ),
                 ),
                 if (!widget.coverOnly) Padding(

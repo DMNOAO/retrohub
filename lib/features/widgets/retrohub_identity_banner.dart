@@ -16,6 +16,7 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
     RetroHubConsoleType.gameBoy,
     RetroHubConsoleType.gameBoyColor,
     RetroHubConsoleType.gameBoyAdvance,
+    RetroHubConsoleType.superNintendo,
   ];
 
   int _index = 0;
