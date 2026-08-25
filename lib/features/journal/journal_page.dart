@@ -354,6 +354,7 @@ class _ProgressJournal extends StatelessWidget {
         ? null
         : PokemonNatureResolver.resolve(personality);
     final heldItem = PokemonItemResolver.resolve(
+      profile,
       _intValue(pokemon['heldItemId']) ?? 0,
     );
     showModalBottomSheet<void>(
@@ -394,6 +395,11 @@ class _ProgressJournal extends StatelessWidget {
                       ),
                       size: 26,
                     ),
+                  if (!isEgg && _boolValue(pokemon['isShiny']))
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Text('✨', semanticsLabel: 'Variocolor'),
+                    ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -415,8 +421,6 @@ class _ProgressJournal extends StatelessWidget {
                       ? 'No disponible'
                       : '${pokemon['currentHp']}/${pokemon['maximumHp']}',
                 ),
-                if (_boolValue(pokemon['isShiny']))
-                  const _PokemonDetailRow(label: 'Variocolor', value: 'Sí ✨'),
                 if (pokemon['nickname']?.toString().trim().isNotEmpty == true)
                   _PokemonDetailRow(
                     label: 'Apodo',

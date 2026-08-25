@@ -1,8 +1,68 @@
+import '../../../core/assets/game_asset_profile.dart';
+
 abstract final class PokemonItemResolver {
-  static String? resolve(int itemId) {
+  static String? resolve(GameAssetProfile profile, int itemId) {
     if (itemId <= 0) return null;
-    return _generationThreeNames[itemId] ?? 'Objeto #$itemId';
+    final names = switch (profile.game) {
+      PokemonAssetGame.gold ||
+      PokemonAssetGame.silver ||
+      PokemonAssetGame.crystal => _generationTwoNames,
+      PokemonAssetGame.rubySapphire ||
+      PokemonAssetGame.emerald ||
+      PokemonAssetGame.fireRedLeafGreen => _generationThreeNames,
+      _ => const <int, String>{},
+    };
+    return names[itemId] ?? 'Objeto #$itemId';
   }
+
+  // IDs internos de Oro, Plata y Cristal. Se mantienen separados porque no
+  // son compatibles con los game_index de tercera generación.
+  static const Map<int, String> _generationTwoNames = <int, String>{
+    0x03: 'Polvo Brillo',
+    0x1e: 'Puño Suerte',
+    0x23: 'Polvo Metálico',
+    0x39: 'Repartir Exp.',
+    0x49: 'Garra Rápida',
+    0x4c: 'Arena Fina',
+    0x4d: 'Pico Afilado',
+    0x51: 'Flecha Venenosa',
+    0x52: 'Roca del Rey',
+    0x58: 'Polvo Plata',
+    0x5b: 'Moneda Amuleto',
+    0x5e: 'Amuleto',
+    0x5f: 'Agua Mística',
+    0x60: 'Cuchara Torcida',
+    0x62: 'Cinturón Negro',
+    0x66: 'Gafas de Sol',
+    0x68: 'Lazo Rosa',
+    0x69: 'Palo',
+    0x6a: 'Bola Humo',
+    0x6b: 'Antiderretir',
+    0x6c: 'Imán',
+    0x70: 'Piedra Eterna',
+    0x71: 'Hechizo',
+    0x75: 'Semilla Milagro',
+    0x76: 'Hueso Grueso',
+    0x77: 'Cinta Focus',
+    0x7d: 'Piedra Dura',
+    0x7e: 'Huevo Suerte',
+    0x83: 'Polvo Estelar',
+    0x84: 'Trozo Estrella',
+    0x8a: 'Carbón',
+    0x8b: 'Zumo de Baya',
+    0x8c: 'Periscopio',
+    0x8f: 'Revestimiento Metálico',
+    0x90: 'Colmillo Dragón',
+    0x92: 'Restos',
+    0x96: 'Baya Misterio',
+    0x97: 'Escama Dragón',
+    0x98: 'Gen Loco',
+    0xa3: 'Bola Luminosa',
+    0xaa: 'Cinta Lunares',
+    0xac: 'Mejora',
+    0xad: 'Baya',
+    0xae: 'Baya Dorada',
+  };
 
   // Los índices internos de objetos cambian entre generaciones. Esta tabla
   // usa explícitamente los game_index de la tercera generación.
