@@ -9,6 +9,9 @@ void main() {
     const trainer = 0x64;
     const dex = 0x12DC;
 
+    // El bloque activo contiene datos escritos; la partición de respaldo
+    // permanece borrada (0xFF), como en un guardado con una sola copia válida.
+    bytes.fillRange(0, generalSize, 0);
     _u32(bytes, generalSize - 0x14, 2);
     _u32(bytes, generalSize - 0x10, 1);
     _u32(bytes, generalSize - 8, 0x20060623);
