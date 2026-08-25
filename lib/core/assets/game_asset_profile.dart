@@ -56,10 +56,14 @@ class GameAssetProfile {
       return GameAssetProfile(
         game: PokemonAssetGame.platinum,
         region: PokemonAssetRegion.sinnoh,
-        // Ruta reservada para el set que se incorporará en la fase de sprites.
-        pokemonSpriteSet: savedSpriteSet ?? 'nds/diamond_pearl_platinum',
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/platinum',
         pokemonExtension: 'png',
         trainerSpriteSet: 'nds/Sinnoh',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/lucas_pt.png',
+        rivalAsset: 'assets/sprites/characters/rivals/barry_pt.gif',
+        championAsset:
+            'assets/sprites/characters/champions/cynthia_sinnoh.gif',
         sourceTitle: value,
       );
     }
@@ -70,9 +74,14 @@ class GameAssetProfile {
       return GameAssetProfile(
         game: PokemonAssetGame.diamondPearl,
         region: PokemonAssetRegion.sinnoh,
-        pokemonSpriteSet: savedSpriteSet ?? 'nds/diamond_pearl_platinum',
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/diamond-pearl',
         pokemonExtension: 'png',
         trainerSpriteSet: 'nds/Sinnoh',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/lucas_dp.png',
+        rivalAsset: 'assets/sprites/characters/rivals/barry_dp.png',
+        championAsset:
+            'assets/sprites/characters/champions/cynthia_sinnoh.gif',
         sourceTitle: value,
       );
     }

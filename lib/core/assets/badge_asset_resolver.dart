@@ -50,7 +50,35 @@ class BadgeAssetResolver {
     ('rain', 'Medalla Lluvia'),
   ];
 
+  static const _sinnohDiamondPearl = <(String, String)>[
+    ('coal', 'Medalla Lignito'),
+    ('forest', 'Medalla Bosque'),
+    ('cobble', 'Medalla Adoquín'),
+    ('fen', 'Medalla Ciénaga'),
+    ('relic', 'Medalla Reliquia'),
+    ('mine', 'Medalla Mina'),
+    ('icicle', 'Medalla Carámbano'),
+    ('beacon', 'Medalla Faro'),
+  ];
+
+  static const _sinnohPlatinum = <(String, String)>[
+    ('coal', 'Medalla Lignito'),
+    ('forest', 'Medalla Bosque'),
+    ('relic', 'Medalla Reliquia'),
+    ('cobble', 'Medalla Adoquín'),
+    ('fen', 'Medalla Ciénaga'),
+    ('mine', 'Medalla Mina'),
+    ('icicle', 'Medalla Carámbano'),
+    ('beacon', 'Medalla Faro'),
+  ];
+
   static BadgeAsset resolve(GameAssetProfile profile, int index) {
+    if (profile.region == PokemonAssetRegion.sinnoh) {
+      final values = profile.game == PokemonAssetGame.platinum
+          ? _sinnohPlatinum
+          : _sinnohDiamondPearl;
+      return _resolve(values, 'Sinnoh', index);
+    }
     return resolveForRegion(profile.region, index);
   }
 
@@ -59,13 +87,24 @@ class BadgeAssetResolver {
     final values = switch (region) {
       PokemonAssetRegion.johto => _johto,
       PokemonAssetRegion.hoenn => _hoenn,
+      PokemonAssetRegion.sinnoh => _sinnohDiamondPearl,
       _ => _kanto,
     };
     final folder = switch (region) {
       PokemonAssetRegion.johto => 'Johto',
       PokemonAssetRegion.hoenn => 'Hoenn',
+      PokemonAssetRegion.sinnoh => 'Sinnoh',
       _ => 'Kanto',
     };
+    return _resolve(values, folder, safeIndex);
+  }
+
+  static BadgeAsset _resolve(
+    List<(String, String)> values,
+    String folder,
+    int index,
+  ) {
+    final safeIndex = index.clamp(0, 7).toInt();
     final item = values[safeIndex];
     return BadgeAsset(
       index: safeIndex,

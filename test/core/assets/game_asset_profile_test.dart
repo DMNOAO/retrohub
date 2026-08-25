@@ -16,6 +16,16 @@ void main() {
     expect(platinum.game, PokemonAssetGame.platinum);
     expect(diamond.region, PokemonAssetRegion.sinnoh);
     expect(platinum.region, PokemonAssetRegion.sinnoh);
+    expect(diamond.pokemonSpriteSet, 'nds/diamond-pearl');
+    expect(platinum.pokemonSpriteSet, 'nds/platinum');
+    expect(
+      diamond.rivalAsset,
+      'assets/sprites/characters/rivals/barry_dp.png',
+    );
+    expect(
+      platinum.rivalAsset,
+      'assets/sprites/characters/rivals/barry_pt.gif',
+    );
     expect(diamond.supportsPokemonJournal, isTrue);
     expect(platinum.supportsPokemonJournal, isTrue);
   });
