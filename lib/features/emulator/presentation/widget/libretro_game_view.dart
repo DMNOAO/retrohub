@@ -25,6 +25,7 @@ import '../../link/link_transport_factory.dart';
 class LibretroGameController {
   bool hapticsEnabled = false;
   void Function(int buttonId, bool pressed)? _setButtonState;
+  void Function(int x, int y, bool pressed)? _setTouchState;
   VoidCallback? _resetInput;
   Future<bool> Function(int slot, String title)? _saveState;
   Future<bool> Function(int slot)? _loadState;
@@ -77,6 +78,16 @@ class LibretroGameController {
   }
 
   void releaseButton(int buttonId) => _setButtonState?.call(buttonId, false);
+
+  void setTouchState({
+    required int x,
+    required int y,
+    required bool pressed,
+  }) {
+    _setTouchState?.call(x, y, pressed);
+  }
+
+  void releaseTouch() => _setTouchState?.call(0, 0, false);
 
   void resetInput() => _resetInput?.call();
 
@@ -155,6 +166,7 @@ class LibretroGameController {
 
   void _attach({
     required void Function(int buttonId, bool pressed) setButtonState,
+    required void Function(int x, int y, bool pressed) setTouchState,
     required VoidCallback resetInput,
     required Future<bool> Function(int slot, String title) saveState,
     required Future<bool> Function(int slot) loadState,
@@ -182,6 +194,7 @@ class LibretroGameController {
     required LinkManager linkManager,
   }) {
     _setButtonState = setButtonState;
+    _setTouchState = setTouchState;
     _resetInput = resetInput;
     _saveState = saveState;
     _loadState = loadState;
@@ -205,6 +218,7 @@ class LibretroGameController {
 
   void _detach() {
     _setButtonState = null;
+    _setTouchState = null;
     _resetInput = null;
     _saveState = null;
     _loadState = null;
@@ -362,6 +376,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   void _attachController() {
     widget.controller?._attach(
       setButtonState: _setButtonPressed,
+      setTouchState: _setTouchState,
       resetInput: _releaseAllButtons,
       saveState: _saveState,
       loadState: _loadState,
@@ -1061,6 +1076,19 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (key == LogicalKeyboardKey.keyS) return _buttonR;
 
     return null;
+  }
+
+  void _setTouchState(int x, int y, bool pressed) {
+    final bridge = _bridge;
+
+    if (bridge == null ||
+        !_isRunning ||
+        _disposed ||
+        _persistenceOperationInProgress) {
+      return;
+    }
+
+    bridge.setTouchState(x: x, y: y, pressed: pressed);
   }
 
   void _setButtonPressed(int buttonId, bool pressed) {
