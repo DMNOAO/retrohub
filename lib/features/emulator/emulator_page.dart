@@ -68,6 +68,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   bool _isClosing = false;
   bool _exitDialogOpen = false;
   Timer? _headerRefreshTimer;
+  int? _ndsTouchPointer;
   List<int> _partySpeciesIds = const <int>[];
   EmulatorPreferences _preferences = const EmulatorPreferences();
 
@@ -864,6 +865,58 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             right: 0,
                             height: screenHeight,
                             child: gameView,
+                          ),
+                          Positioned(
+                            top: touchScreenTop,
+                            left: 0,
+                            right: 0,
+                            height: constraints.maxWidth * .75,
+                            child: Listener(
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: (PointerDownEvent event) {
+                                if (_ndsTouchPointer != null) return;
+                                _ndsTouchPointer = event.pointer;
+                                _gameController.setTouchState(
+                                  x: ((event.localPosition.dx /
+                                              constraints.maxWidth) *
+                                          255)
+                                      .round()
+                                      .clamp(0, 255),
+                                  y: ((event.localPosition.dy /
+                                              (constraints.maxWidth * .75)) *
+                                          191)
+                                      .round()
+                                      .clamp(0, 191),
+                                  pressed: true,
+                                );
+                              },
+                              onPointerMove: (PointerMoveEvent event) {
+                                if (_ndsTouchPointer != event.pointer) return;
+                                _gameController.setTouchState(
+                                  x: ((event.localPosition.dx /
+                                              constraints.maxWidth) *
+                                          255)
+                                      .round()
+                                      .clamp(0, 255),
+                                  y: ((event.localPosition.dy /
+                                              (constraints.maxWidth * .75)) *
+                                          191)
+                                      .round()
+                                      .clamp(0, 191),
+                                  pressed: true,
+                                );
+                              },
+                              onPointerUp: (PointerUpEvent event) {
+                                if (_ndsTouchPointer != event.pointer) return;
+                                _gameController.releaseTouch();
+                                _ndsTouchPointer = null;
+                              },
+                              onPointerCancel: (PointerCancelEvent event) {
+                                if (_ndsTouchPointer != event.pointer) return;
+                                _gameController.releaseTouch();
+                                _ndsTouchPointer = null;
+                              },
+                            ),
                           ),
                           Positioned(
                             top: 8,
