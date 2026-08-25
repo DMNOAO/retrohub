@@ -32,7 +32,7 @@ void main() {
     );
 
     expect(leechSeedParents, contains(1));
-    expect(leechSeedParents, contains(357));
+    expect(leechSeedParents, isNot(contains(357)));
   });
 
   test('ignora preevoluciones introducidas en generaciones posteriores', () {
