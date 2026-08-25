@@ -1,4 +1,3 @@
-import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
@@ -78,6 +77,10 @@ final class PokemonGen4SaveReader {
   }
 
   static int _newerBlock(List<int> first, List<int> second) {
+    final bool firstErased = first.every((int value) => value == 0xFF);
+    final bool secondErased = second.every((int value) => value == 0xFF);
+    if (firstErased != secondErased) return firstErased ? 1 : 0;
+
     final int firstMajor = _u32(first, 0);
     final int secondMajor = _u32(second, 0);
     if (firstMajor != secondMajor) return firstMajor > secondMajor ? 0 : 1;
