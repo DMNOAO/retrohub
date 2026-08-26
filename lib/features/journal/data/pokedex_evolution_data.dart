@@ -1,5 +1,6 @@
 import '../../../core/assets/game_asset_profile.dart';
 import '../../pokemon/decoder/pokemon_decoder.dart';
+import 'gen4_evolution_data.dart';
 
 class PokedexEvolutionData {
   const PokedexEvolutionData._();
@@ -11,9 +12,14 @@ class PokedexEvolutionData {
       PokemonAssetGame.rubySapphire ||
       PokemonAssetGame.emerald ||
       PokemonAssetGame.fireRedLeafGreen => 3,
+      PokemonAssetGame.diamondPearl || PokemonAssetGame.platinum => 4,
       _ => 0,
     };
     if (generation == 0) return '';
+    if (generation == 4) {
+      return gen4EvolutionData[pokemonId] ??
+          'No evoluciona en esta generación.';
+    }
     final rules = profile.game == PokemonAssetGame.fireRedLeafGreen
         ? _fireRedLeafGreen
         : generation == 1

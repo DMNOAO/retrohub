@@ -1,4 +1,5 @@
 import '../../../core/assets/game_asset_profile.dart';
+import 'gen4_ability_data.dart';
 
 class PokemonAbilityInfo {
   final int id;
@@ -11,17 +12,27 @@ abstract final class PokemonAbilityResolver {
   static bool supports(GameAssetProfile profile) =>
       profile.game == PokemonAssetGame.rubySapphire ||
       profile.game == PokemonAssetGame.emerald ||
-      profile.game == PokemonAssetGame.fireRedLeafGreen;
+      profile.game == PokemonAssetGame.fireRedLeafGreen ||
+      profile.game == PokemonAssetGame.diamondPearl ||
+      profile.game == PokemonAssetGame.platinum;
 
   static List<PokemonAbilityInfo> possible(
     GameAssetProfile profile,
     int pokemonId,
   ) {
     if (!supports(profile)) return const <PokemonAbilityInfo>[];
-    return (_speciesAbilities[pokemonId] ?? const <int>[])
-        .map((id) => _abilities[id])
+    final isGen4 = profile.game == PokemonAssetGame.diamondPearl ||
+        profile.game == PokemonAssetGame.platinum;
+    final species = isGen4 ? gen4SpeciesAbilities : _speciesAbilities;
+    return (species[pokemonId] ?? const <int>[])
+        .map((id) => _abilities[id] ?? _gen4Ability(id))
         .whereType<PokemonAbilityInfo>()
         .toList(growable: false);
+  }
+
+  static PokemonAbilityInfo? _gen4Ability(int id) {
+    final data = gen4Abilities[id];
+    return data == null ? null : PokemonAbilityInfo(id, data.$1, data.$2);
   }
 
   static PokemonAbilityInfo? current(
