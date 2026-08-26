@@ -3,6 +3,7 @@ import '../models/pokemon_location.dart';
 import 'locations/gen2/crystal_locations.g.dart';
 import 'locations/gen3/emerald_locations.dart';
 import 'locations/gen3/fire_red_leaf_green_locations.dart';
+import 'locations/gen4/heart_gold_soul_silver_locations.dart';
 import 'locations/gen4/platinum_locations.dart';
 
 export '../models/pokemon_location.dart';
@@ -150,7 +151,7 @@ class PokemonDecoder {
         return platinumLocations[mapId];
       case PokemonGameVersion.heartGold:
       case PokemonGameVersion.soulSilver:
-        return null;
+        return heartGoldSoulSilverLocations[mapId];
       case PokemonGameVersion.unsupported:
         return null;
     }
