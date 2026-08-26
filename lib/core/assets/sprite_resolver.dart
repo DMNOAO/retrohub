@@ -27,6 +27,7 @@ class SpriteResolver {
     bool isShiny = false,
     bool isFemale = false,
     bool secondFrame = false,
+    String? formSuffix,
   }) {
     final id = pokemonId.toString().padLeft(4, '0');
     final folders = <String>[
@@ -35,6 +36,7 @@ class SpriteResolver {
       if (secondFrame) 'frame2',
     ];
     final variantPath = folders.isEmpty ? '' : '${folders.join('/')}/';
-    return 'assets/sprites/pokemon/${profile.pokemonSpriteSet}/$variantPath$id.${profile.pokemonExtension}';
+    final form = formSuffix == null || formSuffix.isEmpty ? '' : '-$formSuffix';
+    return 'assets/sprites/pokemon/${profile.pokemonSpriteSet}/$variantPath$id$form.${profile.pokemonExtension}';
   }
 }
