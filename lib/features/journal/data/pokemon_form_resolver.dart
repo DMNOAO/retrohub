@@ -1,4 +1,4 @@
-import '../../core/assets/game_asset_profile.dart';
+import '../../../core/assets/game_asset_profile.dart';
 
 class PokemonFormInfo {
   final String id;
