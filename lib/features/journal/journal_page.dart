@@ -504,64 +504,81 @@ class _AdventureHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 84,
-            height: 84,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: SpriteImage(
-              path: protagonistPath,
-              size: 68,
-              fallbackIcon: Icons.person_outline,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              game.title,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  game.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 84,
+                height: 84,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 5),
-                Text(snapshot.currentLocation ?? 'Aventura en progreso'),
-                const SizedBox(height: 8),
-                Text('${snapshot.pokedexCaught} capturados'),
-              ],
-            ),
-          ),
-          if (leadPokemon != null)
-            Column(
-              children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: scheme.surface,
-                    border: Border.all(color: scheme.primary, width: 2.5),
-                  ),
-                  child: ClipOval(
-                    child: SpriteImage(
-                      path: leadPokemonPath,
-                      size: 64,
-                      fallbackIcon: Icons.catching_pokemon,
+                child: SpriteImage(
+                  path: protagonistPath,
+                  size: 68,
+                  fallbackIcon: Icons.person_outline,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      snapshot.currentLocation ?? 'Aventura en progreso',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Text('${snapshot.pokedexCaught} capturados'),
+                  ],
                 ),
-                Text(
-                  'Nv. ${leadPokemon!['level'] ?? '—'}',
-                  style: Theme.of(context).textTheme.labelMedium,
+              ),
+              if (leadPokemon != null) ...[
+                const SizedBox(width: 12),
+                Column(
+                  children: [
+                    Container(
+                      width: 76,
+                      height: 76,
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: scheme.surface,
+                        border: Border.all(color: scheme.primary, width: 2.5),
+                      ),
+                      child: ClipOval(
+                        child: SpriteImage(
+                          path: leadPokemonPath,
+                          size: 64,
+                          fallbackIcon: Icons.catching_pokemon,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Nv. ${leadPokemon!['level'] ?? '—'}',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ],
                 ),
               ],
-            ),
+            ],
+          ),
         ],
       ),
     );
@@ -812,6 +829,7 @@ class _PokemonTile extends StatelessWidget {
   final bool shiny;
   final List<PokemonMoveType> types;
   final VoidCallback? onTap;
+
   const _PokemonTile({
     required this.name,
     required this.detail,
@@ -827,38 +845,104 @@ class _PokemonTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        leading: _ThemedSpriteFrame(
-          spritePath: spritePath,
-          size: 62,
-          fallbackIcon: Icons.catching_pokemon,
-        ),
-        title: Row(
-          children: [
-            Expanded(child: Text(name)),
-            if (types.isNotEmpty) PokemonTypeIcons(types: types, size: 22),
-            if (shiny) const Text('✨', semanticsLabel: 'Shiny'),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(detail),
-            if (hpDetail?.isNotEmpty == true) Text(hpDetail!),
-            if (friendship != null)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.favorite, color: Colors.red, size: 18),
-                  const SizedBox(width: 4),
-                  Text('$friendship/255'),
-                ],
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              _ThemedSpriteFrame(
+                spritePath: spritePath,
+                size: 62,
+                fallbackIcon: Icons.catching_pokemon,
               ),
-          ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (types.isNotEmpty)
+                          PokemonTypeIcons(types: types, size: 22),
+                        if (shiny)
+                          const Text('✨', semanticsLabel: 'Shiny'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _PokemonSummaryMetric(value: detail),
+                        if (hpDetail?.isNotEmpty == true)
+                          _PokemonSummaryMetric(value: hpDetail!),
+                        if (friendship != null)
+                          _PokemonSummaryMetric(
+                            value: '$friendship/255',
+                            icon: Icons.favorite,
+                            iconColor: Colors.red,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right),
+              ],
+            ],
+          ),
         ),
-        trailing: onTap == null ? null : const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _PokemonSummaryMetric extends StatelessWidget {
+  final String value;
+  final IconData? icon;
+  final Color? iconColor;
+
+  const _PokemonSummaryMetric({
+    required this.value,
+    this.icon,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: .34),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: iconColor),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
