@@ -8,6 +8,7 @@ import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
 import 'pokemon_emerald_memory_reader.dart';
+import 'pokemon_gen4_save_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
 
 class RuntimeRtcDiagnostics {
@@ -133,6 +134,24 @@ class PokemonControllerMemoryReader {
   PokemonMemorySnapshot? capture() {
     if (!controller.isAttached) return null;
     _captureRtcDiagnostics();
+
+    if (profile.isGen4) {
+      final int size = controller.inspectMemoryRegions()['saveRam'] ?? 0;
+      if (size < PokemonGen4SaveReader.requiredSaveSize) {
+        PokemonGen4SaveReader.recordDiagnostic(
+          'SAVE_RAM too small: $size/${PokemonGen4SaveReader.requiredSaveSize}',
+        );
+        return null;
+      }
+      return PokemonGen4SaveReader(
+        profile: profile,
+        read: (int offset, int length) => controller.readMemoryBlock(
+          memoryId: LibretroMemoryRegion.saveRam,
+          offset: offset,
+          length: length,
+        ),
+      ).capture();
+    }
 
     if (profile.version == PokemonGameVersion.emerald ||
         profile.version == PokemonGameVersion.ruby ||

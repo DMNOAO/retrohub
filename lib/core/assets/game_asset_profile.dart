@@ -9,10 +9,12 @@ enum PokemonAssetGame {
   rubySapphire,
   emerald,
   fireRedLeafGreen,
+  diamondPearl,
+  platinum,
   unsupported,
 }
 
-enum PokemonAssetRegion { kanto, johto, hoenn, unknown }
+enum PokemonAssetRegion { kanto, johto, hoenn, sinnoh, unknown }
 
 class GameAssetProfile {
   final PokemonAssetGame game;
@@ -49,6 +51,40 @@ class GameAssetProfile {
         .replaceAll(RegExp(r'[_\-]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+
+    if (value.contains('platino') || value.contains('platinum')) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.platinum,
+        region: PokemonAssetRegion.sinnoh,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/platinum',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Sinnoh',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/lucas_pt.png',
+        rivalAsset: 'assets/sprites/characters/rivals/barry_pt.gif',
+        championAsset:
+            'assets/sprites/characters/champions/cynthia_sinnoh.gif',
+        sourceTitle: value,
+      );
+    }
+    if (value.contains('diamante') ||
+        value.contains('diamond') ||
+        value.contains('perla') ||
+        value.contains('pearl')) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.diamondPearl,
+        region: PokemonAssetRegion.sinnoh,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/diamond-pearl',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Sinnoh',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/lucas_dp.png',
+        rivalAsset: 'assets/sprites/characters/rivals/barry_dp.png',
+        championAsset:
+            'assets/sprites/characters/champions/cynthia_sinnoh.gif',
+        sourceTitle: value,
+      );
+    }
 
     if (value.contains('amarillo') || value.contains('yellow')) {
       return GameAssetProfile(game: PokemonAssetGame.yellow, region: PokemonAssetRegion.kanto, pokemonSpriteSet: savedSpriteSet ?? 'gb/yellow', pokemonExtension: 'png', trainerSpriteSet: 'gb', protagonistAsset: 'assets/sprites/characters/protagonists/red_yellow.png', rivalAsset: 'assets/sprites/characters/rivals/blue_kanto_yellow.png', championAsset: 'assets/sprites/characters/champions/blue_kanto_yellow.png', sourceTitle: value);

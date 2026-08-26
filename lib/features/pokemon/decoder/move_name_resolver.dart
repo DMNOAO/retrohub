@@ -1,12 +1,17 @@
+import 'gen4_move_names.dart';
+
 abstract final class MoveNameResolver {
   static String resolve(int moveId) =>
-      _spanishNames[moveId] ?? 'Movimiento #$moveId';
+      _spanishNames[moveId] ?? gen4MoveNames[moveId] ?? 'Movimiento #$moveId';
 
   static int? idForName(String name) {
     final normalized = _normalize(name);
     final alias = _aliases[normalized];
     if (alias != null) return alias;
     for (final entry in _spanishNames.entries) {
+      if (_normalize(entry.value) == normalized) return entry.key;
+    }
+    for (final entry in gen4MoveNames.entries) {
       if (_normalize(entry.value) == normalized) return entry.key;
     }
     return null;

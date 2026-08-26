@@ -1,6 +1,6 @@
 import '../memory/pokemon_addresses.dart';
 
-enum PokemonGeneration { gen1, gen2, gen3, unsupported }
+enum PokemonGeneration { gen1, gen2, gen3, gen4, unsupported }
 
 enum PokemonGameVersion {
   redBlue,
@@ -13,6 +13,9 @@ enum PokemonGameVersion {
   emerald,
   fireRed,
   leafGreen,
+  diamond,
+  pearl,
+  platinum,
   unsupported,
 }
 
@@ -34,6 +37,7 @@ class PokemonGameProfile {
   bool get isGen1 => generation == PokemonGeneration.gen1;
   bool get isGen2 => generation == PokemonGeneration.gen2;
   bool get isGen3 => generation == PokemonGeneration.gen3;
+  bool get isGen4 => generation == PokemonGeneration.gen4;
 
   /// Identifica la versión usando primero el título conservado en la
   /// biblioteca. La ruta queda como respaldo para instalaciones antiguas
@@ -43,6 +47,36 @@ class PokemonGameProfile {
     required String romPath,
   }) {
     final normalized = _normalize('$gameTitle $romPath');
+
+    // Gen IV debe resolverse antes que Gen I/II. Los títulos de ROM suelen
+    // incluir región, revisión y grupo, pero conservan el nombre del juego.
+    if (normalized.contains('platinum') || normalized.contains('platino')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.platinum,
+        generation: PokemonGeneration.gen4,
+        displayName: 'Pokémon Platinum',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('diamond') || normalized.contains('diamante')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.diamond,
+        generation: PokemonGeneration.gen4,
+        displayName: 'Pokémon Diamond',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('pearl') || normalized.contains('perla')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.pearl,
+        generation: PokemonGeneration.gen4,
+        displayName: 'Pokémon Pearl',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
 
     // Gen III debe resolverse antes que Gen I: "FireRed" también contiene
     // "red" y, sin este orden, podía activar por error el mapa de memoria

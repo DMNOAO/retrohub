@@ -75,11 +75,40 @@ flutter:
     - assets/sprites/pokemon/gba/ruby_sapphire/
     - assets/sprites/pokemon/gba/ruby_sapphire/shiny/
 
-    - assets/sprites/pokemon/nds/black_white/
+    - assets/sprites/pokemon/nds/diamond-pearl/
+    - assets/sprites/pokemon/nds/diamond-pearl/frame2/
+    - assets/sprites/pokemon/nds/diamond-pearl/female/
+    - assets/sprites/pokemon/nds/diamond-pearl/female/frame2/
+    - assets/sprites/pokemon/nds/diamond-pearl/shiny/
+    - assets/sprites/pokemon/nds/diamond-pearl/shiny/frame2/
+    - assets/sprites/pokemon/nds/diamond-pearl/shiny/female/
+    - assets/sprites/pokemon/nds/diamond-pearl/shiny/female/frame2/
+    - assets/sprites/pokemon/nds/platinum/
+    - assets/sprites/pokemon/nds/platinum/frame2/
+    - assets/sprites/pokemon/nds/platinum/female/
+    - assets/sprites/pokemon/nds/platinum/female/frame2/
+    - assets/sprites/pokemon/nds/platinum/shiny/
+    - assets/sprites/pokemon/nds/platinum/shiny/frame2/
+    - assets/sprites/pokemon/nds/platinum/shiny/female/
+    - assets/sprites/pokemon/nds/platinum/shiny/female/frame2/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/frame2/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/female/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/female/frame2/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/shiny/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/shiny/frame2/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/shiny/female/
+    - assets/sprites/pokemon/nds/heartgold-soulsilver/shiny/female/frame2/
+    - assets/sprites/pokemon/nds/gen5/
+    - assets/sprites/pokemon/nds/gen5/female/
+    - assets/sprites/pokemon/nds/gen5/shiny/
+    - assets/sprites/pokemon/nds/gen5/shiny/female/
 
     - assets/sprites/badges/Kanto/
     - assets/sprites/badges/Johto/
     - assets/sprites/badges/Hoenn/
+    - assets/sprites/badges/Sinnoh/
+    - assets/sprites/badges/Unova/
 
     - assets/sprites/characters/protagonists/
     - assets/sprites/characters/rivals/
@@ -88,17 +117,29 @@ flutter:
     - assets/sprites/characters/gym_leaders/gbc/
     - assets/sprites/characters/gym_leaders/gba/Kanto/
     - assets/sprites/characters/gym_leaders/gba/Hoenn/
+    - assets/sprites/characters/gym_leaders/nds/Johto/
+    - assets/sprites/characters/gym_leaders/nds/Sinnoh/
+    - assets/sprites/characters/gym_leaders/nds/Unova/
     - assets/sprites/characters/elite_four/gb/
     - assets/sprites/characters/elite_four/gbc/
     - assets/sprites/characters/elite_four/gba/Kanto/
     - assets/sprites/characters/elite_four/gba/Hoenn/
+    - assets/sprites/characters/elite_four/nds/Johto/
+    - assets/sprites/characters/elite_four/nds/Sinnoh/
+    - assets/sprites/characters/elite_four/nds/Unova/
     - assets/sprites/characters/villains/rocket/
     - assets/sprites/characters/villains/magma/
     - assets/sprites/characters/villains/aqua/
+    - assets/sprites/characters/villains/galactic/
+    - assets/sprites/characters/villains/plasma/
     - assets/sprites/characters/trainers/gb/
     - assets/sprites/characters/trainers/gbc/
     - assets/sprites/characters/trainers/gba/Kanto/
     - assets/sprites/characters/trainers/gba/Hoenn/
+    - assets/sprites/characters/trainers/nds/Johto/
+    - assets/sprites/characters/trainers/nds/Sinnoh/
+    - assets/sprites/characters/trainers/nds/Unova/
     - assets/sprites/characters/special_trainers/
     - assets/sprites/characters/special_trainers/battle_frontier/emerald/
+    - assets/sprites/characters/special_trainers/battle_frontier/nds/
     - assets/sprites/frontier_symbols/emerald/

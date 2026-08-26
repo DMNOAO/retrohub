@@ -15,4 +15,14 @@ void main() {
       <int>{25, 252, 386},
     );
   });
+
+  test('Sinnoh regional Pokédexes keep their game-specific sizes', () {
+    expect(sinnohDiamondPearlPokedexOrder, hasLength(151));
+    expect(sinnohDiamondPearlPokedexOrder.toSet(), hasLength(151));
+    expect(sinnohPlatinumPokedexOrder, hasLength(210));
+    expect(sinnohPlatinumPokedexOrder.toSet(), hasLength(210));
+    expect(sinnohDiamondPearlPokedexOrder.first, 387);
+    expect(sinnohDiamondPearlPokedexOrder.last, 490);
+    expect(sinnohPlatinumPokedexOrder.last, 487);
+  });
 }

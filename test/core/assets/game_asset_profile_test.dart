@@ -2,6 +2,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retrohub/core/assets/game_asset_profile.dart';
 
 void main() {
+  test('reconoce los juegos de Sinnoh como bitácoras Pokémon', () {
+    final diamond = GameAssetProfile.fromTitle(
+      title: 'Pokémon Diamante',
+      console: 'NDS',
+    );
+    final platinum = GameAssetProfile.fromTitle(
+      title: 'Pokémon Platinum',
+      console: 'NDS',
+    );
+
+    expect(diamond.game, PokemonAssetGame.diamondPearl);
+    expect(platinum.game, PokemonAssetGame.platinum);
+    expect(diamond.region, PokemonAssetRegion.sinnoh);
+    expect(platinum.region, PokemonAssetRegion.sinnoh);
+    expect(diamond.pokemonSpriteSet, 'nds/diamond-pearl');
+    expect(platinum.pokemonSpriteSet, 'nds/platinum');
+    expect(
+      diamond.rivalAsset,
+      'assets/sprites/characters/rivals/barry_dp.png',
+    );
+    expect(
+      platinum.rivalAsset,
+      'assets/sprites/characters/rivals/barry_pt.gif',
+    );
+    expect(diamond.supportsPokemonJournal, isTrue);
+    expect(platinum.supportsPokemonJournal, isTrue);
+  });
+
   test('usa los recursos GBA para Rojo Fuego con guiones bajos', () {
     final profile = GameAssetProfile.fromTitle(
       title: 'Pokemon_Rojo_Fuego',

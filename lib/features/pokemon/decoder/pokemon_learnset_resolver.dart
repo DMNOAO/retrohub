@@ -1,4 +1,5 @@
 import '../../../core/assets/game_asset_profile.dart';
+import 'gen4_learnset_data.dart';
 
 abstract final class PokemonLearnsetResolver {
   static List<int> tutorMoves(GameAssetProfile profile, int pokemonId) =>
@@ -20,6 +21,10 @@ abstract final class PokemonLearnsetResolver {
   }
 
   static int baseSpeciesId(GameAssetProfile profile, int pokemonId) {
+    if (profile.game == PokemonAssetGame.diamondPearl ||
+        profile.game == PokemonAssetGame.platinum) {
+      return gen4BaseSpecies[pokemonId] ?? pokemonId;
+    }
     final maximumId = switch (profile.game) {
       PokemonAssetGame.redBlue || PokemonAssetGame.yellow => 151,
       PokemonAssetGame.gold ||
@@ -51,10 +56,12 @@ abstract final class PokemonLearnsetResolver {
       PokemonAssetGame.rubySapphire => 5,
       PokemonAssetGame.emerald => 6,
       PokemonAssetGame.fireRedLeafGreen => 7,
+      PokemonAssetGame.diamondPearl || PokemonAssetGame.platinum => 8,
       _ => 0,
     };
 
   static const Map<int, Map<int, List<int>>> _tutorByGroup = <int, Map<int, List<int>>>{
+    8: gen4TutorMoves,
     4: <int, List<int>>{
       4: <int>[53],
       5: <int>[53],
@@ -959,6 +966,7 @@ abstract final class PokemonLearnsetResolver {
   };
 
   static const Map<int, Map<int, List<int>>> _eggByGroup = <int, Map<int, List<int>>>{
+    8: gen4EggMoves,
     3: <int, List<int>>{
       1: <int>[13, 80, 113, 130, 204, 219],
       4: <int>[44, 157, 187, 200, 246, 251],

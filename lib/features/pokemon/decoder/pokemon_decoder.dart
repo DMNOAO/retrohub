@@ -3,6 +3,7 @@ import '../models/pokemon_location.dart';
 import 'locations/gen2/crystal_locations.g.dart';
 import 'locations/gen3/emerald_locations.dart';
 import 'locations/gen3/fire_red_leaf_green_locations.dart';
+import 'locations/gen4/platinum_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -86,7 +87,9 @@ class PokemonDecoder {
   }
 
   static int dexId(PokemonGameProfile profile, int species) =>
-      profile.isGen2 ? species : (_gen1InternalToDex[species] ?? 0);
+      profile.isGen2 || profile.isGen4
+      ? species
+      : (_gen1InternalToDex[species] ?? 0);
 
   static String pokemonName(int dexId) =>
       dexId > 0 && dexId < _names.length ? _names[dexId] : 'Pokémon #$dexId';
@@ -111,6 +114,7 @@ class PokemonDecoder {
       final String map = (mapId & 0xFF).toString().padLeft(2, '0');
       return 'Mapa $group:$map';
     }
+    if (profile.isGen4) return 'Zona $mapId';
     if (profile.isGen2) {
       return 'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
     }
@@ -140,13 +144,22 @@ class PokemonDecoder {
       case PokemonGameVersion.fireRed:
       case PokemonGameVersion.leafGreen:
         return fireRedLeafGreenLocations[mapId];
+      case PokemonGameVersion.diamond:
+      case PokemonGameVersion.pearl:
+        return null;
+      case PokemonGameVersion.platinum:
+        return platinumLocations[mapId];
       case PokemonGameVersion.unsupported:
         return null;
     }
   }
 
   static String badgeName(PokemonGameProfile profile, int index) {
-    final names = profile.version == PokemonGameVersion.fireRed ||
+    final names = profile.isGen4
+        ? (profile.version == PokemonGameVersion.platinum
+              ? _sinnohPlatinumBadges
+              : _sinnohBadges)
+        : profile.version == PokemonGameVersion.fireRed ||
             profile.version == PokemonGameVersion.leafGreen
         ? _kantoBadges
         : profile.isGen3
@@ -202,6 +215,26 @@ class PokemonDecoder {
     'Medalla Pantano',
     'Medalla Volcán',
     'Medalla Tierra',
+  ];
+  static const _sinnohBadges = <String>[
+    'Medalla Lignito',
+    'Medalla Bosque',
+    'Medalla Adoquín',
+    'Medalla Ciénaga',
+    'Medalla Reliquia',
+    'Medalla Mina',
+    'Medalla Carámbano',
+    'Medalla Faro',
+  ];
+  static const _sinnohPlatinumBadges = <String>[
+    'Medalla Lignito',
+    'Medalla Bosque',
+    'Medalla Reliquia',
+    'Medalla Adoquín',
+    'Medalla Ciénaga',
+    'Medalla Mina',
+    'Medalla Carámbano',
+    'Medalla Faro',
   ];
 
   static const Map<int, String> _characters = <int, String>{
@@ -819,6 +852,113 @@ class PokemonDecoder {
     'Rayquaza',
     'Jirachi',
     'Deoxys',
+    'Turtwig',
+    'Grotle',
+    'Torterra',
+    'Chimchar',
+    'Monferno',
+    'Infernape',
+    'Piplup',
+    'Prinplup',
+    'Empoleon',
+    'Starly',
+    'Staravia',
+    'Staraptor',
+    'Bidoof',
+    'Bibarel',
+    'Kricketot',
+    'Kricketune',
+    'Shinx',
+    'Luxio',
+    'Luxray',
+    'Budew',
+    'Roserade',
+    'Cranidos',
+    'Rampardos',
+    'Shieldon',
+    'Bastiodon',
+    'Burmy',
+    'Wormadam',
+    'Mothim',
+    'Combee',
+    'Vespiquen',
+    'Pachirisu',
+    'Buizel',
+    'Floatzel',
+    'Cherubi',
+    'Cherrim',
+    'Shellos',
+    'Gastrodon',
+    'Ambipom',
+    'Drifloon',
+    'Drifblim',
+    'Buneary',
+    'Lopunny',
+    'Mismagius',
+    'Honchkrow',
+    'Glameow',
+    'Purugly',
+    'Chingling',
+    'Stunky',
+    'Skuntank',
+    'Bronzor',
+    'Bronzong',
+    'Bonsly',
+    'Mime Jr.',
+    'Happiny',
+    'Chatot',
+    'Spiritomb',
+    'Gible',
+    'Gabite',
+    'Garchomp',
+    'Munchlax',
+    'Riolu',
+    'Lucario',
+    'Hippopotas',
+    'Hippowdon',
+    'Skorupi',
+    'Drapion',
+    'Croagunk',
+    'Toxicroak',
+    'Carnivine',
+    'Finneon',
+    'Lumineon',
+    'Mantyke',
+    'Snover',
+    'Abomasnow',
+    'Weavile',
+    'Magnezone',
+    'Lickilicky',
+    'Rhyperior',
+    'Tangrowth',
+    'Electivire',
+    'Magmortar',
+    'Togekiss',
+    'Yanmega',
+    'Leafeon',
+    'Glaceon',
+    'Gliscor',
+    'Mamoswine',
+    'Porygon-Z',
+    'Gallade',
+    'Probopass',
+    'Dusknoir',
+    'Froslass',
+    'Rotom',
+    'Uxie',
+    'Mesprit',
+    'Azelf',
+    'Dialga',
+    'Palkia',
+    'Heatran',
+    'Regigigas',
+    'Giratina',
+    'Cresselia',
+    'Phione',
+    'Manaphy',
+    'Darkrai',
+    'Shaymin',
+    'Arceus',
   ];
 
   // --- Fase 4.1A: tabla de ubicaciones propia por versión de juego. ---

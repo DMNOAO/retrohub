@@ -2,6 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retrohub/features/pokemon/models/pokemon_game_profile.dart';
 
 void main() {
+  group('PokemonGameProfile Gen IV', () {
+    for (final testCase in <(String, PokemonGameVersion)>[
+      ('Pokémon Diamante.nds', PokemonGameVersion.diamond),
+      ('Pokemon Pearl (USA).nds', PokemonGameVersion.pearl),
+      ('Pokémon Platino.nds', PokemonGameVersion.platinum),
+    ]) {
+      test('detecta ${testCase.$1}', () {
+        final profile = PokemonGameProfile.fromRomPath(testCase.$1);
+
+        expect(profile.version, testCase.$2);
+        expect(profile.generation, PokemonGeneration.gen4);
+        expect(profile.isGen4, isTrue);
+      });
+    }
+  });
+
   group('PokemonGameProfile Gen III', () {
     final cases = <({
       String identity,

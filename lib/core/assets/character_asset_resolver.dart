@@ -12,6 +12,11 @@ class CharacterAssetResolver {
     required String trainerClass,
   }) {
     final normalized = _normalize(trainerClass);
+    final ndsVariant = _ndsTrainerVariant(profile.trainerSpriteSet);
+    if (ndsVariant != null) {
+      return 'assets/sprites/characters/trainers/'
+          '${profile.trainerSpriteSet}/${normalized}_${ndsVariant.$1}.${ndsVariant.$2}';
+    }
     final fileName = _trainerFileNames[normalized] ?? normalized;
     return 'assets/sprites/characters/trainers/${profile.trainerSpriteSet}/$fileName.png';
   }
@@ -86,6 +91,11 @@ class CharacterAssetResolver {
     if (normalized.contains('campeon') || normalized.contains('lance')) {
       return champion(profile);
     }
+    final ndsVariant = _ndsTrainerVariant(profile.trainerSpriteSet);
+    if (ndsVariant != null) {
+      return 'assets/sprites/characters/trainers/'
+          '${profile.trainerSpriteSet}/${normalized}_${ndsVariant.$1}.${ndsVariant.$2}';
+    }
     final fileName = _trainerFileNames[normalized];
     if (fileName == null) return null;
     return 'assets/sprites/characters/trainers/${profile.trainerSpriteSet}/$fileName.png';
@@ -93,6 +103,10 @@ class CharacterAssetResolver {
 
   static String specialTrainer(String key) {
     final normalized = _normalize(key);
+    if (normalized == 'caril' || normalized == 'fero') {
+      return 'assets/sprites/characters/special_trainers/'
+          '${normalized}_unova_bw2.gif';
+    }
     if (normalized == 'red_mt_silver' || normalized == 'eusine') {
       return 'assets/sprites/characters/special_trainers/$normalized.png';
     }
@@ -102,6 +116,14 @@ class CharacterAssetResolver {
   static String villain({required String team, required String character}) {
     return 'assets/sprites/characters/villains/${_normalize(team)}/${_normalize(character)}.png';
   }
+
+  static (String, String)? _ndsTrainerVariant(String spriteSet) =>
+      switch (spriteSet) {
+        'nds/Johto' => ('johto_hgss', 'png'),
+        'nds/Sinnoh' => ('sinnoh_gen4', 'png'),
+        'nds/Unova' => ('unova_gen5', 'gif'),
+        _ => null,
+      };
 
   static String _normalize(String value) {
     return value
