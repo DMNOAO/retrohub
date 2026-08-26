@@ -86,6 +86,10 @@ class JournalSectionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final availableWidth = MediaQuery.sizeOf(context).width - 16;
+    final itemWidth = sections.length <= 4
+        ? availableWidth / sections.length
+        : 92.0;
     return Material(
       color: scheme.surfaceContainer,
       elevation: 10,
@@ -106,7 +110,7 @@ class JournalSectionBar extends StatelessWidget {
                   onTap: () => onSelected(section.id),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    width: 92,
+                    width: itemWidth,
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
                       color: active ? scheme.primaryContainer : Colors.transparent,
