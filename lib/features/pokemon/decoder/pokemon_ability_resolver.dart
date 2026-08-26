@@ -1,5 +1,6 @@
 import '../../../core/assets/game_asset_profile.dart';
 import 'gen4_ability_data.dart';
+import 'gen5_ability_data.dart';
 
 class PokemonAbilityInfo {
   final int id;
@@ -15,7 +16,9 @@ abstract final class PokemonAbilityResolver {
       profile.game == PokemonAssetGame.fireRedLeafGreen ||
       profile.game == PokemonAssetGame.diamondPearl ||
       profile.game == PokemonAssetGame.platinum ||
-      profile.game == PokemonAssetGame.heartGoldSoulSilver;
+      profile.game == PokemonAssetGame.heartGoldSoulSilver ||
+      profile.game == PokemonAssetGame.blackWhite ||
+      profile.game == PokemonAssetGame.black2White2;
 
   static List<PokemonAbilityInfo> possible(
     GameAssetProfile profile,
@@ -25,15 +28,28 @@ abstract final class PokemonAbilityResolver {
     final isGen4 = profile.game == PokemonAssetGame.diamondPearl ||
         profile.game == PokemonAssetGame.platinum ||
         profile.game == PokemonAssetGame.heartGoldSoulSilver;
-    final species = isGen4 ? gen4SpeciesAbilities : _speciesAbilities;
+    final isGen5 = profile.game == PokemonAssetGame.blackWhite ||
+        profile.game == PokemonAssetGame.black2White2;
+    final species = isGen5
+        ? gen5SpeciesAbilities
+        : isGen4
+        ? gen4SpeciesAbilities
+        : _speciesAbilities;
     return (species[pokemonId] ?? const <int>[])
-        .map((id) => _abilities[id] ?? _gen4Ability(id))
+        .map((id) => isGen5
+            ? _gen5Ability(id)
+            : _abilities[id] ?? _gen4Ability(id))
         .whereType<PokemonAbilityInfo>()
         .toList(growable: false);
   }
 
   static PokemonAbilityInfo? _gen4Ability(int id) {
     final data = gen4Abilities[id];
+    return data == null ? null : PokemonAbilityInfo(id, data.$1, data.$2);
+  }
+
+  static PokemonAbilityInfo? _gen5Ability(int id) {
+    final data = gen5Abilities[id];
     return data == null ? null : PokemonAbilityInfo(id, data.$1, data.$2);
   }
 

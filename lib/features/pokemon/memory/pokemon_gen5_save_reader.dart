@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/pokemon_hatch_cycles.dart';
 import '../decoder/pokemon_decoder.dart';
+import '../decoder/gen5_ability_data.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
@@ -145,7 +146,10 @@ final class PokemonGen5SaveReader {
     final int friendship = data[growth + 0x0C];
     final int ivFlags = _u32(data, attacks + 0x10);
     final bool isEgg = (ivFlags & (1 << 30)) != 0;
-    final bool hiddenAbility = (data[attacks + 0x1A] & 1) != 0;
+    final int abilityId = data[growth + 0x0D];
+    final List<int> speciesAbilities =
+        gen5SpeciesAbilities[species] ?? const <int>[];
+    final int abilityIndex = speciesAbilities.indexOf(abilityId);
     final List<int> stats = _cryptWords(encrypted.sublist(0x88), personality);
     final int level = stats[4];
     if (level <= 0 || level > 100) return null;
@@ -179,7 +183,7 @@ final class PokemonGen5SaveReader {
       speed: _u16(stats, 14),
       specialAttack: _u16(stats, 16),
       specialDefense: _u16(stats, 18),
-      abilitySlot: hiddenAbility ? 3 : (personality & 1) + 1,
+      abilitySlot: abilityIndex >= 0 ? abilityIndex + 1 : 1,
       personality: personality,
       heldItemId: _u16(data, growth + 2),
       eggCyclesRemaining: isEgg ? friendship : null,

@@ -1,5 +1,6 @@
 import '../../../core/assets/game_asset_profile.dart';
 import 'blue_pokedex_generated.dart';
+import 'black_white_pokedex_generated.dart';
 import 'crystal_pokedex_generated.dart';
 import 'emerald_pokedex_generated.dart';
 import 'fire_red_leaf_green_pokedex_generated.dart';
@@ -48,6 +49,10 @@ class PokedexDetailData {
       case PokemonAssetGame.platinum:
       case PokemonAssetGame.heartGoldSoulSilver:
         return platinumGeneratedSpecies[pokemonId] ??
+            const PokedexSpeciesDetail();
+      case PokemonAssetGame.blackWhite:
+      case PokemonAssetGame.black2White2:
+        return blackWhiteGeneratedSpecies[pokemonId] ??
             const PokedexSpeciesDetail();
       default:
         return const PokedexSpeciesDetail();
