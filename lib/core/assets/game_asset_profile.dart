@@ -69,6 +69,8 @@ class GameAssetProfile {
         trainerSpriteSet: 'nds/Johto',
         protagonistAsset:
             'assets/sprites/characters/protagonists/ethan_hgss.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/lyra_hgss.png',
         rivalAsset: 'assets/sprites/characters/rivals/silver_hgss.gif',
         championAsset:
             'assets/sprites/characters/champions/lance_johto_hgss.gif',
