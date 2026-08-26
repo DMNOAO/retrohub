@@ -109,6 +109,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           romPath: game.romPath,
         );
     final bool supportsPokemonJournal =
+        pokemonProfile.isGen4 ||
         CoreLoader.isGameBoyRom(game.romPath) ||
         (CoreLoader.isGbaRom(game.romPath) &&
             (pokemonProfile.version == PokemonGameVersion.emerald ||

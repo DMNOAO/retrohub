@@ -23,7 +23,12 @@ class ProfileStats {
   const ProfileStats(this.games, this.events, this.entries);
 }
 
-final profileStatsProvider = FutureProvider<ProfileStats>((ref) async {
+// Perfil se desmonta al cambiar de pestaña. autoDispose evita conservar una
+// lectura antigua (por ejemplo, la lista vacía anterior a importar una ROM) y
+// vuelve a consultar la misma base de datos que usa Biblioteca al regresar.
+final profileStatsProvider = FutureProvider.autoDispose<ProfileStats>((
+  ref,
+) async {
   final db = ref.watch(databaseProvider);
   return ProfileStats(
     await db.getAllGames(),
