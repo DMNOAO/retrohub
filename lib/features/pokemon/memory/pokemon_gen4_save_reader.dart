@@ -317,7 +317,7 @@ final class _Gen4Layout {
       generalSize: 0xC100,
       trainerOffset: 0x64,
       dexOffset: 0x12DC,
-      partyOffset: 0x98,
+      partyOffset: 0x94,
       mapOffset: 0x1238,
       xOffset: 0x1240,
       yOffset: 0x1244,
