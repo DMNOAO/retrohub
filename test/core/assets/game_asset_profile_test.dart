@@ -72,6 +72,30 @@ void main() {
     expect(profile.pokemonSpriteSet, 'gba/fire_red_leaf_green');
   });
 
+  test('detecta Blanco y Negro con los recursos de Teselia', () {
+    final profile = GameAssetProfile.fromTitle(
+      title: 'Pokémon Negro',
+      console: 'NDS',
+    );
+
+    expect(profile.game, PokemonAssetGame.blackWhite);
+    expect(profile.region, PokemonAssetRegion.unova);
+    expect(profile.pokemonSpriteSet, 'nds/gen5');
+    expect(profile.protagonistAsset, contains('hilbert_bw'));
+    expect(profile.femaleProtagonistAsset, contains('hilda_bw'));
+    expect(profile.rivalAsset, contains('cheren_bw'));
+  });
+
+  test('las secuelas se resuelven antes que Blanco y Negro', () {
+    final profile = GameAssetProfile.fromTitle(
+      title: 'Pokémon Blanco 2',
+      console: 'NDS',
+    );
+
+    expect(profile.game, PokemonAssetGame.black2White2);
+    expect(profile.championAsset, contains('iris_unova_bw2'));
+  });
+
   test('habilita la bitácora únicamente para perfiles Pokémon compatibles', () {
     final pokemon = GameAssetProfile.fromTitle(
       title: 'Pokemon_Esmeralda',

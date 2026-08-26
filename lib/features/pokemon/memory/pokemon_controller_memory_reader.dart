@@ -9,6 +9,7 @@ import '../models/pokemon_memory_snapshot.dart';
 import 'pokemon_addresses.dart';
 import 'pokemon_emerald_memory_reader.dart';
 import 'pokemon_gen4_save_reader.dart';
+import 'pokemon_gen5_save_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
 
 class RuntimeRtcDiagnostics {
@@ -135,6 +136,23 @@ class PokemonControllerMemoryReader {
     if (!controller.isAttached) return null;
     _captureRtcDiagnostics();
 
+    if (profile.isGen5) {
+      final int size = controller.inspectMemoryRegions()['saveRam'] ?? 0;
+      if (size < PokemonGen5SaveReader.requiredSaveSize) {
+        PokemonGen5SaveReader.recordDiagnostic(
+          'SAVE_RAM too small: $size/${PokemonGen5SaveReader.requiredSaveSize}',
+        );
+        return null;
+      }
+      return PokemonGen5SaveReader(
+        profile: profile,
+        read: (int offset, int length) => controller.readMemoryBlock(
+          memoryId: LibretroMemoryRegion.saveRam,
+          offset: offset,
+          length: length,
+        ),
+      ).capture();
+    }
     if (profile.isGen4) {
       final int size = controller.inspectMemoryRegions()['saveRam'] ?? 0;
       if (size < PokemonGen4SaveReader.requiredSaveSize) {

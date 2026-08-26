@@ -26,7 +26,9 @@ abstract final class PokemonFormResolver {
       profile.game == PokemonAssetGame.heartGoldSoulSilver;
 
   static bool _supportsAlternateForms(GameAssetProfile profile) =>
-      _supportsGen3(profile) || _supportsGen4(profile);
+      _supportsGen3(profile) || _supportsGen4(profile) ||
+      profile.game == PokemonAssetGame.blackWhite ||
+      profile.game == PokemonAssetGame.black2White2;
 
   static List<PokemonFormInfo> forPokemon(
     GameAssetProfile profile,
@@ -92,6 +94,26 @@ abstract final class PokemonFormResolver {
       492: const [
         PokemonFormInfo(id: 'land', label: 'Tierra'),
         PokemonFormInfo(id: 'sky', label: 'Cielo', suffix: 'sky'),
+      ],
+      550: const [
+        PokemonFormInfo(id: 'red-striped', label: 'Raya roja'),
+        PokemonFormInfo(id: 'blue-striped', label: 'Raya azul', suffix: 'blue-striped'),
+      ],
+      555: const [
+        PokemonFormInfo(id: 'standard', label: 'Normal'),
+        PokemonFormInfo(id: 'zen', label: 'Daruma', suffix: 'zen'),
+      ],
+      585: const [
+        PokemonFormInfo(id: 'spring', label: 'Primavera', suffix: 'spring'),
+        PokemonFormInfo(id: 'summer', label: 'Verano', suffix: 'summer'),
+        PokemonFormInfo(id: 'autumn', label: 'Otoño', suffix: 'autumn'),
+        PokemonFormInfo(id: 'winter', label: 'Invierno', suffix: 'winter'),
+      ],
+      586: const [
+        PokemonFormInfo(id: 'spring', label: 'Primavera', suffix: 'spring'),
+        PokemonFormInfo(id: 'summer', label: 'Verano', suffix: 'summer'),
+        PokemonFormInfo(id: 'autumn', label: 'Otoño', suffix: 'autumn'),
+        PokemonFormInfo(id: 'winter', label: 'Invierno', suffix: 'winter'),
       ],
     };
 

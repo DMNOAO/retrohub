@@ -1,6 +1,6 @@
 import '../memory/pokemon_addresses.dart';
 
-enum PokemonGeneration { gen1, gen2, gen3, gen4, unsupported }
+enum PokemonGeneration { gen1, gen2, gen3, gen4, gen5, unsupported }
 
 enum PokemonGameVersion {
   redBlue,
@@ -18,6 +18,10 @@ enum PokemonGameVersion {
   platinum,
   heartGold,
   soulSilver,
+  black,
+  white,
+  black2,
+  white2,
   unsupported,
 }
 
@@ -40,6 +44,7 @@ class PokemonGameProfile {
   bool get isGen2 => generation == PokemonGeneration.gen2;
   bool get isGen3 => generation == PokemonGeneration.gen3;
   bool get isGen4 => generation == PokemonGeneration.gen4;
+  bool get isGen5 => generation == PokemonGeneration.gen5;
 
   /// Identifica la versión usando primero el título conservado en la
   /// biblioteca. La ruta queda como respaldo para instalaciones antiguas
@@ -49,6 +54,51 @@ class PokemonGameProfile {
     required String romPath,
   }) {
     final normalized = _normalize('$gameTitle $romPath');
+
+    // Las secuelas deben resolverse antes que Blanco/Negro: sus nombres
+    // contienen el título del juego original, pero el layout es distinto.
+    if (normalized.contains('black 2') ||
+        normalized.contains('black2') ||
+        normalized.contains('negro 2') ||
+        normalized.contains('negro2')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.black2,
+        generation: PokemonGeneration.gen5,
+        displayName: 'Pokémon Black 2',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('white 2') ||
+        normalized.contains('white2') ||
+        normalized.contains('blanco 2') ||
+        normalized.contains('blanco2')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.white2,
+        generation: PokemonGeneration.gen5,
+        displayName: 'Pokémon White 2',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('black') || normalized.contains('negro')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.black,
+        generation: PokemonGeneration.gen5,
+        displayName: 'Pokémon Black',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('white') || normalized.contains('blanco')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.white,
+        generation: PokemonGeneration.gen5,
+        displayName: 'Pokémon White',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
 
     // Gen IV debe resolverse antes que Gen I/II. Los títulos de ROM suelen
     // incluir región, revisión y grupo, pero conservan el nombre del juego.

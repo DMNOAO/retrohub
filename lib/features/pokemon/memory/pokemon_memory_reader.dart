@@ -7,6 +7,7 @@ import 'pokemon_addresses.dart';
 import 'pokemon_controller_memory_reader.dart';
 import 'pokemon_memory_profile_resolver.dart';
 import 'pokemon_gen4_save_reader.dart';
+import 'pokemon_gen5_save_reader.dart';
 
 class PokemonMemoryReader {
   final LibretroBridge bridge;
@@ -15,6 +16,23 @@ class PokemonMemoryReader {
   const PokemonMemoryReader({required this.bridge, required this.profile});
 
   PokemonMemorySnapshot? capture() {
+    if (profile.isGen5) {
+      final int size = bridge.memoryRegionSize(LibretroMemoryRegion.saveRam);
+      if (size < PokemonGen5SaveReader.requiredSaveSize) {
+        PokemonGen5SaveReader.recordDiagnostic(
+          'SAVE_RAM too small: $size/${PokemonGen5SaveReader.requiredSaveSize}',
+        );
+        return null;
+      }
+      return PokemonGen5SaveReader(
+        profile: profile,
+        read: (int offset, int length) => bridge.readMemoryBlock(
+          memoryId: LibretroMemoryRegion.saveRam,
+          offset: offset,
+          length: length,
+        ),
+      ).capture();
+    }
     if (profile.isGen4) {
       final int size = bridge.memoryRegionSize(LibretroMemoryRegion.saveRam);
       if (size < PokemonGen4SaveReader.requiredSaveSize) {
