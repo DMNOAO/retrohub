@@ -101,10 +101,12 @@ final class PokemonGen5SaveReader {
     }
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
+    final List<int> defeatedTrainers = _defeatedTrainerIds();
 
     recordDiagnostic(
       'SAVE_RAM=$requiredSaveSize bytes, BW blocks valid, '
-      'party=$count, decoded=${party.length}, seen=${seen.length}, caught=${caught.length}',
+      'party=$count, decoded=${party.length}, seen=${seen.length}, '
+      'caught=${caught.length}, defeatedTrainers=${defeatedTrainers.length}',
     );
 
     return PokemonMemorySnapshot(
@@ -125,7 +127,7 @@ final class PokemonGen5SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
-      defeatedTrainerIds: _defeatedTrainerIds(),
+      defeatedTrainerIds: defeatedTrainers,
       gamePlayTimeMinutes: _u16(trainer, 0x24) * 60 + trainer[0x26],
     );
   }
