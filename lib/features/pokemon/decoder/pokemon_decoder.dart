@@ -5,6 +5,7 @@ import 'locations/gen3/emerald_locations.dart';
 import 'locations/gen3/fire_red_leaf_green_locations.dart';
 import 'locations/gen4/heart_gold_soul_silver_locations.dart';
 import 'locations/gen4/platinum_locations.dart';
+import 'locations/gen5/black_white_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -154,6 +155,7 @@ class PokemonDecoder {
         return heartGoldSoulSilverLocations[mapId];
       case PokemonGameVersion.black:
       case PokemonGameVersion.white:
+        return blackWhiteLocations[mapId];
       case PokemonGameVersion.black2:
       case PokemonGameVersion.white2:
         return null;
