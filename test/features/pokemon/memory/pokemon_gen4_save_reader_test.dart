@@ -27,11 +27,10 @@ void main() {
     _u16(bytes, 0x1244, 9);
     bytes[dex + 4] = 0x01;
     bytes[dex + 4 + 0x40] = 0x03;
-    _u32(bytes, 0x98, 6);
-    _u32(bytes, 0x9C, 1);
+    _u32(bytes, 0x98, 1);
     _writePartyPokemon(
       bytes,
-      offset: 0xA0,
+      offset: 0x9C,
       personality: 0,
       trainerId: 0x12345678,
       species: 393,
