@@ -46,6 +46,49 @@ void main() {
       'assets/sprites/characters/trainers/nds/Sinnoh/'
       'pokemon_ranger_mujer_sinnoh_gen4.png',
     );
+    expect(
+      CharacterAssetResolver.trainer(
+        profile: profile,
+        trainerClass: 'Chico ninja',
+      ),
+      'assets/sprites/characters/trainers/nds/Sinnoh/'
+      'chico_ninja_sinnoh_gen4.png',
+    );
+    expect(
+      CharacterAssetResolver.trainer(
+        profile: profile,
+        trainerClass: 'Obrero',
+      ),
+      'assets/sprites/characters/trainers/nds/Sinnoh/'
+      'obrero_sinnoh_gen4.png',
+    );
+  });
+
+  test('distingue las dos variantes de Operario de Teselia', () {
+    const profile = GameAssetProfile(
+      game: PokemonAssetGame.unsupported,
+      region: PokemonAssetRegion.unknown,
+      pokemonSpriteSet: 'nds/gen5',
+      pokemonExtension: 'png',
+      trainerSpriteSet: 'nds/Unova',
+    );
+
+    expect(
+      CharacterAssetResolver.trainer(
+        profile: profile,
+        trainerClass: 'Operario',
+      ),
+      'assets/sprites/characters/trainers/nds/Unova/'
+      'operario_unova_gen5.gif',
+    );
+    expect(
+      CharacterAssetResolver.trainer(
+        profile: profile,
+        trainerClass: 'Operario (hielo)',
+      ),
+      'assets/sprites/characters/trainers/nds/Unova/'
+      'operario_hielo_unova_gen5.gif',
+    );
   });
 
   test('resuelve los Jefes Metro de Blanco 2 y Negro 2', () {
