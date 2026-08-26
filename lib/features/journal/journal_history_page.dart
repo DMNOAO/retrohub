@@ -214,12 +214,7 @@ class _HistoryHeader extends StatelessWidget {
   }
 }
 
-class _HistoryFilters extends StatelessWidget {
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  const _HistoryFilters({required this.selected, required this.onSelected});
-
+abstract final class _HistoryFilters {
   static const values = <JournalSection>[
     JournalSection('all', 'Todo', Icons.view_timeline_outlined),
     JournalSection('pokemon', 'Pokedex', Icons.catching_pokemon),
@@ -228,26 +223,6 @@ class _HistoryFilters extends StatelessWidget {
     JournalSection('system', 'Sesiones', Icons.save_outlined),
     JournalSection('manual', 'Notas', Icons.edit_note_outlined),
   ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Row(
-        children: values.map((item) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(item.$2),
-              selected: selected == item.$1,
-              onSelected: (_) => onSelected(item.$1),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
 }
 
 class _TimelineCard extends StatelessWidget {
