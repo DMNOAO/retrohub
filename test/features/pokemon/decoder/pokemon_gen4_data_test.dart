@@ -37,7 +37,14 @@ void main() {
     expect(PokemonTypeResolver.resolve(profile, 392), <PokemonMoveType>[PokemonMoveType.fire, PokemonMoveType.fighting]);
   });
 
-  test('muestra Ruta 201 en lugar del identificador crudo de Platino', () {
+  test('muestra ubicaciones de Sinnoh en Diamante, Perla y Platino', () {
+    final PokemonGameProfile diamond = PokemonGameProfile.fromRomPath('Pokemon Diamond.nds');
+    final PokemonGameProfile pearl = PokemonGameProfile.fromRomPath('Pokemon Pearl.nds');
+    expect(PokemonDecoder.mapName(diamond, 411), 'Pueblo Hojaverde');
+    expect(PokemonDecoder.locationFor(diamond, 411)?.kind, PokemonLocationKind.city);
+    expect(PokemonDecoder.mapName(pearl, 418), 'Pueblo Arena');
+
+   
     final PokemonGameProfile profile = PokemonGameProfile.fromRomPath('Pokemon Platinum.nds');
     expect(PokemonDecoder.mapName(profile, 342), 'Ruta 201');
     expect(PokemonDecoder.locationFor(profile, 342)?.kind, PokemonLocationKind.route);
