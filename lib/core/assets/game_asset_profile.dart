@@ -11,6 +11,7 @@ enum PokemonAssetGame {
   fireRedLeafGreen,
   diamondPearl,
   platinum,
+  heartGoldSoulSilver,
   unsupported,
 }
 
@@ -52,6 +53,26 @@ class GameAssetProfile {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
+    if (value.contains('heartgold') ||
+        value.contains('heart gold') ||
+        value.contains('soulsilver') ||
+        value.contains('soul silver') ||
+        value.contains('oro heart') ||
+        value.contains('plata soul')) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.heartGoldSoulSilver,
+        region: PokemonAssetRegion.johto,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/heartgold-soulsilver',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Johto',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/ethan_hgss.png',
+        rivalAsset: 'assets/sprites/characters/rivals/silver_hgss.gif',
+        championAsset:
+            'assets/sprites/characters/champions/lance_johto_hgss.gif',
+        sourceTitle: value,
+      );
+    }
     if (value.contains('platino') || value.contains('platinum')) {
       return GameAssetProfile(
         game: PokemonAssetGame.platinum,

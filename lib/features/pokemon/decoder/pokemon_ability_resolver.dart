@@ -14,7 +14,8 @@ abstract final class PokemonAbilityResolver {
       profile.game == PokemonAssetGame.emerald ||
       profile.game == PokemonAssetGame.fireRedLeafGreen ||
       profile.game == PokemonAssetGame.diamondPearl ||
-      profile.game == PokemonAssetGame.platinum;
+      profile.game == PokemonAssetGame.platinum ||
+      profile.game == PokemonAssetGame.heartGoldSoulSilver;
 
   static List<PokemonAbilityInfo> possible(
     GameAssetProfile profile,
@@ -22,7 +23,8 @@ abstract final class PokemonAbilityResolver {
   ) {
     if (!supports(profile)) return const <PokemonAbilityInfo>[];
     final isGen4 = profile.game == PokemonAssetGame.diamondPearl ||
-        profile.game == PokemonAssetGame.platinum;
+        profile.game == PokemonAssetGame.platinum ||
+        profile.game == PokemonAssetGame.heartGoldSoulSilver;
     final species = isGen4 ? gen4SpeciesAbilities : _speciesAbilities;
     return (species[pokemonId] ?? const <int>[])
         .map((id) => _abilities[id] ?? _gen4Ability(id))

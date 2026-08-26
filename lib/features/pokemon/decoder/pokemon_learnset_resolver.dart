@@ -22,7 +22,8 @@ abstract final class PokemonLearnsetResolver {
 
   static int baseSpeciesId(GameAssetProfile profile, int pokemonId) {
     if (profile.game == PokemonAssetGame.diamondPearl ||
-        profile.game == PokemonAssetGame.platinum) {
+        profile.game == PokemonAssetGame.platinum ||
+        profile.game == PokemonAssetGame.heartGoldSoulSilver) {
       return gen4BaseSpecies[pokemonId] ?? pokemonId;
     }
     final maximumId = switch (profile.game) {
@@ -56,7 +57,9 @@ abstract final class PokemonLearnsetResolver {
       PokemonAssetGame.rubySapphire => 5,
       PokemonAssetGame.emerald => 6,
       PokemonAssetGame.fireRedLeafGreen => 7,
-      PokemonAssetGame.diamondPearl || PokemonAssetGame.platinum => 8,
+      PokemonAssetGame.diamondPearl ||
+      PokemonAssetGame.platinum ||
+      PokemonAssetGame.heartGoldSoulSilver => 8,
       _ => 0,
     };
 

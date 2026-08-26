@@ -143,8 +143,10 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                       caughtIds: _caughtPokemonIds,
                       nationalDexUnlocked:
                           profile.game != PokemonAssetGame.emerald &&
-                              profile.game !=
+                          profile.game !=
                                   PokemonAssetGame.fireRedLeafGreen &&
+                              profile.game !=
+                                  PokemonAssetGame.heartGoldSoulSilver &&
                               profile.region != PokemonAssetRegion.sinnoh ||
                           _nationalDexUnlocked,
                     )

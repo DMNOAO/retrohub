@@ -12,7 +12,9 @@ class PokedexEvolutionData {
       PokemonAssetGame.rubySapphire ||
       PokemonAssetGame.emerald ||
       PokemonAssetGame.fireRedLeafGreen => 3,
-      PokemonAssetGame.diamondPearl || PokemonAssetGame.platinum => 4,
+      PokemonAssetGame.diamondPearl ||
+      PokemonAssetGame.platinum ||
+      PokemonAssetGame.heartGoldSoulSilver => 4,
       _ => 0,
     };
     if (generation == 0) return '';

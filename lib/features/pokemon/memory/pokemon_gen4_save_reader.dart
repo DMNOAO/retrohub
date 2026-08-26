@@ -95,7 +95,7 @@ final class PokemonGen4SaveReader {
     );
     _lastPartyDecodeError = null;
     final List<PokemonPartyMember> party = _readParty(general, layout);
-    final int declaredPartyCount = _u32(general, layout.partyOffset);
+    final int declaredPartyCount = general[layout.partyOffset];
     recordDiagnostic(
       'SAVE_RAM=${requiredSaveSize} bytes, block=0x${blockBase.toRadixString(16)}, '
       'party=$declaredPartyCount, decoded=${party.length}'
@@ -112,7 +112,10 @@ final class PokemonGen4SaveReader {
       playerX: _u16(general, layout.xOffset),
       playerY: _u16(general, layout.yOffset),
       money: _u32(general, layout.trainerOffset + 0x14),
-      badgesMask: general[layout.trainerOffset + 0x1A],
+      badgesMask: general[layout.trainerOffset + 0x1A] |
+          (layout.hasKantoBadges
+              ? general[layout.trainerOffset + 0x1F] << 8
+              : 0),
       pokedexSeen: seen.length,
       pokedexCaught: caught.length,
       nationalDexUnlocked: (progressFlags & 0x02) != 0,
@@ -129,7 +132,7 @@ final class PokemonGen4SaveReader {
     List<int> general,
     _Gen4Layout layout,
   ) {
-    final int count = _u32(general, layout.partyOffset);
+    final int count = general[layout.partyOffset];
     if (count < 0 || count > 6) {
       recordDiagnostic('invalid party count: $count');
       return const <PokemonPartyMember>[];
@@ -302,6 +305,7 @@ final class _Gen4Layout {
   final int mapOffset;
   final int xOffset;
   final int yOffset;
+  final bool hasKantoBadges;
 
   const _Gen4Layout({
     required this.generalSize,
@@ -311,6 +315,7 @@ final class _Gen4Layout {
     required this.mapOffset,
     required this.xOffset,
     required this.yOffset,
+    this.hasKantoBadges = false,
   });
 
   static _Gen4Layout? forVersion(PokemonGameVersion version) => switch (version) {
@@ -332,6 +337,17 @@ final class _Gen4Layout {
       xOffset: 0x1288,
       yOffset: 0x128C,
     ),
+    PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver =>
+      const _Gen4Layout(
+        generalSize: 0xF628,
+        trainerOffset: 0x64,
+        dexOffset: 0x12B8,
+        partyOffset: 0x94,
+        mapOffset: 0x1234,
+        xOffset: 0x123C,
+        yOffset: 0x1240,
+        hasKantoBadges: true,
+      ),
     _ => null,
   };
 }

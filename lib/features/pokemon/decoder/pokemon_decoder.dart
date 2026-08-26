@@ -149,14 +149,21 @@ class PokemonDecoder {
         return null;
       case PokemonGameVersion.platinum:
         return platinumLocations[mapId];
+      case PokemonGameVersion.heartGold:
+      case PokemonGameVersion.soulSilver:
+        return null;
       case PokemonGameVersion.unsupported:
         return null;
     }
   }
 
   static String badgeName(PokemonGameProfile profile, int index) {
+    final isHgss = profile.version == PokemonGameVersion.heartGold ||
+        profile.version == PokemonGameVersion.soulSilver;
     final names = profile.isGen4
-        ? (profile.version == PokemonGameVersion.platinum
+        ? (isHgss
+              ? _gen2Badges
+              : profile.version == PokemonGameVersion.platinum
               ? _sinnohPlatinumBadges
               : _sinnohBadges)
         : profile.version == PokemonGameVersion.fireRed ||

@@ -46,6 +46,7 @@ class PokedexDetailData {
             const PokedexSpeciesDetail();
       case PokemonAssetGame.diamondPearl:
       case PokemonAssetGame.platinum:
+      case PokemonAssetGame.heartGoldSoulSilver:
         return platinumGeneratedSpecies[pokemonId] ??
             const PokedexSpeciesDetail();
       default:

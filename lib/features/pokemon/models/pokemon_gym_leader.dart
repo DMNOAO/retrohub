@@ -43,6 +43,11 @@ class GymLeaderAssetResolver {
         return badgeIndex < _sinnohPlatinum.length
             ? _sinnohPlatinum[badgeIndex]
             : null;
+      case PokemonGameVersion.heartGold:
+      case PokemonGameVersion.soulSilver:
+        return badgeIndex < _johtoKantoHgss.length
+            ? _johtoKantoHgss[badgeIndex]
+            : null;
       case PokemonGameVersion.unsupported:
         return null;
     }
@@ -152,6 +157,25 @@ class GymLeaderAssetResolver {
       'Lectro',
       'assets/sprites/characters/gym_leaders/nds/Sinnoh/volkner_sinnoh.gif',
     ),
+  ];
+
+  static const List<GymLeaderInfo> _johtoKantoHgss = <GymLeaderInfo>[
+    GymLeaderInfo('Pegaso', 'assets/sprites/characters/gym_leaders/nds/Johto/falkner_johto_hgss.gif'),
+    GymLeaderInfo('Antón', 'assets/sprites/characters/gym_leaders/nds/Johto/bugsy_johto_hgss.gif'),
+    GymLeaderInfo('Blanca', 'assets/sprites/characters/gym_leaders/nds/Johto/whitney_johto_hgss.gif'),
+    GymLeaderInfo('Morti', 'assets/sprites/characters/gym_leaders/nds/Johto/morty_johto_hgss.gif'),
+    GymLeaderInfo('Aníbal', 'assets/sprites/characters/gym_leaders/nds/Johto/chuck_johto_hgss.gif'),
+    GymLeaderInfo('Yasmina', 'assets/sprites/characters/gym_leaders/nds/Johto/jasmine_johto_hgss.gif'),
+    GymLeaderInfo('Fredo', 'assets/sprites/characters/gym_leaders/nds/Johto/pryce_johto_hgss.gif'),
+    GymLeaderInfo('Débora', 'assets/sprites/characters/gym_leaders/nds/Johto/clair_johto_hgss.gif'),
+    GymLeaderInfo('Brock', 'assets/sprites/characters/gym_leaders/nds/Johto/brock_kanto_hgss.gif'),
+    GymLeaderInfo('Misty', 'assets/sprites/characters/gym_leaders/nds/Johto/misty_kanto_hgss.gif'),
+    GymLeaderInfo('Lt. Surge', 'assets/sprites/characters/gym_leaders/nds/Johto/lt_surge_kanto_hgss.gif'),
+    GymLeaderInfo('Erika', 'assets/sprites/characters/gym_leaders/nds/Johto/erika_kanto_hgss.gif'),
+    GymLeaderInfo('Janine', 'assets/sprites/characters/gym_leaders/nds/Johto/janine_kanto_hgss.gif'),
+    GymLeaderInfo('Sabrina', 'assets/sprites/characters/gym_leaders/nds/Johto/sabrina_kanto_hgss.gif'),
+    GymLeaderInfo('Blaine', 'assets/sprites/characters/gym_leaders/nds/Johto/blaine_kanto_hgss.gif'),
+    GymLeaderInfo('Blue', 'assets/sprites/characters/gym_leaders/nds/Johto/blue_kanto_hgss.gif'),
   ];
 
   static const List<GymLeaderInfo> _hoennRubySapphire = <GymLeaderInfo>[

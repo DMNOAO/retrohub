@@ -8,7 +8,8 @@ abstract final class PokemonTypeResolver {
     int pokemonId,
   ) {
     if (profile.game == PokemonAssetGame.diamondPearl ||
-        profile.game == PokemonAssetGame.platinum) {
+        profile.game == PokemonAssetGame.platinum ||
+        profile.game == PokemonAssetGame.heartGoldSoulSilver) {
       return gen4PokemonTypes[pokemonId] ?? const <PokemonMoveType>[];
     }
     final overrides = switch (profile.game) {

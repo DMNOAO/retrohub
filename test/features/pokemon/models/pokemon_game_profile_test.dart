@@ -7,6 +7,8 @@ void main() {
       ('Pokémon Diamante.nds', PokemonGameVersion.diamond),
       ('Pokemon Pearl (USA).nds', PokemonGameVersion.pearl),
       ('Pokémon Platino.nds', PokemonGameVersion.platinum),
+      ('Pokemon HeartGold (USA).nds', PokemonGameVersion.heartGold),
+      ('Pokémon SoulSilver.nds', PokemonGameVersion.soulSilver),
     ]) {
       test('detecta ${testCase.$1}', () {
         final profile = PokemonGameProfile.fromRomPath(testCase.$1);

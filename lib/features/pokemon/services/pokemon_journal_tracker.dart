@@ -78,6 +78,11 @@ class PokemonJournalTracker {
     required this.playTimeMinutes,
   });
 
+  static bool _hasJohtoKantoBadges(PokemonGameProfile profile) =>
+      profile.isGen2 ||
+      profile.version == PokemonGameVersion.heartGold ||
+      profile.version == PokemonGameVersion.soulSilver;
+
   void start() {
     _timer ??= Timer.periodic(
       const Duration(seconds: 2),
@@ -452,7 +457,9 @@ class PokemonJournalTracker {
 
     final newBadges = current.badgesMask & ~previous.badgesMask;
     if (newBadges != 0) {
-      for (var index = 0; index < (current.profile.isGen2 ? 16 : 8); index++) {
+      for (var index = 0;
+          index < (_hasJohtoKantoBadges(current.profile) ? 16 : 8);
+          index++) {
         if ((newBadges & (1 << index)) == 0) continue;
         final badgeName = PokemonDecoder.badgeName(current.profile, index);
 
@@ -474,7 +481,8 @@ class PokemonJournalTracker {
               'leaderName': leader.name,
               'spritePath': leader.spritePath,
               'badgeIndex': index,
-              if (current.profile.isGen2) 'gen2BadgeOrder': 'canonical',
+              if (_hasJohtoKantoBadges(current.profile))
+                'gen2BadgeOrder': 'canonical',
             },
           );
         }
@@ -489,7 +497,8 @@ class PokemonJournalTracker {
             'newBadgesMask': newBadges,
             'badgeIndex': index,
             'badgeName': badgeName,
-            if (current.profile.isGen2) 'gen2BadgeOrder': 'canonical',
+            if (_hasJohtoKantoBadges(current.profile))
+              'gen2BadgeOrder': 'canonical',
           },
         );
       }
@@ -965,7 +974,7 @@ class PokemonJournalTracker {
   }
 
   bool _isKantoUnlocked(PokemonMemorySnapshot value) {
-    if (!value.profile.isGen2) return false;
+    if (!_hasJohtoKantoBadges(value.profile)) return false;
     final johtoMask = value.badgesMask & 0xff;
     final kantoMask = (value.badgesMask >> 8) & 0xff;
     return johtoMask == 0xff || kantoMask != 0 || value.badgeCount >= 8;
@@ -1005,7 +1014,7 @@ class PokemonJournalTracker {
         badgesJson: Value(
           jsonEncode(
             List.generate(
-              value.profile.isGen2 ? 16 : 8,
+              _hasJohtoKantoBadges(value.profile) ? 16 : 8,
               (index) => <String, dynamic>{
                 'index': index,
                 'obtained': (value.badgesMask & (1 << index)) != 0,

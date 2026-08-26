@@ -25,4 +25,15 @@ void main() {
     expect(sinnohDiamondPearlPokedexOrder.last, 490);
     expect(sinnohPlatinumPokedexOrder.last, 487);
   });
+
+  test('HGSS keeps the updated 256-species Johto order', () {
+    expect(johtoHeartGoldSoulSilverPokedexOrder, hasLength(256));
+    expect(johtoHeartGoldSoulSilverPokedexOrder.toSet(), hasLength(256));
+    expect(
+      johtoHeartGoldSoulSilverPokedexOrder.take(9),
+      <int>[152, 153, 154, 155, 156, 157, 158, 159, 160],
+    );
+    expect(johtoHeartGoldSoulSilverPokedexOrder.last, 251);
+    expect(johtoHeartGoldSoulSilverPokedexOrder, containsAll(<int>[424, 469, 473]));
+  });
 }

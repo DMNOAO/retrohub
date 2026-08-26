@@ -45,6 +45,23 @@ void main() {
     );
   });
 
+  test('reconoce HGSS y usa sus sprites NDS de Johto', () {
+    final profile = GameAssetProfile.fromTitle(
+      title: 'Pokémon HeartGold',
+      console: 'NDS',
+    );
+
+    expect(profile.game, PokemonAssetGame.heartGoldSoulSilver);
+    expect(profile.region, PokemonAssetRegion.johto);
+    expect(profile.pokemonSpriteSet, 'nds/heartgold-soulsilver');
+    expect(profile.trainerSpriteSet, 'nds/Johto');
+    expect(
+      profile.rivalAsset,
+      'assets/sprites/characters/rivals/silver_hgss.gif',
+    );
+    expect(profile.supportsPokemonJournal, isTrue);
+  });
+
   test('usa los recursos GBA para Verde Hoja con guiones', () {
     final profile = GameAssetProfile.fromTitle(
       title: 'Pokemon-Verde-Hoja',
