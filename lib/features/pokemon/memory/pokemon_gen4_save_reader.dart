@@ -18,6 +18,8 @@ final class PokemonGen4SaveReader {
   static const int _partitionSize = 0x40000;
   static const int _dexRegionSize = 0x40;
   static const int _partyPokemonSize = 0xEC;
+  static const int _trainerDefeatedFlagStart = 0x550;
+  static const int _trainerDefeatedFlagCount = 0xB60 - _trainerDefeatedFlagStart;
   static const List<String> _blockOrders = <String>[
     'ABCD', 'ABDC', 'ACBD', 'ACDB', 'ADBC', 'ADCB',
     'BACD', 'BADC', 'BCAD', 'BCDA', 'BDAC', 'BDCA',
@@ -123,6 +125,7 @@ final class PokemonGen4SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
+      defeatedTrainerIds: _defeatedTrainerIds(general, layout.eventFlagOffset),
       gamePlayTimeMinutes:
           _u16(general, layout.trainerOffset + 0x22) * 60 +
           general[layout.trainerOffset + 0x24],
@@ -277,6 +280,16 @@ final class PokemonGen4SaveReader {
     return result;
   }
 
+  static List<int> _defeatedTrainerIds(List<int> general, int eventFlagOffset) {
+    final List<int> result = <int>[];
+    for (int trainerId = 1; trainerId < _trainerDefeatedFlagCount; trainerId++) {
+      final int flag = _trainerDefeatedFlagStart + trainerId;
+      final int offset = eventFlagOffset + (flag >> 3);
+      if ((general[offset] & (1 << (flag & 7))) != 0) result.add(trainerId);
+    }
+    return result;
+  }
+
   static String _decodeUtf16(
     List<int> bytes,
     int offset,
@@ -303,6 +316,7 @@ final class _Gen4Layout {
   final int trainerOffset;
   final int dexOffset;
   final int partyOffset;
+  final int eventFlagOffset;
   final int mapOffset;
   final int xOffset;
   final int yOffset;
@@ -313,6 +327,7 @@ final class _Gen4Layout {
     required this.trainerOffset,
     required this.dexOffset,
     required this.partyOffset,
+    required this.eventFlagOffset,
     required this.mapOffset,
     required this.xOffset,
     required this.yOffset,
@@ -325,6 +340,7 @@ final class _Gen4Layout {
       trainerOffset: 0x64,
       dexOffset: 0x12DC,
       partyOffset: 0x94,
+      eventFlagOffset: 0xFDC,
       mapOffset: 0x1238,
       xOffset: 0x1240,
       yOffset: 0x1244,
@@ -334,6 +350,7 @@ final class _Gen4Layout {
       trainerOffset: 0x68,
       dexOffset: 0x1328,
       partyOffset: 0x9C,
+      eventFlagOffset: 0xFEC,
       mapOffset: 0x1280,
       xOffset: 0x1288,
       yOffset: 0x128C,
@@ -344,6 +361,7 @@ final class _Gen4Layout {
         trainerOffset: 0x64,
         dexOffset: 0x12B8,
         partyOffset: 0x94,
+        eventFlagOffset: 0x10C4,
         mapOffset: 0x1234,
         xOffset: 0x123C,
         yOffset: 0x1240,
