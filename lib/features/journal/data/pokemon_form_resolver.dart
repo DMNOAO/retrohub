@@ -15,16 +15,24 @@ class PokemonFormInfo {
 }
 
 abstract final class PokemonFormResolver {
+  static bool _supportsGen3(GameAssetProfile profile) =>
+      profile.game == PokemonAssetGame.rubySapphire ||
+      profile.game == PokemonAssetGame.emerald ||
+      profile.game == PokemonAssetGame.fireRedLeafGreen;
+
   static bool _supportsGen4(GameAssetProfile profile) =>
       profile.game == PokemonAssetGame.diamondPearl ||
       profile.game == PokemonAssetGame.platinum ||
       profile.game == PokemonAssetGame.heartGoldSoulSilver;
 
+  static bool _supportsAlternateForms(GameAssetProfile profile) =>
+      _supportsGen3(profile) || _supportsGen4(profile);
+
   static List<PokemonFormInfo> forPokemon(
     GameAssetProfile profile,
     int pokemonId,
   ) {
-    if (!_supportsGen4(profile)) return const <PokemonFormInfo>[];
+    if (!_supportsAlternateForms(profile)) return const <PokemonFormInfo>[];
 
     if (pokemonId == 201) {
       return <PokemonFormInfo>[
@@ -88,7 +96,7 @@ abstract final class PokemonFormResolver {
     };
 
     final result = <PokemonFormInfo>[...?forms[pokemonId]];
-    if (_femaleSpriteIds.contains(pokemonId)) {
+    if (_supportsGen4(profile) && _femaleSpriteIds.contains(pokemonId)) {
       result.add(const PokemonFormInfo(id: 'female', label: 'Hembra', female: true));
     }
     return result;
