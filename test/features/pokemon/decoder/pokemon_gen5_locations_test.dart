@@ -22,6 +22,16 @@ void main() {
     }
   });
 
+  test('Blanco y Negro traducen el exterior inicial a Ruta 2', () {
+    for (final PokemonGameProfile profile in <PokemonGameProfile>[black, white]) {
+      expect(PokemonDecoder.mapName(profile, 319), 'Ruta 2');
+      expect(
+        PokemonDecoder.locationFor(profile, 319)?.kind,
+        PokemonLocationKind.route,
+      );
+    }
+  });
+
   test('un MapHeader de Gen V desconocido conserva el respaldo Zona', () {
     expect(PokemonDecoder.mapName(white, 9999), 'Zona 9999');
   });

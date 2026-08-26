@@ -101,7 +101,7 @@ final class PokemonGen5SaveReader {
     }
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
-    final List<int> defeatedTrainers = _defeatedTrainerIds();
+    final List<int> defeatedTrainers = _changedTrainerFlagIds();
 
     recordDiagnostic(
       'SAVE_RAM=$requiredSaveSize bytes, BW blocks valid, '
@@ -132,7 +132,13 @@ final class PokemonGen5SaveReader {
     );
   }
 
-  List<int> _defeatedTrainerIds() {
+  /// Devuelve índices relativos de banderas persistentes de combate.
+  ///
+  /// A diferencia de Gen IV, en Blanco/Negro el índice de la bandera del NPC
+  /// no coincide necesariamente con el trainerId de su entrada en TRData.
+  /// Se conserva en defeatedTrainerIds por compatibilidad con el snapshot,
+  /// pero el tracker debe tratarlo como trainerFlagId.
+  List<int> _changedTrainerFlagIds() {
     final List<int> flags = read(_eventFlagOffset, 0xB60 ~/ 8);
     if (flags.length != 0xB60 ~/ 8) return const <int>[];
     final List<int> result = <int>[];

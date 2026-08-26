@@ -738,11 +738,22 @@ class PokemonJournalTracker {
       title: gameTitle,
       console: 'NDS',
     );
-    final trainer = await NdsTrainerResolver.resolve(
-      romPath: romPath,
-      version: current.profile.version,
-      trainerId: trainerId,
-    );
+    // Gen V entrega aquí el índice relativo de la bandera del NPC, no el
+    // trainerId de TRData. Resolverlo como trainerId puede atribuir el combate
+    // a otro personaje (por ejemplo, Bel). Gen IV sí mantiene la relación.
+    final trainer = current.profile.isGen5
+        ? null
+        : await NdsTrainerResolver.resolve(
+            romPath: romPath,
+            version: current.profile.version,
+            trainerId: trainerId,
+          );
+    if (current.profile.isGen5) {
+      developer.log(
+        'Gen V trainer victory flag=$trainerId map=${current.currentMapId}',
+        name: 'RetroHub.PokemonJournalTracker',
+      );
+    }
     await _insertEvent(
       type: 'trainer_defeated',
       title: trainer == null
@@ -751,7 +762,10 @@ class PokemonJournalTracker {
       description: 'Venció a un entrenador durante su aventura.',
       metadata: <String, dynamic>{
         ..._metadata(current),
-        'trainerId': trainerId,
+        if (current.profile.isGen5)
+          'trainerFlagId': trainerId
+        else
+          'trainerId': trainerId,
         'trainerClassId': trainer?.classId,
         'trainerClass': trainer?.className,
         'generation': generation,
