@@ -88,11 +88,11 @@ final class PokemonGen4SaveReader {
     List<int> general,
     _Gen4Layout layout,
   ) {
-    final int count = _u32(general, layout.partyOffset + 4);
+    final int count = _u32(general, layout.partyOffset);
     if (count < 0 || count > 6) return const <PokemonPartyMember>[];
 
     final List<PokemonPartyMember> party = <PokemonPartyMember>[];
-    final int pokemonStart = layout.partyOffset + 8;
+    final int pokemonStart = layout.partyOffset + 4;
     for (int slot = 0; slot < count; slot++) {
       final int offset = pokemonStart + slot * _partyPokemonSize;
       if (offset + _partyPokemonSize > general.length) break;
