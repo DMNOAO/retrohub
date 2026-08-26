@@ -146,7 +146,6 @@ class PokemonDecoder {
         return fireRedLeafGreenLocations[mapId];
       case PokemonGameVersion.diamond:
       case PokemonGameVersion.pearl:
-        return null;
       case PokemonGameVersion.platinum:
         return platinumLocations[mapId];
       case PokemonGameVersion.heartGold:
