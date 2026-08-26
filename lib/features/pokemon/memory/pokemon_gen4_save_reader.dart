@@ -98,9 +98,14 @@ final class PokemonGen4SaveReader {
     _lastPartyDecodeError = null;
     final List<PokemonPartyMember> party = _readParty(general, layout);
     final int declaredPartyCount = general[layout.partyOffset];
+    final List<int> defeatedTrainers = _defeatedTrainerIds(
+      general,
+      layout.eventFlagOffset,
+    );
     recordDiagnostic(
       'SAVE_RAM=${requiredSaveSize} bytes, block=0x${blockBase.toRadixString(16)}, '
-      'party=$declaredPartyCount, decoded=${party.length}'
+      'party=$declaredPartyCount, decoded=${party.length}, '
+      'defeatedTrainers=${defeatedTrainers.length}'
       '${_lastPartyDecodeError == null ? '' : ', error=$_lastPartyDecodeError'}',
     );
 
@@ -125,7 +130,7 @@ final class PokemonGen4SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
-      defeatedTrainerIds: _defeatedTrainerIds(general, layout.eventFlagOffset),
+      defeatedTrainerIds: defeatedTrainers,
       gamePlayTimeMinutes:
           _u16(general, layout.trainerOffset + 0x22) * 60 +
           general[layout.trainerOffset + 0x24],
