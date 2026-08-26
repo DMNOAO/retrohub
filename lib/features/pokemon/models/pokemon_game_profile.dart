@@ -16,6 +16,8 @@ enum PokemonGameVersion {
   diamond,
   pearl,
   platinum,
+  heartGold,
+  soulSilver,
   unsupported,
 }
 
@@ -55,6 +57,30 @@ class PokemonGameProfile {
         version: PokemonGameVersion.platinum,
         generation: PokemonGeneration.gen4,
         displayName: 'Pokémon Platinum',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('heartgold') ||
+        normalized.contains('heart gold') ||
+        normalized.contains('oro heartgold') ||
+        normalized.contains('oro heart gold')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.heartGold,
+        generation: PokemonGeneration.gen4,
+        displayName: 'Pokémon HeartGold',
+        memoryMapVerified: false,
+        addresses: null,
+      );
+    }
+    if (normalized.contains('soulsilver') ||
+        normalized.contains('soul silver') ||
+        normalized.contains('plata soulsilver') ||
+        normalized.contains('plata soul silver')) {
+      return const PokemonGameProfile(
+        version: PokemonGameVersion.soulSilver,
+        generation: PokemonGeneration.gen4,
+        displayName: 'Pokémon SoulSilver',
         memoryMapVerified: false,
         addresses: null,
       );

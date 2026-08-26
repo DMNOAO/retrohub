@@ -10,9 +10,20 @@ void main() {
   test('decodifica texto internacional de Gen IV', () {
     expect(
       PokemonGen4TextDecoder.decodeWords(
-        const <int>[0x12B, 0x145, 0x170, 0x192, 0x1DE, 0x121, 0xFFFF],
+        const <int>[
+          0x12B,
+          0x145,
+          0x170,
+          0x190,
+          0x176,
+          0x196,
+          0x192,
+          0x1DE,
+          0x121,
+          0xFFFF,
+        ],
       ),
-      'AaÑñ 0',
+      'AaÑñ×÷ó 0',
     );
   });
 
@@ -24,9 +35,46 @@ void main() {
     expect(PokemonTypeResolver.resolve(profile, 390), <PokemonMoveType>[PokemonMoveType.fire]);
     expect(PokemonTypeResolver.resolve(profile, 391), <PokemonMoveType>[PokemonMoveType.fire, PokemonMoveType.fighting]);
     expect(PokemonTypeResolver.resolve(profile, 392), <PokemonMoveType>[PokemonMoveType.fire, PokemonMoveType.fighting]);
+    expect(
+      profile.femaleProtagonistAsset,
+      'assets/sprites/characters/protagonists/dawn_pt.png',
+    );
   });
 
-  test('muestra Ruta 201 en lugar del identificador crudo de Platino', () {
+  test('resuelve ubicaciones y protagonistas de HeartGold y SoulSilver', () {
+    final PokemonGameProfile heartGold =
+        PokemonGameProfile.fromRomPath('Pokemon HeartGold.nds');
+    final PokemonGameProfile soulSilver =
+        PokemonGameProfile.fromRomPath('Pokemon SoulSilver.nds');
+    expect(PokemonDecoder.mapName(heartGold, 33), 'Ruta 29');
+    expect(
+      PokemonDecoder.locationFor(heartGold, 33)?.kind,
+      PokemonLocationKind.route,
+    );
+    expect(PokemonDecoder.mapName(soulSilver, 60), 'Pueblo Primavera');
+
+    final GameAssetProfile assets = GameAssetProfile.fromTitle(
+      title: 'Pokémon Edición Oro HeartGold',
+      console: 'nds',
+    );
+    expect(
+      assets.protagonistAsset,
+      'assets/sprites/characters/protagonists/ethan_hgss.png',
+    );
+    expect(
+      assets.femaleProtagonistAsset,
+      'assets/sprites/characters/protagonists/lyra_hgss.png',
+    );
+    expect(assets.pokemonSpriteSet, 'nds/heartgold-soulsilver');
+  });
+
+  test('muestra ubicaciones de Sinnoh en Diamante, Perla y Platino', () {
+    final PokemonGameProfile diamond = PokemonGameProfile.fromRomPath('Pokemon Diamond.nds');
+    final PokemonGameProfile pearl = PokemonGameProfile.fromRomPath('Pokemon Pearl.nds');
+    expect(PokemonDecoder.mapName(diamond, 411), 'Pueblo Hojaverde');
+    expect(PokemonDecoder.locationFor(diamond, 411)?.kind, PokemonLocationKind.city);
+    expect(PokemonDecoder.mapName(pearl, 418), 'Pueblo Arena');
+
     final PokemonGameProfile profile = PokemonGameProfile.fromRomPath('Pokemon Platinum.nds');
     expect(PokemonDecoder.mapName(profile, 342), 'Ruta 201');
     expect(PokemonDecoder.locationFor(profile, 342)?.kind, PokemonLocationKind.route);

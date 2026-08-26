@@ -101,6 +101,7 @@ class PokemonMemorySnapshot {
   final int memoryShift;
   final String playerName;
   final int trainerId;
+  final bool isFemale;
   final int currentMapId;
   final int playerX;
   final int playerY;
@@ -125,6 +126,7 @@ class PokemonMemorySnapshot {
     required this.memoryShift,
     required this.playerName,
     required this.trainerId,
+    this.isFemale = false,
     required this.currentMapId,
     required this.playerX,
     required this.playerY,

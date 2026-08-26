@@ -82,4 +82,16 @@ void main() {
       );
     }
   });
+
+  test('HGSS usa líderes NDS de Johto y Kanto', () {
+    final profile = PokemonGameProfile.fromRomPath('Pokemon HeartGold.nds');
+
+    expect(GymLeaderAssetResolver.forBadge(profile, 0)?.name, 'Pegaso');
+    expect(
+      GymLeaderAssetResolver.forBadge(profile, 0)?.spritePath,
+      'assets/sprites/characters/gym_leaders/nds/Johto/falkner_johto_hgss.gif',
+    );
+    expect(GymLeaderAssetResolver.forBadge(profile, 8)?.name, 'Brock');
+    expect(GymLeaderAssetResolver.forBadge(profile, 15)?.name, 'Blue');
+  });
 }

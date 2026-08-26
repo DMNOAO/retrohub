@@ -73,6 +73,9 @@ class BadgeAssetResolver {
   ];
 
   static BadgeAsset resolve(GameAssetProfile profile, int index) {
+    if (profile.game == PokemonAssetGame.heartGoldSoulSilver && index >= 8) {
+      return resolveForRegion(PokemonAssetRegion.kanto, index - 8);
+    }
     if (profile.region == PokemonAssetRegion.sinnoh) {
       final values = profile.game == PokemonAssetGame.platinum
           ? _sinnohPlatinum

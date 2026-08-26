@@ -18,6 +18,7 @@ void main() {
     _utf16(bytes, trainer, 'LUCAS');
     _u16(bytes, trainer + 0x10, 12345);
     _u32(bytes, trainer + 0x14, 54321);
+    bytes[trainer + 0x18] = 1;
     bytes[trainer + 0x1A] = 0x05;
     bytes[trainer + 0x1D] = 0x02;
     _u16(bytes, trainer + 0x22, 12);
@@ -27,10 +28,10 @@ void main() {
     _u16(bytes, 0x1244, 9);
     bytes[dex + 4] = 0x01;
     bytes[dex + 4 + 0x40] = 0x03;
-    _u32(bytes, 0x98, 1);
+    bytes[0x94] = 1;
     _writePartyPokemon(
       bytes,
-      offset: 0x9C,
+      offset: 0x98,
       personality: 0,
       trainerId: 0x12345678,
       species: 393,
@@ -49,6 +50,7 @@ void main() {
     expect(snapshot, isNotNull);
     expect(snapshot!.playerName, 'LUCAS');
     expect(snapshot.trainerId, 12345);
+    expect(snapshot.isFemale, isTrue);
     expect(snapshot.money, 54321);
     expect(snapshot.badgesMask, 0x05);
     expect(snapshot.currentMapId, 411);
@@ -67,6 +69,60 @@ void main() {
     expect(snapshot.party.single.friendship, 70);
     expect(snapshot.party.single.experience, 135);
     expect(snapshot.party.single.moveIds, <int>[1, 45]);
+  });
+
+  test('lee el layout, equipo y las 16 medallas de HGSS', () {
+    final bytes = List<int>.filled(0x80000, 0xFF);
+    const generalSize = 0xF628;
+    const trainer = 0x64;
+    const dex = 0x12B8;
+
+    bytes.fillRange(0, generalSize, 0);
+    _u32(bytes, generalSize - 0x14, 4);
+    _u32(bytes, generalSize - 0x10, 2);
+    _u32(bytes, generalSize - 8, 0x20060623);
+    _utf16(bytes, trainer, 'LYRA');
+    _u16(bytes, trainer + 0x10, 54321);
+    _u32(bytes, trainer + 0x14, 98765);
+    bytes[trainer + 0x18] = 1;
+    bytes[trainer + 0x1A] = 0xFF;
+    bytes[trainer + 0x1F] = 0x05;
+    bytes[trainer + 0x1D] = 0x02;
+    _u16(bytes, 0x1234, 99);
+    _u16(bytes, 0x123C, 12);
+    _u16(bytes, 0x1240, 18);
+    bytes[dex + 4 + (151 >> 3)] |= 1 << (151 & 7);
+    bytes[dex + 4 + 0x40 + (151 >> 3)] |= 1 << (151 & 7);
+    bytes[0x94] = 1;
+    _writePartyPokemon(
+      bytes,
+      offset: 0x98,
+      personality: 0,
+      trainerId: 0x12345678,
+      species: 152,
+      level: 5,
+      experience: 135,
+      friendship: 70,
+      moves: const <int>[33, 45],
+    );
+
+    final snapshot = PokemonGen4SaveReader(
+      profile: PokemonGameProfile.fromRomPath('Pokemon HeartGold.nds'),
+      read: (offset, length) => bytes.sublist(offset, offset + length),
+    ).capture();
+
+    expect(snapshot, isNotNull);
+    expect(snapshot!.playerName, 'LYRA');
+    expect(snapshot.isFemale, isTrue);
+    expect(snapshot.currentLocation, 'Cueva Unión');
+    expect(snapshot.badgesMask, 0x05FF);
+    expect(snapshot.currentMapId, 99);
+    expect(snapshot.playerX, 12);
+    expect(snapshot.playerY, 18);
+    expect(snapshot.nationalDexUnlocked, isTrue);
+    expect(snapshot.caughtPokemonIds, <int>[152]);
+    expect(snapshot.party.single.pokedexId, 152);
+    expect(snapshot.party.single.name, 'Chikorita');
   });
 }
 

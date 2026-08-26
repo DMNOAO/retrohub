@@ -11,6 +11,7 @@ enum PokemonAssetGame {
   fireRedLeafGreen,
   diamondPearl,
   platinum,
+  heartGoldSoulSilver,
   unsupported,
 }
 
@@ -23,6 +24,7 @@ class GameAssetProfile {
   final String pokemonExtension;
   final String trainerSpriteSet;
   final String? protagonistAsset;
+  final String? femaleProtagonistAsset;
   final String? rivalAsset;
   final String? championAsset;
   final String? sourceTitle;
@@ -36,6 +38,7 @@ class GameAssetProfile {
     required this.pokemonExtension,
     required this.trainerSpriteSet,
     this.protagonistAsset,
+    this.femaleProtagonistAsset,
     this.rivalAsset,
     this.championAsset,
     this.sourceTitle,
@@ -52,6 +55,28 @@ class GameAssetProfile {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
+    if (value.contains('heartgold') ||
+        value.contains('heart gold') ||
+        value.contains('soulsilver') ||
+        value.contains('soul silver') ||
+        value.contains('oro heart') ||
+        value.contains('plata soul')) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.heartGoldSoulSilver,
+        region: PokemonAssetRegion.johto,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/heartgold-soulsilver',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Johto',
+        protagonistAsset:
+            'assets/sprites/characters/protagonists/ethan_hgss.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/lyra_hgss.png',
+        rivalAsset: 'assets/sprites/characters/rivals/silver_hgss.gif',
+        championAsset:
+            'assets/sprites/characters/champions/lance_johto_hgss.gif',
+        sourceTitle: value,
+      );
+    }
     if (value.contains('platino') || value.contains('platinum')) {
       return GameAssetProfile(
         game: PokemonAssetGame.platinum,
@@ -61,6 +86,8 @@ class GameAssetProfile {
         trainerSpriteSet: 'nds/Sinnoh',
         protagonistAsset:
             'assets/sprites/characters/protagonists/lucas_pt.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/dawn_pt.png',
         rivalAsset: 'assets/sprites/characters/rivals/barry_pt.gif',
         championAsset:
             'assets/sprites/characters/champions/cynthia_sinnoh.gif',
@@ -79,6 +106,8 @@ class GameAssetProfile {
         trainerSpriteSet: 'nds/Sinnoh',
         protagonistAsset:
             'assets/sprites/characters/protagonists/lucas_dp.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/dawn_dp.png',
         rivalAsset: 'assets/sprites/characters/rivals/barry_dp.png',
         championAsset:
             'assets/sprites/characters/champions/cynthia_sinnoh.gif',

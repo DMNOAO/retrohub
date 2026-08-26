@@ -6,6 +6,7 @@ class SpriteImage extends StatelessWidget {
   final String? path;
   final double size;
   final IconData fallbackIcon;
+  final String? fallbackPath;
   final BoxFit fit;
 
   const SpriteImage({
@@ -13,6 +14,7 @@ class SpriteImage extends StatelessWidget {
     required this.path,
     this.size = 48,
     this.fallbackIcon = Icons.image_not_supported_outlined,
+    this.fallbackPath,
     this.fit = BoxFit.contain,
   });
 
@@ -30,7 +32,7 @@ class SpriteImage extends StatelessWidget {
         fit: fit,
         filterQuality: FilterQuality.none,
         gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => _fallback(),
+        errorBuilder: (_, __, ___) => _fallbackImage(),
       );
     } else {
       image = Image.file(
@@ -44,6 +46,21 @@ class SpriteImage extends StatelessWidget {
     }
 
     return SizedBox(width: size, height: size, child: image);
+  }
+
+  Widget _fallbackImage() {
+    final fallback = fallbackPath?.trim();
+    if (fallback != null && fallback.isNotEmpty && fallback != path) {
+      return Image.asset(
+        fallback,
+        width: size,
+        height: size,
+        fit: fit,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (_, __, ___) => _fallback(),
+      );
+    }
+    return _fallback();
   }
 
   Widget _fallback() {

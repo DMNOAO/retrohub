@@ -12,6 +12,8 @@ import '../pokemon/decoder/pokemon_decoder.dart';
 import '../pokemon/decoder/pokemon_learnset_resolver.dart';
 import 'data/pokedex_detail_data.dart';
 import 'data/pokedex_evolution_data.dart';
+import 'data/pokemon_form_resolver.dart';
+import 'widgets/journal_chrome.dart';
 import 'widgets/move_type_tile.dart';
 
 class PokedexDetailPage extends StatefulWidget {
@@ -32,6 +34,7 @@ class PokedexDetailPage extends StatefulWidget {
 class _PokedexDetailPageState extends State<PokedexDetailPage> {
   late int _pokemonId;
   bool _showShiny = false;
+  String? _selectedFormId;
   bool get _supportsShiny => widget.profile.game != PokemonAssetGame.redBlue && widget.profile.game != PokemonAssetGame.yellow;
 
   @override
@@ -51,7 +54,11 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
     if (index < 0) return;
     final next = index + direction;
     if (next < 0 || next >= widget.availableIds.length) return;
-    setState(() { _pokemonId = widget.availableIds[next]; _showShiny = false; });
+    setState(() {
+      _pokemonId = widget.availableIds[next];
+      _showShiny = false;
+      _selectedFormId = null;
+    });
   }
 
   @override
@@ -81,10 +88,22 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
           MachineMoveResolver.label(widget.profile, moveId) != 'Tutor';
     }).toList(growable: false);
     final name = PokemonDecoder.pokemonName(_pokemonId);
+    final forms = PokemonFormResolver.forPokemon(widget.profile, _pokemonId);
+    PokemonFormInfo? selectedForm;
+    for (final form in forms) {
+      if (form.id == _selectedFormId) {
+        selectedForm = form;
+        break;
+      }
+    }
+    selectedForm ??= forms.isEmpty ? null : forms.first;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: scheme.surface,
-      appBar: AppBar(title: Text(name)),
+      appBar: JournalAppBar(
+        title: name,
+        icon: Icons.catching_pokemon,
+      ),
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragEnd: (details) { final velocity = details.primaryVelocity ?? 0; if (velocity < -250) { _move(1); } else if (velocity > 250) { _move(-1); } },
@@ -92,7 +111,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
           Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
             Text('#${_displayNumber.toString().padLeft(3, '0')}', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
-            Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)), child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId, isShiny: _supportsShiny && _showShiny), size: 112, fallbackIcon: Icons.catching_pokemon)),
+            Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)), child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId, isShiny: _supportsShiny && _showShiny, isFemale: selectedForm?.female ?? false, formSuffix: selectedForm?.suffix), size: 112, fallbackIcon: Icons.catching_pokemon, fallbackPath: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId))),
             const SizedBox(height: 12),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(name, style: Theme.of(context).textTheme.headlineSmall),
@@ -102,13 +121,55 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
               ),
             ]),
             const SizedBox(height: 8),
-            Wrap(spacing: 8, alignment: WrapAlignment.center, children: [Chip(avatar: Icon(_caught ? Icons.catching_pokemon : Icons.visibility_outlined, size: 18), label: Text(_caught ? 'Capturado' : 'Visto')), if (_caught && _supportsShiny) FilterChip(selected: _showShiny, avatar: const Icon(Icons.auto_awesome, size: 18), label: const Text('Shiny'), onSelected: (value) => setState(() => _showShiny = value))]),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                Chip(
+                  avatar: Icon(
+                    _caught ? Icons.catching_pokemon : Icons.visibility_outlined,
+                    size: 18,
+                  ),
+                  label: Text(_caught ? 'Capturado' : 'Visto'),
+                ),
+                if (_caught && _supportsShiny)
+                  FilterChip(
+                    selected: _showShiny,
+                    avatar: const Icon(Icons.auto_awesome, size: 18),
+                    label: const Text('Shiny'),
+                    onSelected: (value) => setState(() => _showShiny = value),
+                  ),
+              ],
+            ),
+            if (_caught && forms.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Formas', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                alignment: WrapAlignment.center,
+                children: forms.map((form) {
+                  return ChoiceChip(
+                    selected: selectedForm?.id == form.id,
+                    label: Text(form.label),
+                    onSelected: (_) => setState(() => _selectedFormId = form.id),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'La partida confirma la especie capturada; el selector permite consultar sus sprites disponibles.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ]))),
           const SizedBox(height: 12),
           _ExpandableSection(
             storageKey: 'pokedex-entry',
             icon: Icons.menu_book_outlined,
-            title: 'Entrada de la Pokédex',
+            title: 'Entrada de la Pokedex',
             unlocked: _caught,
             child: data.entry.isEmpty
                 ? const Text('Entrada aún no cargada para esta especie.')

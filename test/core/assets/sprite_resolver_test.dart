@@ -34,4 +34,15 @@ void main() {
       'assets/sprites/pokemon/nds/heartgold-soulsilver/0egg.png',
     );
   });
+
+  test('resuelve los sprites propios de HeartGold y SoulSilver', () {
+    final hgss = GameAssetProfile.fromTitle(
+      title: 'Pokémon SoulSilver',
+      console: 'NDS',
+    );
+    expect(
+      SpriteResolver.pokemonForGame(profile: hgss, pokemonId: 250),
+      'assets/sprites/pokemon/nds/heartgold-soulsilver/0250.png',
+    );
+  });
 }

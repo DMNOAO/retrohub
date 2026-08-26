@@ -12,11 +12,17 @@ import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../../shared/theme/app_appearance.dart';
 import 'pokedex_grid.dart';
+import 'widgets/journal_chrome.dart';
 
 class JournalHistoryPage extends ConsumerStatefulWidget {
   final Game game;
+  final String initialSection;
 
-  const JournalHistoryPage({super.key, required this.game});
+  const JournalHistoryPage({
+    super.key,
+    required this.game,
+    this.initialSection = 'all',
+  });
 
   @override
   ConsumerState<JournalHistoryPage> createState() => _JournalHistoryPageState();
@@ -25,7 +31,7 @@ class JournalHistoryPage extends ConsumerStatefulWidget {
 class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   bool _loading = true;
   List<_TimelineItem> _items = const [];
-  String _filter = 'all';
+  late String _filter;
   Set<int> _seenPokemonIds = const <int>{};
   Set<int> _caughtPokemonIds = const <int>{};
   bool _nationalDexUnlocked = false;
@@ -33,6 +39,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   @override
   void initState() {
     super.initState();
+    _filter = widget.initialSection;
     _load();
   }
 
@@ -105,18 +112,20 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
 
     final journalAppearance = AppAppearance.forGameTitle(widget.game.title);
     final history = Scaffold(
-      appBar: AppBar(
-        title: const Text('Historia completa'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: () {
-              setState(() => _loading = true);
-              _load();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
+      appBar: JournalAppBar(
+        title: _filter == 'pokemon' ? 'Pokedex' : 'Historia',
+        icon: _filter == 'pokemon'
+            ? Icons.catching_pokemon
+            : Icons.auto_stories_outlined,
+        onRefresh: () {
+          setState(() => _loading = true);
+          _load();
+        },
+      ),
+      bottomNavigationBar: JournalSectionBar(
+        sections: _HistoryFilters.values,
+        selected: _filter,
+        onSelected: (value) => setState(() => _filter = value),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -129,12 +138,6 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                     itemCount: _items.length,
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: _HistoryFilters(
-                    selected: _filter,
-                    onSelected: (value) => setState(() => _filter = value),
-                  ),
-                ),
               ],
               body: _filter == 'pokemon'
                   ? PokedexGrid(
@@ -143,8 +146,10 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                       caughtIds: _caughtPokemonIds,
                       nationalDexUnlocked:
                           profile.game != PokemonAssetGame.emerald &&
-                              profile.game !=
+                          profile.game !=
                                   PokemonAssetGame.fireRedLeafGreen &&
+                              profile.game !=
+                                  PokemonAssetGame.heartGoldSoulSilver &&
                               profile.region != PokemonAssetRegion.sinnoh ||
                           _nationalDexUnlocked,
                     )
@@ -209,40 +214,15 @@ class _HistoryHeader extends StatelessWidget {
   }
 }
 
-class _HistoryFilters extends StatelessWidget {
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  const _HistoryFilters({required this.selected, required this.onSelected});
-
-  static const values = <(String, String)>[
-    ('all', 'Todo'),
-    ('adventure', 'Aventura'),
-    ('battle', 'Combates'),
-    ('pokemon', 'Pokémon'),
-    ('system', 'Sesiones'),
-    ('manual', 'Notas'),
+abstract final class _HistoryFilters {
+  static const values = <JournalSection>[
+    JournalSection('all', 'Todo', Icons.view_timeline_outlined),
+    JournalSection('pokemon', 'Pokedex', Icons.catching_pokemon),
+    JournalSection('adventure', 'Aventura', Icons.explore_outlined),
+    JournalSection('battle', 'Combates', Icons.sports_martial_arts_outlined),
+    JournalSection('system', 'Sesiones', Icons.save_outlined),
+    JournalSection('manual', 'Notas', Icons.edit_note_outlined),
   ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Row(
-        children: values.map((item) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(item.$2),
-              selected: selected == item.$1,
-              onSelected: (_) => onSelected(item.$1),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
 }
 
 class _TimelineCard extends StatelessWidget {
