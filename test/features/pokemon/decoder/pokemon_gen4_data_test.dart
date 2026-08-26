@@ -35,6 +35,10 @@ void main() {
     expect(PokemonTypeResolver.resolve(profile, 390), <PokemonMoveType>[PokemonMoveType.fire]);
     expect(PokemonTypeResolver.resolve(profile, 391), <PokemonMoveType>[PokemonMoveType.fire, PokemonMoveType.fighting]);
     expect(PokemonTypeResolver.resolve(profile, 392), <PokemonMoveType>[PokemonMoveType.fire, PokemonMoveType.fighting]);
+    expect(
+      profile.femaleProtagonistAsset,
+      'assets/sprites/characters/protagonists/dawn_pt.png',
+    );
   });
 
   test('muestra ubicaciones de Sinnoh en Diamante, Perla y Platino', () {
@@ -44,7 +48,6 @@ void main() {
     expect(PokemonDecoder.locationFor(diamond, 411)?.kind, PokemonLocationKind.city);
     expect(PokemonDecoder.mapName(pearl, 418), 'Pueblo Arena');
 
-   
     final PokemonGameProfile profile = PokemonGameProfile.fromRomPath('Pokemon Platinum.nds');
     expect(PokemonDecoder.mapName(profile, 342), 'Ruta 201');
     expect(PokemonDecoder.locationFor(profile, 342)?.kind, PokemonLocationKind.route);
