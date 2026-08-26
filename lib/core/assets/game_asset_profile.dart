@@ -24,6 +24,7 @@ class GameAssetProfile {
   final String pokemonExtension;
   final String trainerSpriteSet;
   final String? protagonistAsset;
+  final String? femaleProtagonistAsset;
   final String? rivalAsset;
   final String? championAsset;
   final String? sourceTitle;
@@ -37,6 +38,7 @@ class GameAssetProfile {
     required this.pokemonExtension,
     required this.trainerSpriteSet,
     this.protagonistAsset,
+    this.femaleProtagonistAsset,
     this.rivalAsset,
     this.championAsset,
     this.sourceTitle,
@@ -82,6 +84,8 @@ class GameAssetProfile {
         trainerSpriteSet: 'nds/Sinnoh',
         protagonistAsset:
             'assets/sprites/characters/protagonists/lucas_pt.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/dawn_pt.png',
         rivalAsset: 'assets/sprites/characters/rivals/barry_pt.gif',
         championAsset:
             'assets/sprites/characters/champions/cynthia_sinnoh.gif',
@@ -100,6 +104,8 @@ class GameAssetProfile {
         trainerSpriteSet: 'nds/Sinnoh',
         protagonistAsset:
             'assets/sprites/characters/protagonists/lucas_dp.png',
+        femaleProtagonistAsset:
+            'assets/sprites/characters/protagonists/dawn_dp.png',
         rivalAsset: 'assets/sprites/characters/rivals/barry_dp.png',
         championAsset:
             'assets/sprites/characters/champions/cynthia_sinnoh.gif',
