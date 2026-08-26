@@ -24,6 +24,10 @@ final class PokemonGen5SaveReader {
   static const int _trainerOffset = 0x19400;
   static const int _positionOffset = 0x19500;
   static const int _miscOffset = 0x21200;
+  static const int _eventWorkOffset = 0x20100;
+  static const int _eventFlagOffset = _eventWorkOffset + 0x27C;
+  static const int _trainerDefeatedFlagStart = 0x550;
+  static const int _trainerDefeatedFlagCount = 0xB60 - _trainerDefeatedFlagStart;
   static const int _dexOffset = 0x21600;
   static const int _dexBitBytes = 0x54;
   static const List<String> _blockOrders = <String>[
@@ -121,8 +125,20 @@ final class PokemonGen5SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
+      defeatedTrainerIds: _defeatedTrainerIds(),
       gamePlayTimeMinutes: _u16(trainer, 0x24) * 60 + trainer[0x26],
     );
+  }
+
+  List<int> _defeatedTrainerIds() {
+    final List<int> flags = read(_eventFlagOffset, 0xB60 ~/ 8);
+    if (flags.length != 0xB60 ~/ 8) return const <int>[];
+    final List<int> result = <int>[];
+    for (int trainerId = 1; trainerId < _trainerDefeatedFlagCount; trainerId++) {
+      final int flag = _trainerDefeatedFlagStart + trainerId;
+      if ((flags[flag >> 3] & (1 << (flag & 7))) != 0) result.add(trainerId);
+    }
+    return result;
   }
 
   static PokemonPartyMember? _decodePartyPokemon(List<int> encrypted) {
