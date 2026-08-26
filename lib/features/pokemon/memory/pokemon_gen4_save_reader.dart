@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 
 import '../data/pokemon_hatch_cycles.dart';
 import '../decoder/pokemon_decoder.dart';
+import '../decoder/pokemon_gen4_text_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
@@ -277,13 +278,13 @@ final class PokemonGen4SaveReader {
     int offset,
     int maximumCharacters,
   ) {
-    final List<int> codeUnits = <int>[];
+    final List<int> glyphs = <int>[];
     for (int index = 0; index < maximumCharacters; index++) {
       final int value = _u16(bytes, offset + index * 2);
-      if (value == 0 || value == 0xFFFF) break;
-      codeUnits.add(value);
+      if (value == 0xFFFF) break;
+      glyphs.add(value);
     }
-    return String.fromCharCodes(codeUnits).trim();
+    return PokemonGen4TextDecoder.decodeWords(glyphs);
   }
 
   static int _u16(List<int> bytes, int offset) =>
