@@ -137,7 +137,12 @@ class PokemonControllerMemoryReader {
 
     if (profile.isGen4) {
       final int size = controller.inspectMemoryRegions()['saveRam'] ?? 0;
-      if (size < PokemonGen4SaveReader.requiredSaveSize) return null;
+      if (size < PokemonGen4SaveReader.requiredSaveSize) {
+        PokemonGen4SaveReader.recordDiagnostic(
+          'SAVE_RAM too small: $size/${PokemonGen4SaveReader.requiredSaveSize}',
+        );
+        return null;
+      }
       return PokemonGen4SaveReader(
         profile: profile,
         read: (int offset, int length) => controller.readMemoryBlock(

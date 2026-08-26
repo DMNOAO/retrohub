@@ -17,8 +17,13 @@ class PokemonMemoryReader {
   PokemonMemorySnapshot? capture() {
     if (profile.isGen4) {
       final int size = bridge.memoryRegionSize(LibretroMemoryRegion.saveRam);
-      if (size < PokemonGen4SaveReader.requiredSaveSize) return null;
-      return PokemonGen4SaveReader(
+      if (size < PokemonGen4SaveReader.requiredSaveSize) {
+        PokemonGen4SaveReader.recordDiagnostic(
+          'SAVE_RAM too small: $size/${PokemonGen4SaveReader.requiredSaveSize}',
+        );
+        return null;
+      }
+      final PokemonMemorySnapshot? snapshot = PokemonGen4SaveReader(
         profile: profile,
         read: (int offset, int length) => bridge.readMemoryBlock(
           memoryId: LibretroMemoryRegion.saveRam,
@@ -26,6 +31,7 @@ class PokemonMemoryReader {
           length: length,
         ),
       ).capture();
+      return snapshot;
     }
     if (profile.isGen2) {
       final int size = bridge.memoryRegionSize(LibretroMemoryRegion.rtc);

@@ -551,6 +551,7 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       }
 
       final paths = _persistencePaths;
+      debugPrint('Regiones de memoria: ${bridge.inspectMemoryRegions()}');
       if (paths != null && File(paths.sramFile).existsSync()) {
         final bool loaded = bridge.loadSram(paths.sramFile);
         debugPrint(
@@ -912,6 +913,11 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
       if (saved) {
         debugPrint('SRAM guardada: ${paths.sramFile}');
+      } else {
+        debugPrint(
+          'No se pudo guardar SRAM: SAVE_RAM='
+          '${bridge.memoryRegionSize(LibretroMemoryRegion.saveRam)} bytes',
+        );
       }
 
       if (bridge.coreHasRtc()) {

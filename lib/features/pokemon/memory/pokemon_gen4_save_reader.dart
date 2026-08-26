@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import '../data/pokemon_hatch_cycles.dart';
 import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
@@ -21,6 +23,16 @@ final class PokemonGen4SaveReader {
     'CABD', 'CADB', 'CBAD', 'CBDA', 'CDAB', 'CDBA',
     'DABC', 'DACB', 'DBAC', 'DBCA', 'DCAB', 'DCBA',
   ];
+  static String lastDiagnostic = 'Gen IV reader not started';
+  static String? _lastLoggedDiagnostic;
+  static String? _lastPartyDecodeError;
+
+  static void recordDiagnostic(String value) {
+    lastDiagnostic = value;
+    if (_lastLoggedDiagnostic == value) return;
+    _lastLoggedDiagnostic = value;
+    developer.log(value, name: 'RetroHub.Gen4SaveReader');
+  }
 
   final PokemonGameProfile profile;
   final Gen4SaveRead read;
@@ -29,29 +41,50 @@ final class PokemonGen4SaveReader {
 
   PokemonMemorySnapshot? capture() {
     final _Gen4Layout? layout = _Gen4Layout.forVersion(profile.version);
-    if (layout == null) return null;
+    if (layout == null) {
+      recordDiagnostic('unsupported Gen IV layout: ${profile.version.name}');
+      return null;
+    }
 
     final int primaryFooter = layout.generalSize - 0x14;
     final int backupFooter = _partitionSize + primaryFooter;
     final List<int> primary = read(primaryFooter, 8);
     final List<int> backup = read(backupFooter, 8);
-    if (primary.length != 8 || backup.length != 8) return null;
+    if (primary.length != 8 || backup.length != 8) {
+      recordDiagnostic(
+        'footer read failed: primary=${primary.length}, backup=${backup.length}',
+      );
+      return null;
+    }
 
     final int blockBase = _newerBlock(primary, backup) == 0
         ? 0
         : _partitionSize;
     final List<int> general = read(blockBase, layout.generalSize);
-    if (general.length != layout.generalSize) return null;
+    if (general.length != layout.generalSize) {
+      recordDiagnostic(
+        'general block read failed: ${general.length}/${layout.generalSize}',
+      );
+      return null;
+    }
 
     final int magic = _u32(general, layout.generalSize - 8);
-    if (magic != 0x20060623 && magic != 0x20070903) return null;
+    if (magic != 0x20060623 && magic != 0x20070903) {
+      recordDiagnostic(
+        'invalid general block magic: 0x${magic.toRadixString(16)}',
+      );
+      return null;
+    }
 
     final String playerName = _decodeUtf16(
       general,
       layout.trainerOffset,
       8,
     );
-    if (playerName.isEmpty) return null;
+    if (playerName.isEmpty) {
+      recordDiagnostic('empty player name');
+      return null;
+    }
 
     final int progressFlags = general[layout.trainerOffset + 0x1D];
     final List<int> caught = _dexIds(general, layout.dexOffset + 4);
@@ -59,7 +92,14 @@ final class PokemonGen4SaveReader {
       general,
       layout.dexOffset + 4 + _dexRegionSize,
     );
+    _lastPartyDecodeError = null;
     final List<PokemonPartyMember> party = _readParty(general, layout);
+    final int declaredPartyCount = _u32(general, layout.partyOffset);
+    recordDiagnostic(
+      'SAVE_RAM=${requiredSaveSize} bytes, block=0x${blockBase.toRadixString(16)}, '
+      'party=$declaredPartyCount, decoded=${party.length}'
+      '${_lastPartyDecodeError == null ? '' : ', error=$_lastPartyDecodeError'}',
+    );
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -89,7 +129,10 @@ final class PokemonGen4SaveReader {
     _Gen4Layout layout,
   ) {
     final int count = _u32(general, layout.partyOffset);
-    if (count < 0 || count > 6) return const <PokemonPartyMember>[];
+    if (count < 0 || count > 6) {
+      recordDiagnostic('invalid party count: $count');
+      return const <PokemonPartyMember>[];
+    }
 
     final List<PokemonPartyMember> party = <PokemonPartyMember>[];
     final int pokemonStart = layout.partyOffset + 4;
@@ -105,7 +148,11 @@ final class PokemonGen4SaveReader {
   }
 
   static PokemonPartyMember? _decodePartyPokemon(List<int> encrypted) {
-    if (encrypted.length != _partyPokemonSize) return null;
+    if (encrypted.length != _partyPokemonSize) {
+      _lastPartyDecodeError =
+          'invalid structure length ${encrypted.length}/$_partyPokemonSize';
+      return null;
+    }
 
     final int personality = _u32(encrypted, 0);
     final int storedChecksum = _u16(encrypted, 6);
@@ -118,14 +165,21 @@ final class PokemonGen4SaveReader {
     for (int offset = 0; offset < data.length; offset += 2) {
       checksum = (checksum + _u16(data, offset)) & 0xFFFF;
     }
-    if (checksum != storedChecksum) return null;
+    if (checksum != storedChecksum) {
+      _lastPartyDecodeError =
+          'checksum ${checksum.toRadixString(16)}/${storedChecksum.toRadixString(16)}';
+      return null;
+    }
 
     final int shuffle = ((personality & 0x3E000) >> 13) % 24;
     final String order = _blockOrders[shuffle];
     final int growth = order.indexOf('A') * 32;
     final int attacks = order.indexOf('B') * 32;
     final int species = _u16(data, growth);
-    if (species <= 0 || species > 493) return null;
+    if (species <= 0 || species > 493) {
+      _lastPartyDecodeError = 'invalid species $species';
+      return null;
+    }
 
     final int heldItem = _u16(data, growth + 2);
     final int originalTrainerId = _u32(data, growth + 4);
@@ -142,7 +196,10 @@ final class PokemonGen4SaveReader {
     // y un segundo flujo del mismo LCRNG.
     final List<int> stats = _cryptWords(encrypted.sublist(0x88), personality);
     final int level = stats[4];
-    if (level <= 0 || level > 100) return null;
+    if (level <= 0 || level > 100) {
+      _lastPartyDecodeError = 'invalid level $level for species $species';
+      return null;
+    }
 
     final int shinyValue =
         (originalTrainerId & 0xFFFF) ^
