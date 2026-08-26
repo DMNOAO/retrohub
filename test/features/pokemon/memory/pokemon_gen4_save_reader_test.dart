@@ -81,9 +81,10 @@ void main() {
     _u32(bytes, generalSize - 0x14, 4);
     _u32(bytes, generalSize - 0x10, 2);
     _u32(bytes, generalSize - 8, 0x20060623);
-    _utf16(bytes, trainer, 'ETHAN');
+    _utf16(bytes, trainer, 'LYRA');
     _u16(bytes, trainer + 0x10, 54321);
     _u32(bytes, trainer + 0x14, 98765);
+    bytes[trainer + 0x18] = 1;
     bytes[trainer + 0x1A] = 0xFF;
     bytes[trainer + 0x1F] = 0x05;
     bytes[trainer + 0x1D] = 0x02;
@@ -111,7 +112,9 @@ void main() {
     ).capture();
 
     expect(snapshot, isNotNull);
-    expect(snapshot!.playerName, 'ETHAN');
+    expect(snapshot!.playerName, 'LYRA');
+    expect(snapshot.isFemale, isTrue);
+    expect(snapshot.currentLocation, 'Cueva Unión');
     expect(snapshot.badgesMask, 0x05FF);
     expect(snapshot.currentMapId, 99);
     expect(snapshot.playerX, 12);
