@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/assets/character_asset_resolver.dart';
 import '../../../core/assets/game_asset_profile.dart';
@@ -979,6 +980,28 @@ class PokemonJournalTracker {
   Future<void> _restorePersistentState() async {
     if (_persistentStateRestored) return;
     _persistentStateRestored = true;
+
+    final restoredProfile = PokemonGameProfile.fromGameIdentity(
+      gameTitle: gameTitle,
+      romPath: romPath,
+    );
+    if (restoredProfile.isGen5) {
+      final events = await database.getProgressEventsByGame(gameId);
+      for (final event in events) {
+        final raw = event.metadataJson;
+        if (raw == null || raw.isEmpty) continue;
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is! Map || decoded['trainerFlagId'] == null) continue;
+          debugPrint(
+            '[RetroHub.Gen5Battle] latest trainerFlagId='
+            '${decoded['trainerFlagId']} map=${decoded['mapId']} '
+            'createdAt=${event.createdAt.toIso8601String()}',
+          );
+          break;
+        } catch (_) {}
+      }
+    }
 
     final latest = await database.getLatestProgressSnapshot(gameId);
     final storedName = latest?.lastDefeatedTrainer?.trim();
