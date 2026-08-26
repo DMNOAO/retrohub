@@ -28,6 +28,7 @@ void main() {
     _u16(bytes, 0x1244, 9);
     bytes[dex + 4] = 0x01;
     bytes[dex + 4 + 0x40] = 0x03;
+    _setFlag(bytes, 0xFDC, 0x550 + 37);
     bytes[0x94] = 1;
     _writePartyPokemon(
       bytes,
@@ -60,6 +61,7 @@ void main() {
     expect(snapshot.nationalDexUnlocked, isTrue);
     expect(snapshot.caughtPokemonIds, <int>[1]);
     expect(snapshot.seenPokemonIds, <int>[1, 2]);
+    expect(snapshot.defeatedTrainerIds, <int>[37]);
     expect(snapshot.party, hasLength(1));
     expect(snapshot.party.single.pokedexId, 393);
     expect(snapshot.party.single.name, 'Piplup');
@@ -93,6 +95,7 @@ void main() {
     _u16(bytes, 0x1240, 18);
     bytes[dex + 4 + (151 >> 3)] |= 1 << (151 & 7);
     bytes[dex + 4 + 0x40 + (151 >> 3)] |= 1 << (151 & 7);
+    _setFlag(bytes, 0x10C4, 0x550 + 52);
     bytes[0x94] = 1;
     _writePartyPokemon(
       bytes,
@@ -121,9 +124,14 @@ void main() {
     expect(snapshot.playerY, 18);
     expect(snapshot.nationalDexUnlocked, isTrue);
     expect(snapshot.caughtPokemonIds, <int>[152]);
+    expect(snapshot.defeatedTrainerIds, <int>[52]);
     expect(snapshot.party.single.pokedexId, 152);
     expect(snapshot.party.single.name, 'Chikorita');
   });
+}
+
+void _setFlag(List<int> bytes, int flagsOffset, int flag) {
+  bytes[flagsOffset + (flag >> 3)] |= 1 << (flag & 7);
 }
 
 void _writePartyPokemon(
