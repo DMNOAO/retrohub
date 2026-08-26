@@ -555,7 +555,9 @@ class PokemonJournalTracker {
   ) async {
     if (current.profile.version == PokemonGameVersion.emerald ||
         current.profile.version == PokemonGameVersion.ruby ||
-        current.profile.version == PokemonGameVersion.sapphire) {
+        current.profile.version == PokemonGameVersion.sapphire ||
+        current.profile.isGen4 ||
+        current.profile.isGen5) {
       final Set<int> previousIds = previous.defeatedTrainerIds.toSet();
       final List<int> newTrainerIds = current.defeatedTrainerIds
           .where((id) => !previousIds.contains(id))
@@ -568,10 +570,17 @@ class PokemonJournalTracker {
         _pendingTrainerId = null;
         _pendingBattleResult = null;
         for (final int trainerId in newTrainerIds) {
-          await _recordGen3TrainerVictory(
-            current: current,
-            trainerId: trainerId,
-          );
+          if (current.profile.isGen4 || current.profile.isGen5) {
+            await _recordNdsTrainerVictory(
+              current: current,
+              trainerId: trainerId,
+            );
+          } else {
+            await _recordGen3TrainerVictory(
+              current: current,
+              trainerId: trainerId,
+            );
+          }
         }
         return;
       }
@@ -714,6 +723,26 @@ class PokemonJournalTracker {
       },
     );
     await _rememberLastDefeatedTrainer(info?.name ?? 'Entrenador', current);
+  }
+
+  Future<void> _recordNdsTrainerVictory({
+    required PokemonMemorySnapshot current,
+    required int trainerId,
+  }) async {
+    if (trainerId <= 0) return;
+    final String generation = current.profile.isGen5 ? 'V' : 'IV';
+    await _insertEvent(
+      type: 'trainer_defeated',
+      title: 'Ganó un combate de entrenador',
+      description: 'Venció a un entrenador durante su aventura.',
+      metadata: <String, dynamic>{
+        ..._metadata(current),
+        'trainerId': trainerId,
+        'generation': generation,
+        'detectedFromTrainerFlag': true,
+      },
+    );
+    await _rememberLastDefeatedTrainer('Entrenador', current);
   }
 
   Future<void> _recordGen3TrainerVictory({
