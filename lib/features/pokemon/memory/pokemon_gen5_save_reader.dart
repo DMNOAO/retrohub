@@ -132,12 +132,11 @@ final class PokemonGen5SaveReader {
     );
   }
 
-  /// Devuelve índices relativos de banderas persistentes de combate.
+  /// Devuelve los IDs de entrenador con su bandera persistente activa.
   ///
-  /// A diferencia de Gen IV, en Blanco/Negro el índice de la bandera del NPC
-  /// no coincide necesariamente con el trainerId de su entrada en TRData.
-  /// Se conserva en defeatedTrainerIds por compatibilidad con el snapshot,
-  /// pero el tracker debe tratarlo como trainerFlagId.
+  /// Blanco/Negro reserva las banderas desde 0x550. Los comandos de script
+  /// TrainerFlagSet/Get reciben el trainerId y el juego aplica internamente
+  /// esa base; por eso aquí se devuelve el índice relativo como trainerId.
   List<int> _changedTrainerFlagIds() {
     final List<int> flags = read(_eventFlagOffset, 0xB60 ~/ 8);
     if (flags.length != 0xB60 ~/ 8) return const <int>[];

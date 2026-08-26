@@ -739,11 +739,13 @@ class PokemonJournalTracker {
       title: gameTitle,
       console: 'NDS',
     );
-    // Gen V entrega aquí el índice relativo de la bandera del NPC, no el
-    // trainerId de TRData. Resolverlo como trainerId puede atribuir el combate
-    // a otro personaje (por ejemplo, Bel). Gen IV sí mantiene la relación.
     final trainer = current.profile.isGen5
-        ? NdsTrainerResolver.forGen5TrainerFlag(trainerId)
+        ? (await NdsTrainerResolver.resolveGen5TrainerFlag(
+              romPath: romPath,
+              version: current.profile.version,
+              trainerFlagId: trainerId,
+            ) ??
+            NdsTrainerResolver.forGen5TrainerFlag(trainerId))
         : await NdsTrainerResolver.resolve(
             romPath: romPath,
             version: current.profile.version,
@@ -751,7 +753,9 @@ class PokemonJournalTracker {
           );
     if (current.profile.isGen5) {
       developer.log(
-        'Gen V trainer victory flag=$trainerId map=${current.currentMapId}',
+        'Gen V trainer victory flag=$trainerId trainerId=$trainerId '
+        'classId=${trainer?.classId} class=${trainer?.className} '
+        'map=${current.currentMapId}',
         name: 'RetroHub.PokemonJournalTracker',
       );
     }

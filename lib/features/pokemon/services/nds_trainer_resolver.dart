@@ -60,6 +60,23 @@ final class NdsTrainerResolver {
     }
   }
 
+  /// Resuelve una victoria persistida de Blanco/Negro.
+  ///
+  /// El guardado almacena las victorias en las banderas de entrenador que
+  /// comienzan en 0x550. [PokemonGen5SaveReader] elimina esa base al crear el
+  /// snapshot, de modo que el valor recibido aquí vuelve a ser el trainerId
+  /// usado por los comandos TrainerFlagSet/Get y por TRData.
+  static Future<NdsTrainerInfo?> resolveGen5TrainerFlag({
+    required String romPath,
+    required PokemonGameVersion version,
+    required int trainerFlagId,
+  }) =>
+      resolve(
+        romPath: romPath,
+        version: version,
+        trainerId: trainerFlagId,
+      );
+
   static NdsTrainerInfo? forClassId({
     required PokemonGameVersion version,
     required int trainerId,
@@ -94,8 +111,8 @@ final class NdsTrainerResolver {
     );
   }
 
-  /// Asociaciones verificadas en partidas reales de Blanco/Negro. Estas son
-  /// banderas de NPC, no índices de TRData.
+  /// Respaldo sin acceso a la ROM para eventos históricos ya guardados.
+  /// Los eventos nuevos deben usar [resolveGen5TrainerFlag].
   static NdsTrainerInfo? forGen5TrainerFlag(int trainerFlagId) {
     final classId = _unovaTrainerFlagClasses[trainerFlagId];
     if (classId == null) return null;

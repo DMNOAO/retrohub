@@ -68,7 +68,7 @@ void main() {
     expect(cilan?.spritePath, endsWith('cilan_unova.gif'));
   });
 
-  test('resuelve banderas Gen V verificadas sin tratarlas como trainerId', () {
+  test('mantiene respaldo histórico para una bandera Gen V verificada', () {
     final trainer = NdsTrainerResolver.forGen5TrainerFlag(145);
 
     expect(trainer?.className, 'Joven');
