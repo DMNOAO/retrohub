@@ -1,4 +1,5 @@
 import '../../../core/assets/game_asset_profile.dart';
+import 'gen4_pokemon_types.dart';
 import 'move_type_resolver.dart';
 
 abstract final class PokemonTypeResolver {
@@ -6,6 +7,10 @@ abstract final class PokemonTypeResolver {
     GameAssetProfile profile,
     int pokemonId,
   ) {
+    if (profile.game == PokemonAssetGame.diamondPearl ||
+        profile.game == PokemonAssetGame.platinum) {
+      return gen4PokemonTypes[pokemonId] ?? const <PokemonMoveType>[];
+    }
     final overrides = switch (profile.game) {
       PokemonAssetGame.redBlue || PokemonAssetGame.yellow => _gen1Overrides,
       PokemonAssetGame.gold ||
@@ -476,4 +481,3 @@ abstract final class PokemonTypeResolver {
     303: <PokemonMoveType>[PokemonMoveType.steel],
   };
 }
-
