@@ -13,6 +13,9 @@ void main() {
     }
     save[0x19404 + name.length * 2] = 0xFF;
     save[0x19405 + name.length * 2] = 0xFF;
+    const trainerFlag = 0x550 + 81;
+    save[0x20100 + 0x27C + (trainerFlag >> 3)] |=
+        1 << (trainerFlag & 7);
 
     const profile = PokemonGameProfile(
       version: PokemonGameVersion.white,
@@ -29,5 +32,6 @@ void main() {
     expect(snapshot, isNotNull);
     expect(snapshot!.playerName, name);
     expect(snapshot.party, isEmpty);
+    expect(snapshot.defeatedTrainerIds, <int>[81]);
   });
 }
