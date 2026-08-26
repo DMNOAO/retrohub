@@ -206,6 +206,11 @@ class _ProgressJournal extends StatelessWidget {
     final profile = GameAssetProfile.fromGame(game);
     final party = decodeList(snapshot.partyJson);
     final badges = decodeList(snapshot.badgesJson);
+    final bool isFemale =
+        badges.isNotEmpty && badges.first['playerGender'] == 'female';
+    final String? protagonistPath = isFemale
+        ? profile.femaleProtagonistAsset ?? profile.protagonistAsset
+        : profile.protagonistAsset;
     final isGen2 = profile.region == PokemonAssetRegion.johto;
     final johtoIndices = List<int>.generate(8, (index) => index);
     final johtoCount = _countBadges(badges, johtoIndices);
@@ -227,6 +232,7 @@ class _ProgressJournal extends StatelessWidget {
           game: game,
           snapshot: snapshot,
           profile: profile,
+          protagonistPath: protagonistPath,
           leadPokemon: party.isEmpty ? null : party.first,
           leadPokemonPath: party.isEmpty
               ? null
@@ -475,6 +481,7 @@ class _AdventureHeader extends StatelessWidget {
   final Game game;
   final GameProgressSnapshot snapshot;
   final GameAssetProfile profile;
+  final String? protagonistPath;
   final Map<String, dynamic>? leadPokemon;
   final String? leadPokemonPath;
 
@@ -482,6 +489,7 @@ class _AdventureHeader extends StatelessWidget {
     required this.game,
     required this.snapshot,
     required this.profile,
+    required this.protagonistPath,
     required this.leadPokemon,
     required this.leadPokemonPath,
   });
@@ -507,7 +515,7 @@ class _AdventureHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: SpriteImage(
-              path: profile.protagonistAsset,
+              path: protagonistPath,
               size: 68,
               fallbackIcon: Icons.person_outline,
             ),
