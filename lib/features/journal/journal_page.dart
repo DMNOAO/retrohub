@@ -271,7 +271,9 @@ class _ProgressJournal extends StatelessWidget {
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
-                children: party.map((pokemon) {
+                children: party.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final pokemon = entry.value;
                   final int? currentHp = _intValue(pokemon['currentHp']);
                   final int? maximumHp = _intValue(pokemon['maximumHp']);
                   final String hp = currentHp != null && maximumHp != null
@@ -306,6 +308,8 @@ class _ProgressJournal extends StatelessWidget {
                             ),
                       onTap: () => _showPokemonDetails(
                         context,
+                        party: party,
+                        initialIndex: index,
                         pokemon: pokemon,
                         spritePath: _pokemonSprite(profile, pokemon),
                         profile: profile,
@@ -345,6 +349,8 @@ class _ProgressJournal extends StatelessWidget {
 
   void _showPokemonDetails(
     BuildContext context, {
+    required List<Map<String, dynamic>> party,
+    required int initialIndex,
     required Map<String, dynamic> pokemon,
     required String? spritePath,
     required GameAssetProfile profile,
@@ -373,8 +379,29 @@ class _ProgressJournal extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
+      builder: (sheetContext) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          final direction = velocity < -250 ? 1 : velocity > 250 ? -1 : 0;
+          final nextIndex = initialIndex + direction;
+          if (direction == 0 || nextIndex < 0 || nextIndex >= party.length) return;
+          Navigator.of(sheetContext).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            final nextPokemon = party[nextIndex];
+            _showPokemonDetails(
+              context,
+              party: party,
+              initialIndex: nextIndex,
+              pokemon: nextPokemon,
+              spritePath: _pokemonSprite(profile, nextPokemon),
+              profile: profile,
+            );
+          });
+        },
+        child: SafeArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -479,6 +506,7 @@ class _ProgressJournal extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
