@@ -7,6 +7,17 @@ class CharacterAssetResolver {
   static String? rival(GameAssetProfile profile) => profile.rivalAsset;
   static String? champion(GameAssetProfile profile) => profile.championAsset;
 
+  /// Sprite representativo para victorias NDS detectadas desde una bandera
+  /// persistente. Esas banderas conservan el ID del entrenador, pero no su
+  /// clase gráfica; este recurso evita degradar a un icono de Material hasta
+  /// que exista una tabla de IDs específica para cada edición.
+  static String? genericTrainer(GameAssetProfile profile) {
+    final ndsVariant = _ndsTrainerVariant(profile.trainerSpriteSet);
+    if (ndsVariant == null) return null;
+    return 'assets/sprites/characters/trainers/'
+        '${profile.trainerSpriteSet}/entrenador_guay_${ndsVariant.$1}.${ndsVariant.$2}';
+  }
+
   static String trainer({
     required GameAssetProfile profile,
     required String trainerClass,

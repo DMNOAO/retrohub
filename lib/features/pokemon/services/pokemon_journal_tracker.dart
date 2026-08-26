@@ -4,6 +4,8 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../../core/assets/character_asset_resolver.dart';
+import '../../../core/assets/game_asset_profile.dart';
 import '../../../data/database/app_database.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
@@ -731,6 +733,10 @@ class PokemonJournalTracker {
   }) async {
     if (trainerId <= 0) return;
     final String generation = current.profile.isGen5 ? 'V' : 'IV';
+    final assetProfile = GameAssetProfile.fromTitle(
+      title: gameTitle,
+      console: 'NDS',
+    );
     await _insertEvent(
       type: 'trainer_defeated',
       title: 'Ganó un combate de entrenador',
@@ -739,6 +745,7 @@ class PokemonJournalTracker {
         ..._metadata(current),
         'trainerId': trainerId,
         'generation': generation,
+        'spritePath': CharacterAssetResolver.genericTrainer(assetProfile),
         'detectedFromTrainerFlag': true,
       },
     );

@@ -393,7 +393,7 @@ class _TimelineCard extends StatelessWidget {
         return _Visual(
           explicitPath ??
               (trainerClass == null
-                  ? null
+                  ? CharacterAssetResolver.genericTrainer(profile)
                   : CharacterAssetResolver.trainer(
                       profile: profile,
                       trainerClass: trainerClass,
