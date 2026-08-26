@@ -18,6 +18,7 @@ import '../pokemon/decoder/pokemon_item_resolver.dart';
 import '../pokemon/decoder/pokemon_nature_resolver.dart';
 import 'journal_history_page.dart';
 import 'widgets/move_type_tile.dart';
+import 'widgets/journal_chrome.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
   final Game game;
@@ -82,18 +83,32 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final game = _game ?? widget.game;
     final journalAppearance = AppAppearance.forGameTitle(game.title);
     final journal = Scaffold(
-      appBar: AppBar(
-        title: const Text('Bitácora'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: () {
-              setState(() => _isLoading = true);
-              _loadSnapshot();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
+      appBar: JournalAppBar(
+        title: 'Bitácora',
+        icon: Icons.menu_book_rounded,
+        onRefresh: () {
+          setState(() => _isLoading = true);
+          _loadSnapshot();
+        },
+      ),
+      bottomNavigationBar: JournalSectionBar(
+        sections: const [
+          JournalSection('summary', 'Resumen', Icons.dashboard_outlined),
+          JournalSection('history', 'Historia', Icons.auto_stories_outlined),
+          JournalSection('pokemon', 'Pokedex', Icons.catching_pokemon),
         ],
+        selected: 'summary',
+        onSelected: (section) {
+          if (section == 'summary') return;
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => JournalHistoryPage(
+                game: game,
+                initialSection: section == 'pokemon' ? 'pokemon' : 'all',
+              ),
+            ),
+          );
+        },
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -238,16 +253,7 @@ class _ProgressJournal extends StatelessWidget {
               ? null
               : _pokemonSprite(profile, party.first),
         ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => JournalHistoryPage(game: game)),
-            );
-          },
-          icon: const Icon(Icons.auto_stories_outlined),
-          label: const Text('Ver historia completa'),
-        ),
+        const SizedBox(height: 8),
         const _SectionTitle(title: 'Equipo actual'),
         if (party.isEmpty)
           const _EmptySection(
