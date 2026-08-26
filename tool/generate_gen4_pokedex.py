@@ -65,6 +65,7 @@ def main():
 
     details = {}
     abilities = {}
+    types = {}
     tutor_moves = {}
     egg_moves = {}
     base_species = {}
@@ -87,6 +88,9 @@ def main():
         }
         abilities[species_id] = [ability_ids[a.removeprefix('ABILITY_')]
                                  for a in data.get('abilities', []) if a != 'ABILITY_NONE']
+        types[species_id] = list(dict.fromkeys(
+            value.removeprefix('TYPE_').lower() for value in data.get('types', [])
+        ))
         tutor_moves[species_id] = [move_ids[m.removeprefix('MOVE_')]
                                    for m in learnset.get('by_tutor', [])
                                    if m.removeprefix('MOVE_') in move_ids]
@@ -179,6 +183,15 @@ def main():
             ability_out.append(f"  {ability_id}: ('{esc(ability_names[ability_id])}', '{esc(ability_desc.get(ability_id, ''))}'),")
     ability_out.append('};')
     (ROOT / 'lib/features/pokemon/decoder/gen4_ability_data.dart').write_text('\n'.join(ability_out) + '\n')
+
+    type_out = ["import 'move_type_resolver.dart';", '',
+                '// GENERATED FILE. Run: python tool/generate_gen4_pokedex.py',
+                'const Map<int, List<PokemonMoveType>> gen4PokemonTypes = {']
+    for species_id, values in types.items():
+        rendered = ', '.join(f'PokemonMoveType.{value}' for value in values)
+        type_out.append(f'  {species_id}: <PokemonMoveType>[{rendered}],')
+    type_out.append('};')
+    (ROOT / 'lib/features/pokemon/decoder/gen4_pokemon_types.dart').write_text('\n'.join(type_out) + '\n')
 
     learnset_out = ['// GENERATED FILE. Run: python tool/generate_gen4_pokedex.py']
     for name, values in [('gen4TutorMoves', tutor_moves), ('gen4EggMoves', egg_moves)]:
