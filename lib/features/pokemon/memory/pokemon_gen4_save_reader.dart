@@ -108,6 +108,7 @@ final class PokemonGen4SaveReader {
       memoryShift: blockBase,
       playerName: playerName,
       trainerId: _u16(general, layout.trainerOffset + 0x10),
+      isFemale: general[layout.trainerOffset + 0x18] == 1,
       currentMapId: _u16(general, layout.mapOffset),
       playerX: _u16(general, layout.xOffset),
       playerY: _u16(general, layout.yOffset),
