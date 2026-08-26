@@ -111,7 +111,7 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
           Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
             Text('#${_displayNumber.toString().padLeft(3, '0')}', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
-            Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)), child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId, isShiny: _supportsShiny && _showShiny, isFemale: selectedForm?.female ?? false, formSuffix: selectedForm?.suffix), size: 112, fallbackIcon: Icons.catching_pokemon)),
+            Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: scheme.primary, width: 3)), child: SpriteImage(path: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId, isShiny: _supportsShiny && _showShiny, isFemale: selectedForm?.female ?? false, formSuffix: selectedForm?.suffix), size: 112, fallbackIcon: Icons.catching_pokemon, fallbackPath: SpriteResolver.pokemonForGame(profile: widget.profile, pokemonId: _pokemonId))),
             const SizedBox(height: 12),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(name, style: Theme.of(context).textTheme.headlineSmall),
