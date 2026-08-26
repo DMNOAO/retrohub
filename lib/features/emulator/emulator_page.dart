@@ -110,6 +110,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         );
     final bool supportsPokemonJournal =
         pokemonProfile.isGen4 ||
+        (pokemonProfile.isGen5 &&
+            (pokemonProfile.version == PokemonGameVersion.black ||
+                pokemonProfile.version == PokemonGameVersion.white)) ||
         CoreLoader.isGameBoyRom(game.romPath) ||
         (CoreLoader.isGbaRom(game.romPath) &&
             (pokemonProfile.version == PokemonGameVersion.emerald ||
@@ -1598,12 +1601,14 @@ class _EmulatorVisualTheme {
       secondary = const Color(0xFF49647A);
       accent = const Color(0xFFDCEBFA);
     } else if (identity.contains('black 2') ||
-        identity.contains('negro 2')) {
+        identity.contains('negro 2') ||
+        identity.contains('negra 2')) {
       primary = const Color(0xFF111318);
       secondary = const Color(0xFF263A54);
       accent = const Color(0xFF64B5F6);
     } else if (identity.contains('white 2') ||
-        identity.contains('blanco 2')) {
+        identity.contains('blanco 2') ||
+        identity.contains('blanca 2')) {
       primary = const Color(0xFF34343A);
       secondary = const Color(0xFF6D7180);
       accent = const Color(0xFFF2F4FF);

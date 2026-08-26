@@ -9,6 +9,14 @@ void main() {
       ('Pokémon Platino.nds', PokemonGameVersion.platinum),
       ('Pokemon HeartGold (USA).nds', PokemonGameVersion.heartGold),
       ('Pokémon SoulSilver.nds', PokemonGameVersion.soulSilver),
+      ('Pokémon Negro.nds', PokemonGameVersion.black),
+      ('Pokemon White (USA).nds', PokemonGameVersion.white),
+      ('Pokemon Blanca.nds', PokemonGameVersion.white),
+      ('Pokemon Negra.nds', PokemonGameVersion.black),
+      ('Pokémon Negro 2.nds', PokemonGameVersion.black2),
+      ('Pokemon White 2.nds', PokemonGameVersion.white2),
+      ('Pokemon Negra 2.nds', PokemonGameVersion.black2),
+      ('Pokemon Blanca 2.nds', PokemonGameVersion.white2),
     ]) {
       test('detecta ${testCase.$1}', () {
         final profile = PokemonGameProfile.fromRomPath(testCase.$1);

@@ -55,6 +55,13 @@ const List<int> johtoHeartGoldSoulSilverPokedexOrder = <int>[
   145,146,243,244,245,147,148,149,246,247,248,249,250,150,151,251,
 ];
 
+/// Pokédex de Teselia de Blanco y Negro: Victini ocupa el número regional
+/// 000, seguido por las 155 especies introducidas en la quinta generación.
+final List<int> unovaBlackWhitePokedexOrder = <int>[
+  494,
+  for (int id = 495; id <= 649; id++) id,
+];
+
 List<int> pokedexIdsInOrder(Iterable<int> ids, List<int> order) {
   final available = ids.toSet();
   return order.where(available.contains).toList(growable: false);

@@ -3,6 +3,7 @@ import '../../game_engine/game_engine.dart';
 import '../../game_engine/game_engine_status.dart';
 import '../memory/pokemon_emerald_memory_reader.dart';
 import '../memory/pokemon_gen4_save_reader.dart';
+import '../memory/pokemon_gen5_save_reader.dart';
 import '../memory/pokemon_memory_reader.dart';
 import '../memory/pokemon_memory_profile_resolver.dart';
 import '../models/pokemon_game_profile.dart';
@@ -30,6 +31,9 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
   @override
   bool get isSupported =>
       profile.isGen4 ||
+      (profile.isGen5 &&
+          (profile.version == PokemonGameVersion.black ||
+              profile.version == PokemonGameVersion.white)) ||
       profile.memoryMapVerified ||
       profile.version == PokemonGameVersion.emerald ||
       profile.version == PokemonGameVersion.ruby ||
@@ -57,7 +61,7 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
     final int systemRamSize = bridge.memoryRegionSize(
       LibretroMemoryRegion.systemRam,
     );
-    final int readableMemorySize = profile.isGen4
+    final int readableMemorySize = profile.isGen4 || profile.isGen5
         ? bridge.memoryRegionSize(LibretroMemoryRegion.saveRam)
         : systemRamSize;
 
@@ -92,7 +96,9 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
           gameName: gameName,
           systemRamSize: readableMemorySize,
           snapshot: null,
-          message: profile.isGen4
+          message: profile.isGen5
+              ? PokemonGen5SaveReader.lastDiagnostic
+              : profile.isGen4
               ? PokemonGen4SaveReader.lastDiagnostic
               : PokemonMemoryProfileResolver.lastDiagnostic,
         );

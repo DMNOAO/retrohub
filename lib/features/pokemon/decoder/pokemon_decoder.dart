@@ -5,6 +5,7 @@ import 'locations/gen3/emerald_locations.dart';
 import 'locations/gen3/fire_red_leaf_green_locations.dart';
 import 'locations/gen4/heart_gold_soul_silver_locations.dart';
 import 'locations/gen4/platinum_locations.dart';
+import 'locations/gen5/black_white_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -88,7 +89,7 @@ class PokemonDecoder {
   }
 
   static int dexId(PokemonGameProfile profile, int species) =>
-      profile.isGen2 || profile.isGen4
+      profile.isGen2 || profile.isGen4 || profile.isGen5
       ? species
       : (_gen1InternalToDex[species] ?? 0);
 
@@ -115,7 +116,7 @@ class PokemonDecoder {
       final String map = (mapId & 0xFF).toString().padLeft(2, '0');
       return 'Mapa $group:$map';
     }
-    if (profile.isGen4) return 'Zona $mapId';
+    if (profile.isGen4 || profile.isGen5) return 'Zona $mapId';
     if (profile.isGen2) {
       return 'Mapa ${((mapId >> 8) & 0xff).toString().padLeft(2, '0')}:${(mapId & 0xff).toString().padLeft(2, '0')}';
     }
@@ -152,6 +153,12 @@ class PokemonDecoder {
       case PokemonGameVersion.heartGold:
       case PokemonGameVersion.soulSilver:
         return heartGoldSoulSilverLocations[mapId];
+      case PokemonGameVersion.black:
+      case PokemonGameVersion.white:
+        return blackWhiteLocations[mapId];
+      case PokemonGameVersion.black2:
+      case PokemonGameVersion.white2:
+        return null;
       case PokemonGameVersion.unsupported:
         return null;
     }
@@ -160,7 +167,9 @@ class PokemonDecoder {
   static String badgeName(PokemonGameProfile profile, int index) {
     final isHgss = profile.version == PokemonGameVersion.heartGold ||
         profile.version == PokemonGameVersion.soulSilver;
-    final names = profile.isGen4
+    final names = profile.isGen5
+        ? _unovaBlackWhiteBadges
+        : profile.isGen4
         ? (isHgss
               ? _gen2Badges
               : profile.version == PokemonGameVersion.platinum
@@ -184,6 +193,16 @@ class PokemonDecoder {
     'Medalla Pantano',
     'Medalla Volcán',
     'Medalla Tierra',
+  ];
+  static const _unovaBlackWhiteBadges = <String>[
+    'Medalla Trío',
+    'Medalla Base',
+    'Medalla Élitro',
+    'Medalla Voltio',
+    'Medalla Temblor',
+    'Medalla Jet',
+    'Medalla Candelero',
+    'Medalla Leyenda',
   ];
   static const _gen2Badges = <String>[
     'Medalla Céfiro',
@@ -966,6 +985,162 @@ class PokemonDecoder {
     'Darkrai',
     'Shaymin',
     'Arceus',
+    'Victini',
+    'Snivy',
+    'Servine',
+    'Serperior',
+    'Tepig',
+    'Pignite',
+    'Emboar',
+    'Oshawott',
+    'Dewott',
+    'Samurott',
+    'Patrat',
+    'Watchog',
+    'Lillipup',
+    'Herdier',
+    'Stoutland',
+    'Purrloin',
+    'Liepard',
+    'Pansage',
+    'Simisage',
+    'Pansear',
+    'Simisear',
+    'Panpour',
+    'Simipour',
+    'Munna',
+    'Musharna',
+    'Pidove',
+    'Tranquill',
+    'Unfezant',
+    'Blitzle',
+    'Zebstrika',
+    'Roggenrola',
+    'Boldore',
+    'Gigalith',
+    'Woobat',
+    'Swoobat',
+    'Drilbur',
+    'Excadrill',
+    'Audino',
+    'Timburr',
+    'Gurdurr',
+    'Conkeldurr',
+    'Tympole',
+    'Palpitoad',
+    'Seismitoad',
+    'Throh',
+    'Sawk',
+    'Sewaddle',
+    'Swadloon',
+    'Leavanny',
+    'Venipede',
+    'Whirlipede',
+    'Scolipede',
+    'Cottonee',
+    'Whimsicott',
+    'Petilil',
+    'Lilligant',
+    'Basculin',
+    'Sandile',
+    'Krokorok',
+    'Krookodile',
+    'Darumaka',
+    'Darmanitan',
+    'Maractus',
+    'Dwebble',
+    'Crustle',
+    'Scraggy',
+    'Scrafty',
+    'Sigilyph',
+    'Yamask',
+    'Cofagrigus',
+    'Tirtouga',
+    'Carracosta',
+    'Archen',
+    'Archeops',
+    'Trubbish',
+    'Garbodor',
+    'Zorua',
+    'Zoroark',
+    'Minccino',
+    'Cinccino',
+    'Gothita',
+    'Gothorita',
+    'Gothitelle',
+    'Solosis',
+    'Duosion',
+    'Reuniclus',
+    'Ducklett',
+    'Swanna',
+    'Vanillite',
+    'Vanillish',
+    'Vanilluxe',
+    'Deerling',
+    'Sawsbuck',
+    'Emolga',
+    'Karrablast',
+    'Escavalier',
+    'Foongus',
+    'Amoonguss',
+    'Frillish',
+    'Jellicent',
+    'Alomomola',
+    'Joltik',
+    'Galvantula',
+    'Ferroseed',
+    'Ferrothorn',
+    'Klink',
+    'Klang',
+    'Klinklang',
+    'Tynamo',
+    'Eelektrik',
+    'Eelektross',
+    'Elgyem',
+    'Beheeyem',
+    'Litwick',
+    'Lampent',
+    'Chandelure',
+    'Axew',
+    'Fraxure',
+    'Haxorus',
+    'Cubchoo',
+    'Beartic',
+    'Cryogonal',
+    'Shelmet',
+    'Accelgor',
+    'Stunfisk',
+    'Mienfoo',
+    'Mienshao',
+    'Druddigon',
+    'Golett',
+    'Golurk',
+    'Pawniard',
+    'Bisharp',
+    'Bouffalant',
+    'Rufflet',
+    'Braviary',
+    'Vullaby',
+    'Mandibuzz',
+    'Heatmor',
+    'Durant',
+    'Deino',
+    'Zweilous',
+    'Hydreigon',
+    'Larvesta',
+    'Volcarona',
+    'Cobalion',
+    'Terrakion',
+    'Virizion',
+    'Tornadus',
+    'Thundurus',
+    'Reshiram',
+    'Zekrom',
+    'Landorus',
+    'Kyurem',
+    'Keldeo',
+    'Meloetta',
+    'Genesect',
   ];
 
   // --- Fase 4.1A: tabla de ubicaciones propia por versión de juego. ---

@@ -2,6 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retrohub/features/journal/pokedex_orders.dart';
 
 void main() {
+  test('Teselia conserva a Victini como número regional 000', () {
+    expect(unovaBlackWhitePokedexOrder, hasLength(156));
+    expect(unovaBlackWhitePokedexOrder.first, 494);
+    expect(unovaBlackWhitePokedexOrder[1], 495);
+    expect(unovaBlackWhitePokedexOrder.last, 649);
+  });
+
   test('Hoenn keeps the official 202-species regional order', () {
     expect(hoennPokedexOrder, hasLength(202));
     expect(hoennPokedexOrder.toSet(), hasLength(202));

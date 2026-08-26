@@ -12,10 +12,12 @@ enum PokemonAssetGame {
   diamondPearl,
   platinum,
   heartGoldSoulSilver,
+  blackWhite,
+  black2White2,
   unsupported,
 }
 
-enum PokemonAssetRegion { kanto, johto, hoenn, sinnoh, unknown }
+enum PokemonAssetRegion { kanto, johto, hoenn, sinnoh, unova, unknown }
 
 class GameAssetProfile {
   final PokemonAssetGame game;
@@ -54,6 +56,52 @@ class GameAssetProfile {
         .replaceAll(RegExp(r'[_\-]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+
+    final bool isBlackWhite2 = value.contains('black 2') ||
+        value.contains('black2') ||
+        value.contains('white 2') ||
+        value.contains('white2') ||
+        value.contains('negro 2') ||
+        value.contains('negro2') ||
+        value.contains('blanco 2') ||
+        value.contains('blanco2') ||
+        value.contains('negra 2') ||
+        value.contains('negra2') ||
+        value.contains('blanca 2') ||
+        value.contains('blanca2');
+    if (isBlackWhite2) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.black2White2,
+        region: PokemonAssetRegion.unova,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/gen5',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Unova',
+        protagonistAsset: 'assets/sprites/characters/protagonists/hilbert_bw2.gif',
+        femaleProtagonistAsset: 'assets/sprites/characters/protagonists/hilda_bw2.gif',
+        rivalAsset: 'assets/sprites/characters/rivals/cheren_bw2.gif',
+        championAsset: 'assets/sprites/characters/champions/iris_unova_bw2.gif',
+        sourceTitle: value,
+      );
+    }
+    if (value.contains('black') ||
+        value.contains('white') ||
+        value.contains('negro') ||
+        value.contains('negra') ||
+        value.contains('blanco') ||
+        value.contains('blanca')) {
+      return GameAssetProfile(
+        game: PokemonAssetGame.blackWhite,
+        region: PokemonAssetRegion.unova,
+        pokemonSpriteSet: savedSpriteSet ?? 'nds/gen5',
+        pokemonExtension: 'png',
+        trainerSpriteSet: 'nds/Unova',
+        protagonistAsset: 'assets/sprites/characters/protagonists/hilbert_bw.png',
+        femaleProtagonistAsset: 'assets/sprites/characters/protagonists/hilda_bw.png',
+        rivalAsset: 'assets/sprites/characters/rivals/cheren_bw.gif',
+        championAsset: 'assets/sprites/characters/champions/alder_unova.gif',
+        sourceTitle: value,
+      );
+    }
 
     if (value.contains('heartgold') ||
         value.contains('heart gold') ||

@@ -37,8 +37,6 @@ class _GameDetailPageState extends ConsumerState<GameDetailPage> {
           const SizedBox(height: 8), Text(game.console), const SizedBox(height: 16),
           Text('⏱ ${PlayTimeFormatter.fromSeconds(game.playTimeSeconds)} jugadas'),
         ]))),
-        const SizedBox(height: 12),
-        Text(game.romPath, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white70)),
         const SizedBox(height: 24),
         FilledButton.icon(onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmulatorPage(game: game)));

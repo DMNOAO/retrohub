@@ -72,6 +72,17 @@ class BadgeAssetResolver {
     ('beacon', 'Medalla Faro'),
   ];
 
+  static const _unovaBlackWhite = <(String, String)>[
+    ('trio', 'Medalla Trío'),
+    ('basic', 'Medalla Base'),
+    ('insect', 'Medalla Élitro'),
+    ('bolt', 'Medalla Voltio'),
+    ('quake', 'Medalla Temblor'),
+    ('jet', 'Medalla Jet'),
+    ('freeze', 'Medalla Candelero'),
+    ('legend', 'Medalla Leyenda'),
+  ];
+
   static BadgeAsset resolve(GameAssetProfile profile, int index) {
     if (profile.game == PokemonAssetGame.heartGoldSoulSilver && index >= 8) {
       return resolveForRegion(PokemonAssetRegion.kanto, index - 8);
@@ -91,12 +102,14 @@ class BadgeAssetResolver {
       PokemonAssetRegion.johto => _johto,
       PokemonAssetRegion.hoenn => _hoenn,
       PokemonAssetRegion.sinnoh => _sinnohDiamondPearl,
+      PokemonAssetRegion.unova => _unovaBlackWhite,
       _ => _kanto,
     };
     final folder = switch (region) {
       PokemonAssetRegion.johto => 'Johto',
       PokemonAssetRegion.hoenn => 'Hoenn',
       PokemonAssetRegion.sinnoh => 'Sinnoh',
+      PokemonAssetRegion.unova => 'Unova',
       _ => 'Kanto',
     };
     return _resolve(values, folder, safeIndex);

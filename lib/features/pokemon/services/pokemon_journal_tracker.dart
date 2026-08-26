@@ -282,7 +282,11 @@ class PokemonJournalTracker {
           (pokemon) =>
               (pokemon.pokedexId >= 1 &&
                   pokemon.pokedexId <=
-                      (value.profile.isGen4 ? 493 : 386)) ||
+                      (value.profile.isGen5
+                          ? 649
+                          : value.profile.isGen4
+                          ? 493
+                          : 386)) ||
               (pokemon.isEgg &&
                   value.profile.isGen2 &&
                   pokemon.pokedexId == 0),

@@ -78,9 +78,11 @@ class CoverHelper {
     'pokemon black': 'assets/covers/nds/Pokémon_Edición_Negra.png',
 
     'pokemon blanco 2': 'assets/covers/nds/Pokémon_Blanco_2.png',
+    'pokemon blanca 2': 'assets/covers/nds/Pokémon_Blanco_2.png',
     'pokemon white 2': 'assets/covers/nds/Pokémon_Blanco_2.png',
 
     'pokemon negro 2': 'assets/covers/nds/Pokémon_Negro_2.png',
+    'pokemon negra 2': 'assets/covers/nds/Pokémon_Negro_2.png',
     'pokemon black 2': 'assets/covers/nds/Pokémon_Negro_2.png',
 
     // SNES

@@ -1,6 +1,7 @@
 import '../../../core/assets/game_asset_profile.dart';
 import '../../pokemon/decoder/pokemon_decoder.dart';
 import 'gen4_evolution_data.dart';
+import 'gen5_evolution_data.dart';
 
 class PokedexEvolutionData {
   const PokedexEvolutionData._();
@@ -15,11 +16,16 @@ class PokedexEvolutionData {
       PokemonAssetGame.diamondPearl ||
       PokemonAssetGame.platinum ||
       PokemonAssetGame.heartGoldSoulSilver => 4,
+      PokemonAssetGame.blackWhite || PokemonAssetGame.black2White2 => 5,
       _ => 0,
     };
     if (generation == 0) return '';
     if (generation == 4) {
       return gen4EvolutionData[pokemonId] ??
+          'No evoluciona en esta generación.';
+    }
+    if (generation == 5) {
+      return gen5EvolutionData[pokemonId] ??
           'No evoluciona en esta generación.';
     }
     final rules = profile.game == PokemonAssetGame.fireRedLeafGreen
