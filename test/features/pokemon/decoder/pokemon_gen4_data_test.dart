@@ -41,6 +41,33 @@ void main() {
     );
   });
 
+  test('resuelve ubicaciones y protagonistas de HeartGold y SoulSilver', () {
+    final PokemonGameProfile heartGold =
+        PokemonGameProfile.fromRomPath('Pokemon HeartGold.nds');
+    final PokemonGameProfile soulSilver =
+        PokemonGameProfile.fromRomPath('Pokemon SoulSilver.nds');
+    expect(PokemonDecoder.mapName(heartGold, 33), 'Ruta 29');
+    expect(
+      PokemonDecoder.locationFor(heartGold, 33)?.kind,
+      PokemonLocationKind.route,
+    );
+    expect(PokemonDecoder.mapName(soulSilver, 60), 'Pueblo Primavera');
+
+    final GameAssetProfile assets = GameAssetProfile.fromTitle(
+      title: 'Pokémon Edición Oro HeartGold',
+      console: 'nds',
+    );
+    expect(
+      assets.protagonistAsset,
+      'assets/sprites/characters/protagonists/ethan_hgss.png',
+    );
+    expect(
+      assets.femaleProtagonistAsset,
+      'assets/sprites/characters/protagonists/lyra_hgss.png',
+    );
+    expect(assets.pokemonSpriteSet, 'nds/heartgold-soulsilver');
+  });
+
   test('muestra ubicaciones de Sinnoh en Diamante, Perla y Platino', () {
     final PokemonGameProfile diamond = PokemonGameProfile.fromRomPath('Pokemon Diamond.nds');
     final PokemonGameProfile pearl = PokemonGameProfile.fromRomPath('Pokemon Pearl.nds');
