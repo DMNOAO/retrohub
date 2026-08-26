@@ -18,6 +18,7 @@ void main() {
     _utf16(bytes, trainer, 'LUCAS');
     _u16(bytes, trainer + 0x10, 12345);
     _u32(bytes, trainer + 0x14, 54321);
+    bytes[trainer + 0x18] = 1;
     bytes[trainer + 0x1A] = 0x05;
     bytes[trainer + 0x1D] = 0x02;
     _u16(bytes, trainer + 0x22, 12);
@@ -49,6 +50,7 @@ void main() {
     expect(snapshot, isNotNull);
     expect(snapshot!.playerName, 'LUCAS');
     expect(snapshot.trainerId, 12345);
+    expect(snapshot.isFemale, isTrue);
     expect(snapshot.money, 54321);
     expect(snapshot.badgesMask, 0x05);
     expect(snapshot.currentMapId, 411);
