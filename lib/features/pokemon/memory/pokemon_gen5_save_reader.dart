@@ -1,8 +1,9 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
+
 import '../data/pokemon_hatch_cycles.dart';
 import '../decoder/pokemon_decoder.dart';
-import '../decoder/pokemon_gen4_text_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
@@ -39,6 +40,7 @@ final class PokemonGen5SaveReader {
     if (_lastLoggedDiagnostic == value) return;
     _lastLoggedDiagnostic = value;
     developer.log(value, name: 'RetroHub.Gen5SaveReader');
+    debugPrint('[RetroHub.Gen5SaveReader] $value');
   }
 
   final PokemonGameProfile profile;
@@ -213,7 +215,10 @@ final class PokemonGen5SaveReader {
       if (value == 0 || value == 0xFFFF) break;
       glyphs.add(value);
     }
-    return PokemonGen4TextDecoder.decodeWords(glyphs);
+    return String.fromCharCodes(glyphs)
+        .replaceAll(String.fromCharCode(0x246D), '♂')
+        .replaceAll(String.fromCharCode(0x246E), '♀')
+        .trim();
   }
 
   static int _u16(List<int> bytes, int offset) =>
