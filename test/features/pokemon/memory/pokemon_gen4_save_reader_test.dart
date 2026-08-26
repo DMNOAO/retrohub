@@ -136,7 +136,15 @@ void _u32(List<int> bytes, int offset, int value) {
 
 void _utf16(List<int> bytes, int offset, String value) {
   for (int index = 0; index < value.length; index++) {
-    _u16(bytes, offset + index * 2, value.codeUnitAt(index));
+    final int code = value.codeUnitAt(index);
+    final int glyph = code >= 0x41 && code <= 0x5A
+        ? 0x12B + code - 0x41
+        : code >= 0x61 && code <= 0x7A
+        ? 0x145 + code - 0x61
+        : code >= 0x30 && code <= 0x39
+        ? 0x121 + code - 0x30
+        : 0x1AC;
+    _u16(bytes, offset + index * 2, glyph);
   }
   _u16(bytes, offset + value.length * 2, 0xFFFF);
 }
