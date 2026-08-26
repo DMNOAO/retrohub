@@ -43,8 +43,8 @@ void main() {
     expect(
       NdsTrainerResolver.forClassId(
         version: PokemonGameVersion.white,
-        trainerId: 10,
-        classId: 10,
+        trainerId: 39,
+        classId: 39,
       ),
       isNull,
     );
