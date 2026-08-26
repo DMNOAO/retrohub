@@ -16,6 +16,7 @@ import '../models/pokemon_memory_snapshot.dart';
 import '../models/emerald_trainer.dart';
 import '../models/ruby_sapphire_trainer.dart';
 import '../models/trainer_class.dart';
+import 'nds_trainer_resolver.dart';
 
 class PokemonJournalTracker {
   final AppDatabase database;
@@ -737,19 +738,32 @@ class PokemonJournalTracker {
       title: gameTitle,
       console: 'NDS',
     );
+    final trainer = await NdsTrainerResolver.resolve(
+      romPath: romPath,
+      version: current.profile.version,
+      trainerId: trainerId,
+    );
     await _insertEvent(
       type: 'trainer_defeated',
-      title: 'Ganó un combate de entrenador',
+      title: trainer == null
+          ? 'Ganó un combate de entrenador'
+          : 'Ganó contra ${trainer.className}',
       description: 'Venció a un entrenador durante su aventura.',
       metadata: <String, dynamic>{
         ..._metadata(current),
         'trainerId': trainerId,
+        'trainerClassId': trainer?.classId,
+        'trainerClass': trainer?.className,
         'generation': generation,
-        'spritePath': CharacterAssetResolver.genericTrainer(assetProfile),
+        'spritePath': trainer?.spritePath ??
+            CharacterAssetResolver.genericTrainer(assetProfile),
         'detectedFromTrainerFlag': true,
       },
     );
-    await _rememberLastDefeatedTrainer('Entrenador', current);
+    await _rememberLastDefeatedTrainer(
+      trainer?.className ?? 'Entrenador',
+      current,
+    );
   }
 
   Future<void> _recordGen3TrainerVictory({
