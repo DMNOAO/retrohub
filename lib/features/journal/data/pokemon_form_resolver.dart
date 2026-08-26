@@ -28,7 +28,7 @@ abstract final class PokemonFormResolver {
 
     if (pokemonId == 201) {
       return <PokemonFormInfo>[
-        const PokemonFormInfo(id: 'unown-a', label: 'A'),
+        const PokemonFormInfo(id: 'unown-a', label: 'A', suffix: 'a'),
         for (var code = 98; code <= 122; code++)
           PokemonFormInfo(
             id: 'unown-${String.fromCharCode(code)}',
