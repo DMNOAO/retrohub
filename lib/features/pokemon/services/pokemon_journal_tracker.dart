@@ -359,6 +359,7 @@ class PokemonJournalTracker {
   bool _sameCoreState(PokemonMemorySnapshot a, PokemonMemorySnapshot b) {
     return a.playerName == b.playerName &&
         a.trainerId == b.trainerId &&
+        a.isFemale == b.isFemale &&
         a.currentMapId == b.currentMapId &&
         a.playerX == b.playerX &&
         a.playerY == b.playerY &&
@@ -1018,6 +1019,7 @@ class PokemonJournalTracker {
               (index) => <String, dynamic>{
                 'index': index,
                 'obtained': (value.badgesMask & (1 << index)) != 0,
+                'playerGender': value.isFemale ? 'female' : 'male',
               },
             ),
           ),
@@ -1066,6 +1068,7 @@ class PokemonJournalTracker {
       'profile': value.profile.displayName,
       'playerName': value.playerName,
       'trainerId': value.trainerId,
+      'playerGender': value.isFemale ? 'female' : 'male',
       'mapId': value.currentMapId,
       'mapName': PokemonDecoder.mapName(value.profile, value.currentMapId),
       'x': value.playerX,
