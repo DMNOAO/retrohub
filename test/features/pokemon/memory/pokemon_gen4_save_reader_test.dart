@@ -27,6 +27,19 @@ void main() {
     _u16(bytes, 0x1244, 9);
     bytes[dex + 4] = 0x01;
     bytes[dex + 4 + 0x40] = 0x03;
+    _u32(bytes, 0x98, 6);
+    _u32(bytes, 0x9C, 1);
+    _writePartyPokemon(
+      bytes,
+      offset: 0xA0,
+      personality: 0,
+      trainerId: 0x12345678,
+      species: 393,
+      level: 5,
+      experience: 135,
+      friendship: 70,
+      moves: const <int>[1, 45],
+    );
 
     final profile = PokemonGameProfile.fromRomPath('Pokemon Diamond.nds');
     final snapshot = PokemonGen4SaveReader(
@@ -46,7 +59,70 @@ void main() {
     expect(snapshot.nationalDexUnlocked, isTrue);
     expect(snapshot.caughtPokemonIds, <int>[1]);
     expect(snapshot.seenPokemonIds, <int>[1, 2]);
+    expect(snapshot.party, hasLength(1));
+    expect(snapshot.party.single.pokedexId, 393);
+    expect(snapshot.party.single.name, 'Piplup');
+    expect(snapshot.party.single.level, 5);
+    expect(snapshot.party.single.currentHp, 20);
+    expect(snapshot.party.single.maximumHp, 20);
+    expect(snapshot.party.single.friendship, 70);
+    expect(snapshot.party.single.experience, 135);
+    expect(snapshot.party.single.moveIds, <int>[1, 45]);
   });
+}
+
+void _writePartyPokemon(
+  List<int> target, {
+  required int offset,
+  required int personality,
+  required int trainerId,
+  required int species,
+  required int level,
+  required int experience,
+  required int friendship,
+  required List<int> moves,
+}) {
+  final data = List<int>.filled(0x80, 0);
+  _u16(data, 0, species);
+  _u32(data, 4, trainerId);
+  _u32(data, 8, experience);
+  data[0x0C] = friendship;
+  for (int index = 0; index < moves.length && index < 4; index++) {
+    _u16(data, 0x20 + index * 2, moves[index]);
+  }
+
+  int checksum = 0;
+  for (int index = 0; index < data.length; index += 2) {
+    checksum = (checksum + data[index] + (data[index + 1] << 8)) & 0xFFFF;
+  }
+
+  final stats = List<int>.filled(0x64, 0);
+  stats[4] = level;
+  _u16(stats, 6, 20);
+  _u16(stats, 8, 20);
+  _u16(stats, 10, 12);
+  _u16(stats, 12, 10);
+  _u16(stats, 14, 11);
+  _u16(stats, 16, 12);
+  _u16(stats, 18, 10);
+
+  _u32(target, offset, personality);
+  _u16(target, offset + 6, checksum);
+  target.setRange(offset + 8, offset + 0x88, _crypt(data, checksum));
+  target.setRange(offset + 0x88, offset + 0xEC, _crypt(stats, personality));
+}
+
+List<int> _crypt(List<int> source, int initialSeed) {
+  final result = List<int>.from(source);
+  int seed = initialSeed & 0xFFFFFFFF;
+  for (int offset = 0; offset < result.length; offset += 2) {
+    seed = (seed * 0x41C64E6D + 0x6073) & 0xFFFFFFFF;
+    final value =
+        (result[offset] | (result[offset + 1] << 8)) ^ (seed >> 16);
+    result[offset] = value & 0xFF;
+    result[offset + 1] = value >> 8;
+  }
+  return result;
 }
 
 void _u16(List<int> bytes, int offset, int value) {

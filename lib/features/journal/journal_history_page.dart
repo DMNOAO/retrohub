@@ -144,7 +144,8 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                       nationalDexUnlocked:
                           profile.game != PokemonAssetGame.emerald &&
                               profile.game !=
-                                  PokemonAssetGame.fireRedLeafGreen ||
+                                  PokemonAssetGame.fireRedLeafGreen &&
+                              profile.region != PokemonAssetRegion.sinnoh ||
                           _nationalDexUnlocked,
                     )
                   : filtered.isEmpty

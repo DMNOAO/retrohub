@@ -1,3 +1,5 @@
+import '../data/pokemon_hatch_cycles.dart';
+import '../decoder/pokemon_decoder.dart';
 import '../models/pokemon_game_profile.dart';
 import '../models/pokemon_memory_snapshot.dart';
 
@@ -12,6 +14,13 @@ final class PokemonGen4SaveReader {
   static const int requiredSaveSize = 0x80000;
   static const int _partitionSize = 0x40000;
   static const int _dexRegionSize = 0x40;
+  static const int _partyPokemonSize = 0xEC;
+  static const List<String> _blockOrders = <String>[
+    'ABCD', 'ABDC', 'ACBD', 'ACDB', 'ADBC', 'ADCB',
+    'BACD', 'BADC', 'BCAD', 'BCDA', 'BDAC', 'BDCA',
+    'CABD', 'CADB', 'CBAD', 'CBDA', 'CDAB', 'CDBA',
+    'DABC', 'DACB', 'DBAC', 'DBCA', 'DCAB', 'DCBA',
+  ];
 
   final PokemonGameProfile profile;
   final Gen4SaveRead read;
@@ -50,6 +59,7 @@ final class PokemonGen4SaveReader {
       general,
       layout.dexOffset + 4 + _dexRegionSize,
     );
+    final List<PokemonPartyMember> party = _readParty(general, layout);
 
     return PokemonMemorySnapshot(
       capturedAt: DateTime.now(),
@@ -67,13 +77,118 @@ final class PokemonGen4SaveReader {
       nationalDexUnlocked: (progressFlags & 0x02) != 0,
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
-      // Party Pokémon are encrypted in Gen IV. They are intentionally added
-      // in the next phase rather than exposing partially decoded data.
-      party: const <PokemonPartyMember>[],
+      party: party,
       gamePlayTimeMinutes:
           _u16(general, layout.trainerOffset + 0x22) * 60 +
           general[layout.trainerOffset + 0x24],
     );
+  }
+
+  static List<PokemonPartyMember> _readParty(
+    List<int> general,
+    _Gen4Layout layout,
+  ) {
+    final int count = _u32(general, layout.partyOffset + 4);
+    if (count < 0 || count > 6) return const <PokemonPartyMember>[];
+
+    final List<PokemonPartyMember> party = <PokemonPartyMember>[];
+    final int pokemonStart = layout.partyOffset + 8;
+    for (int slot = 0; slot < count; slot++) {
+      final int offset = pokemonStart + slot * _partyPokemonSize;
+      if (offset + _partyPokemonSize > general.length) break;
+      final PokemonPartyMember? pokemon = _decodePartyPokemon(
+        general.sublist(offset, offset + _partyPokemonSize),
+      );
+      if (pokemon != null) party.add(pokemon);
+    }
+    return party;
+  }
+
+  static PokemonPartyMember? _decodePartyPokemon(List<int> encrypted) {
+    if (encrypted.length != _partyPokemonSize) return null;
+
+    final int personality = _u32(encrypted, 0);
+    final int storedChecksum = _u16(encrypted, 6);
+    final List<int> data = _cryptWords(
+      encrypted.sublist(8, 0x88),
+      storedChecksum,
+    );
+
+    int checksum = 0;
+    for (int offset = 0; offset < data.length; offset += 2) {
+      checksum = (checksum + _u16(data, offset)) & 0xFFFF;
+    }
+    if (checksum != storedChecksum) return null;
+
+    final int shuffle = ((personality & 0x3E000) >> 13) % 24;
+    final String order = _blockOrders[shuffle];
+    final int growth = order.indexOf('A') * 32;
+    final int attacks = order.indexOf('B') * 32;
+    final int species = _u16(data, growth);
+    if (species <= 0 || species > 493) return null;
+
+    final int heldItem = _u16(data, growth + 2);
+    final int originalTrainerId = _u32(data, growth + 4);
+    final int experience = _u32(data, growth + 8);
+    final int friendship = data[growth + 0x0C];
+    final int ivFlags = _u32(data, attacks + 0x10);
+    final bool isEgg = (ivFlags & (1 << 30)) != 0;
+    final List<int> moves = <int>[
+      for (int index = 0; index < 4; index++)
+        _u16(data, attacks + index * 2),
+    ].where((int move) => move > 0).toList(growable: false);
+
+    // Los datos de combate que siguen al BoxPokemon usan el PID como semilla
+    // y un segundo flujo del mismo LCRNG.
+    final List<int> stats = _cryptWords(encrypted.sublist(0x88), personality);
+    final int level = stats[4];
+    if (level <= 0 || level > 100) return null;
+
+    final int shinyValue =
+        (originalTrainerId & 0xFFFF) ^
+        (originalTrainerId >> 16) ^
+        (personality & 0xFFFF) ^
+        (personality >> 16);
+    final int? eggCyclesTotal = isEgg
+        ? hatchCyclesForPokedexId(species) ?? friendship
+        : null;
+
+    return PokemonPartyMember(
+      internalSpeciesId: species,
+      pokedexId: species,
+      name: PokemonDecoder.pokemonName(species),
+      level: isEgg ? 0 : level,
+      isShiny: shinyValue < 8,
+      isEgg: isEgg,
+      currentHp: _u16(stats, 6),
+      maximumHp: _u16(stats, 8),
+      status: _u32(stats, 0),
+      friendship: isEgg ? null : friendship,
+      experience: experience,
+      moveIds: moves,
+      attack: _u16(stats, 10),
+      defense: _u16(stats, 12),
+      speed: _u16(stats, 14),
+      specialAttack: _u16(stats, 16),
+      specialDefense: _u16(stats, 18),
+      abilitySlot: (personality & 1) + 1,
+      personality: personality,
+      heldItemId: heldItem,
+      eggCyclesRemaining: isEgg ? friendship : null,
+      eggCyclesTotal: eggCyclesTotal,
+    );
+  }
+
+  static List<int> _cryptWords(List<int> source, int initialSeed) {
+    final List<int> result = List<int>.from(source);
+    int seed = initialSeed & 0xFFFFFFFF;
+    for (int offset = 0; offset + 1 < result.length; offset += 2) {
+      seed = (seed * 0x41C64E6D + 0x6073) & 0xFFFFFFFF;
+      final int value = _u16(result, offset) ^ (seed >> 16);
+      result[offset] = value & 0xFF;
+      result[offset + 1] = value >> 8;
+    }
+    return result;
   }
 
   static int _newerBlock(List<int> first, List<int> second) {
@@ -125,6 +240,7 @@ final class _Gen4Layout {
   final int generalSize;
   final int trainerOffset;
   final int dexOffset;
+  final int partyOffset;
   final int mapOffset;
   final int xOffset;
   final int yOffset;
@@ -133,6 +249,7 @@ final class _Gen4Layout {
     required this.generalSize,
     required this.trainerOffset,
     required this.dexOffset,
+    required this.partyOffset,
     required this.mapOffset,
     required this.xOffset,
     required this.yOffset,
@@ -143,6 +260,7 @@ final class _Gen4Layout {
       generalSize: 0xC100,
       trainerOffset: 0x64,
       dexOffset: 0x12DC,
+      partyOffset: 0x98,
       mapOffset: 0x1238,
       xOffset: 0x1240,
       yOffset: 0x1244,
@@ -151,6 +269,7 @@ final class _Gen4Layout {
       generalSize: 0xCF2C,
       trainerOffset: 0x68,
       dexOffset: 0x1328,
+      partyOffset: 0x9C,
       mapOffset: 0x1280,
       xOffset: 0x1288,
       yOffset: 0x128C,

@@ -7,7 +7,7 @@ import '../pokemon/decoder/pokemon_decoder.dart';
 import 'pokedex_detail_page.dart';
 import 'pokedex_orders.dart';
 
-enum PokedexOrder { johto, kanto, hoenn, national }
+enum PokedexOrder { johto, kanto, hoenn, sinnoh, national }
 
 class PokedexGrid extends StatefulWidget {
   final GameAssetProfile profile;
@@ -34,7 +34,7 @@ class _PokedexGridState extends State<PokedexGrid> {
   void initState() {
     super.initState();
     _order = _isSinnoh
-        ? PokedexOrder.national
+        ? PokedexOrder.sinnoh
         : _isHoenn
         ? PokedexOrder.hoenn
         : _isGen3Kanto
@@ -45,7 +45,12 @@ class _PokedexGridState extends State<PokedexGrid> {
   @override
   Widget build(BuildContext context) {
     final national = List<int>.generate(_isSinnoh ? 493 : (_isGen3 ? 386 : (_isGen2 ? 251 : 151)), (index) => index + 1);
-    final ids = _isGen2 && _order == PokedexOrder.johto
+    final sinnoh = widget.profile.game == PokemonAssetGame.platinum
+        ? sinnohPlatinumPokedexOrder
+        : sinnohDiamondPearlPokedexOrder;
+    final ids = _isSinnoh && _order == PokedexOrder.sinnoh
+        ? sinnoh
+        : _isGen2 && _order == PokedexOrder.johto
         ? _johtoOrder
         : _isHoenn && _order == PokedexOrder.hoenn
         ? hoennPokedexOrder
@@ -64,6 +69,7 @@ class _PokedexGridState extends State<PokedexGrid> {
           if (_isGen2) SegmentedButton<PokedexOrder>(segments: const [ButtonSegment(value: PokedexOrder.johto, label: Text('Johto')), ButtonSegment(value: PokedexOrder.national, label: Text('Nacional'))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
           if (_isHoenn) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.hoenn, label: Text('Hoenn')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
           if (_isGen3Kanto) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.kanto, label: Text('Kanto')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
+          if (_isSinnoh) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.sinnoh, label: Text('Sinnoh')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
         ]),
       ),
       Expanded(child: LayoutBuilder(builder: (context, constraints) {
@@ -76,7 +82,7 @@ class _PokedexGridState extends State<PokedexGrid> {
             final dexId = ids[index];
             final seen = widget.seenIds.contains(dexId);
             final caught = widget.caughtIds.contains(dexId);
-            final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isHoenn && _order == PokedexOrder.hoenn) ? index + 1 : dexId;
+            final displayNumber = (_isGen2 && _order == PokedexOrder.johto) || (_isHoenn && _order == PokedexOrder.hoenn) || (_isSinnoh && _order == PokedexOrder.sinnoh) ? index + 1 : dexId;
             return InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: seen ? () {
