@@ -136,6 +136,9 @@ flutter:
     - assets/sprites/characters/trainers/gbc/
     - assets/sprites/characters/trainers/gba/Kanto/
     - assets/sprites/characters/trainers/gba/Hoenn/
+    - assets/sprites/characters/trainers/nds/Johto/
+    - assets/sprites/characters/trainers/nds/Sinnoh/
+    - assets/sprites/characters/trainers/nds/Unova/
     - assets/sprites/characters/special_trainers/
     - assets/sprites/characters/special_trainers/battle_frontier/emerald/
     - assets/sprites/characters/special_trainers/battle_frontier/nds/
