@@ -743,7 +743,7 @@ class PokemonJournalTracker {
     // trainerId de TRData. Resolverlo como trainerId puede atribuir el combate
     // a otro personaje (por ejemplo, Bel). Gen IV sí mantiene la relación.
     final trainer = current.profile.isGen5
-        ? null
+        ? NdsTrainerResolver.forGen5TrainerFlag(trainerId)
         : await NdsTrainerResolver.resolve(
             romPath: romPath,
             version: current.profile.version,

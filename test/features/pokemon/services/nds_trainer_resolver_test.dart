@@ -67,4 +67,12 @@ void main() {
     expect(cilan?.className, 'Millo');
     expect(cilan?.spritePath, endsWith('cilan_unova.gif'));
   });
+
+  test('resuelve banderas Gen V verificadas sin tratarlas como trainerId', () {
+    final trainer = NdsTrainerResolver.forGen5TrainerFlag(145);
+
+    expect(trainer?.className, 'Joven');
+    expect(trainer?.spritePath, endsWith('joven_unova_gen5.gif'));
+    expect(NdsTrainerResolver.forGen5TrainerFlag(144), isNull);
+  });
 }

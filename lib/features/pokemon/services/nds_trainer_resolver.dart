@@ -94,6 +94,18 @@ final class NdsTrainerResolver {
     );
   }
 
+  /// Asociaciones verificadas en partidas reales de Blanco/Negro. Estas son
+  /// banderas de NPC, no índices de TRData.
+  static NdsTrainerInfo? forGen5TrainerFlag(int trainerFlagId) {
+    final classId = _unovaTrainerFlagClasses[trainerFlagId];
+    if (classId == null) return null;
+    return forClassId(
+      version: PokemonGameVersion.white,
+      trainerId: trainerFlagId,
+      classId: classId,
+    );
+  }
+
   static bool _isSupported(PokemonGameVersion version) => switch (version) {
         PokemonGameVersion.diamond ||
         PokemonGameVersion.pearl ||
@@ -330,5 +342,10 @@ final class NdsTrainerResolver {
     81: ('Lotto', 'assets/sprites/characters/elite_four/nds/Unova/marshal_unova.gif'),
     82: ('Ghechis', 'assets/sprites/characters/villains/plasma/ghetsis_bw.png'),
     89: ('Mirto', 'assets/sprites/characters/champions/alder_unova.gif'),
+  };
+
+  static const Map<int, int> _unovaTrainerFlagClasses = {
+    // Ruta 2; verificado contra el evento de las 18:59 de Pokémon Blanca.
+    145: 2, // Joven
   };
 }
