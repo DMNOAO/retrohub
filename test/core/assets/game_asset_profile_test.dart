@@ -74,7 +74,7 @@ void main() {
 
   test('detecta Blanco y Negro con los recursos de Teselia', () {
     final profile = GameAssetProfile.fromTitle(
-      title: 'Pokémon Negro',
+      title: 'Pokémon Negra',
       console: 'NDS',
     );
 

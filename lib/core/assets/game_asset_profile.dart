@@ -64,7 +64,11 @@ class GameAssetProfile {
         value.contains('negro 2') ||
         value.contains('negro2') ||
         value.contains('blanco 2') ||
-        value.contains('blanco2');
+        value.contains('blanco2') ||
+        value.contains('negra 2') ||
+        value.contains('negra2') ||
+        value.contains('blanca 2') ||
+        value.contains('blanca2');
     if (isBlackWhite2) {
       return GameAssetProfile(
         game: PokemonAssetGame.black2White2,
@@ -79,8 +83,12 @@ class GameAssetProfile {
         sourceTitle: value,
       );
     }
-    if (value.contains('black') || value.contains('white') ||
-        value.contains('negro') || value.contains('blanco')) {
+    if (value.contains('black') ||
+        value.contains('white') ||
+        value.contains('negro') ||
+        value.contains('negra') ||
+        value.contains('blanco') ||
+        value.contains('blanca')) {
       return GameAssetProfile(
         game: PokemonAssetGame.blackWhite,
         region: PokemonAssetRegion.unova,

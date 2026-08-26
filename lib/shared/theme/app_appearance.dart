@@ -255,10 +255,14 @@ enum AppAppearance {
     if (normalized.contains('azul') || normalized.contains('blue')) {
       return AppAppearance.blue;
     }
-    if (normalized.contains('blanco') || normalized.contains('white')) {
+    if (normalized.contains('blanco') ||
+        normalized.contains('blanca') ||
+        normalized.contains('white')) {
       return AppAppearance.white;
     }
-    if (normalized.contains('negro') || normalized.contains('black')) {
+    if (normalized.contains('negro') ||
+        normalized.contains('negra') ||
+        normalized.contains('black')) {
       return AppAppearance.black;
     }
     if (normalized.contains('rojo') || normalized.contains(' red')) {

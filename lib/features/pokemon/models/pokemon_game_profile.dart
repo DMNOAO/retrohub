@@ -60,7 +60,9 @@ class PokemonGameProfile {
     if (normalized.contains('black 2') ||
         normalized.contains('black2') ||
         normalized.contains('negro 2') ||
-        normalized.contains('negro2')) {
+        normalized.contains('negro2') ||
+        normalized.contains('negra 2') ||
+        normalized.contains('negra2')) {
       return const PokemonGameProfile(
         version: PokemonGameVersion.black2,
         generation: PokemonGeneration.gen5,
@@ -72,7 +74,9 @@ class PokemonGameProfile {
     if (normalized.contains('white 2') ||
         normalized.contains('white2') ||
         normalized.contains('blanco 2') ||
-        normalized.contains('blanco2')) {
+        normalized.contains('blanco2') ||
+        normalized.contains('blanca 2') ||
+        normalized.contains('blanca2')) {
       return const PokemonGameProfile(
         version: PokemonGameVersion.white2,
         generation: PokemonGeneration.gen5,
@@ -81,7 +85,9 @@ class PokemonGameProfile {
         addresses: null,
       );
     }
-    if (normalized.contains('black') || normalized.contains('negro')) {
+    if (normalized.contains('black') ||
+        normalized.contains('negro') ||
+        normalized.contains('negra')) {
       return const PokemonGameProfile(
         version: PokemonGameVersion.black,
         generation: PokemonGeneration.gen5,
@@ -90,7 +96,9 @@ class PokemonGameProfile {
         addresses: null,
       );
     }
-    if (normalized.contains('white') || normalized.contains('blanco')) {
+    if (normalized.contains('white') ||
+        normalized.contains('blanco') ||
+        normalized.contains('blanca')) {
       return const PokemonGameProfile(
         version: PokemonGameVersion.white,
         generation: PokemonGeneration.gen5,
