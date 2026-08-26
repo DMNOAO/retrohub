@@ -10,9 +10,20 @@ void main() {
   test('decodifica texto internacional de Gen IV', () {
     expect(
       PokemonGen4TextDecoder.decodeWords(
-        const <int>[0x12B, 0x145, 0x170, 0x192, 0x1DE, 0x121, 0xFFFF],
+        const <int>[
+          0x12B,
+          0x145,
+          0x170,
+          0x190,
+          0x176,
+          0x196,
+          0x192,
+          0x1DE,
+          0x121,
+          0xFFFF,
+        ],
       ),
-      'AaÑñ 0',
+      'AaÑñ×÷ó 0',
     );
   });
 
