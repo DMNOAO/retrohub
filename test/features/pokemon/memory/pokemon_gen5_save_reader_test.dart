@@ -71,6 +71,7 @@ void main() {
     expect(snapshot!.playerName, name);
     expect(snapshot.money, 0x12345678);
     expect(snapshot.badgesMask, 0x05);
-    expect(snapshot.defeatedTrainerIds, <int>[42]);
+    // Los EventWork de B2W2 no se interpretan como TrainerFlag de BW.
+    expect(snapshot.defeatedTrainerIds, isEmpty);
   });
 }

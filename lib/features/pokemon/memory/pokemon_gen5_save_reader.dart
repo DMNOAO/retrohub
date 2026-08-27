@@ -128,6 +128,10 @@ final class PokemonGen5SaveReader {
   /// TrainerFlagSet/Get reciben el trainerId y el juego aplica internamente
   /// esa base; por eso aquí se devuelve el índice relativo como trainerId.
   List<int> _changedTrainerFlagIds(_Gen5SaveLayout layout) {
+    // La tabla de EventWork de B2W2 no comparte la base de TrainerFlag de BW.
+    // Hasta verificarla, los combates de las secuelas se detectan mediante la
+    // RAM activa para no confundir flags de historia iniciales con victorias.
+    if (!layout.hasVerifiedTrainerFlags) return const <int>[];
     final List<int> flags = read(layout.eventFlagOffset, layout.eventFlagCount ~/ 8);
     if (flags.length != layout.eventFlagCount ~/ 8) return const <int>[];
     final List<int> result = <int>[];
@@ -259,6 +263,7 @@ final class _Gen5SaveLayout {
   final int dexLength;
   final int eventFlagOffset;
   final int eventFlagCount;
+  final bool hasVerifiedTrainerFlags;
 
   const _Gen5SaveLayout({
     required this.label,
@@ -273,6 +278,7 @@ final class _Gen5SaveLayout {
     required this.dexLength,
     required this.eventFlagOffset,
     required this.eventFlagCount,
+    this.hasVerifiedTrainerFlags = true,
   });
 
   static const bw = _Gen5SaveLayout(
@@ -303,6 +309,7 @@ final class _Gen5SaveLayout {
     dexLength: 0x4DC,
     eventFlagOffset: 0x1FF00 + 0x35E,
     eventFlagCount: 0xBF8,
+    hasVerifiedTrainerFlags: false,
   );
 
   static _Gen5SaveLayout? forVersion(PokemonGameVersion version) =>

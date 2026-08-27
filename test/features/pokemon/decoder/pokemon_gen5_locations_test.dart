@@ -11,6 +11,27 @@ void main() {
     gameTitle: 'Pokemon Blanca',
     romPath: 'pokemon_blanca.nds',
   );
+  final PokemonGameProfile black2 = PokemonGameProfile.fromGameIdentity(
+    gameTitle: 'Pokemon Negro 2',
+    romPath: 'pokemon_negro_2.nds',
+  );
+  final PokemonGameProfile white2 = PokemonGameProfile.fromGameIdentity(
+    gameTitle: 'Pokemon Blanca 2',
+    romPath: 'pokemon_blanca_2.nds',
+  );
+
+  test('Negro 2 y Blanco 2 traducen el dormitorio inicial a Ciudad Engobe', () {
+    for (final PokemonGameProfile profile in <PokemonGameProfile>[
+      black2,
+      white2,
+    ]) {
+      expect(PokemonDecoder.mapName(profile, 428), 'Ciudad Engobe');
+      expect(
+        PokemonDecoder.locationFor(profile, 428)?.kind,
+        PokemonLocationKind.city,
+      );
+    }
+  });
 
   test('Blanco y Negro traducen el dormitorio inicial a Pueblo Arcilla', () {
     for (final PokemonGameProfile profile in <PokemonGameProfile>[black, white]) {

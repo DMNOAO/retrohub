@@ -83,6 +83,17 @@ class BadgeAssetResolver {
     ('legend', 'Medalla Leyenda'),
   ];
 
+  static const _unovaBlack2White2 = <(String, String)>[
+    ('basic', 'Medalla Base'),
+    ('toxic', 'Medalla Tóxica'),
+    ('insect', 'Medalla Élitro'),
+    ('bolt', 'Medalla Voltio'),
+    ('quake', 'Medalla Temblor'),
+    ('jet', 'Medalla Jet'),
+    ('legend', 'Medalla Leyenda'),
+    ('wave', 'Medalla Ola'),
+  ];
+
   static BadgeAsset resolve(GameAssetProfile profile, int index) {
     if (profile.game == PokemonAssetGame.heartGoldSoulSilver && index >= 8) {
       return resolveForRegion(PokemonAssetRegion.kanto, index - 8);
@@ -92,6 +103,9 @@ class BadgeAssetResolver {
           ? _sinnohPlatinum
           : _sinnohDiamondPearl;
       return _resolve(values, 'Sinnoh', index);
+    }
+    if (profile.game == PokemonAssetGame.black2White2) {
+      return _resolve(_unovaBlack2White2, 'Unova', index);
     }
     return resolveForRegion(profile.region, index);
   }
