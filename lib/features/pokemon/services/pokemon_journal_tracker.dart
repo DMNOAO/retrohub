@@ -39,6 +39,7 @@ class PokemonJournalTracker {
   bool _gymLeaderEventsRepaired = false;
   bool _gen2BadgeEventsRepaired = false;
   bool _gen5HistoricalEventsRepaired = false;
+  bool _b2w2TrainerEventsRepaired = false;
   bool _busy = false;
   int? _lastAcceptedDiagnosticPlayTime;
 
@@ -216,6 +217,7 @@ class PokemonJournalTracker {
         _gen5HistoricalEventsRepaired = false;
       }
       await _ensureGen5HistoricalEvents(stable);
+      await _ensureB2w2TrainerFlagEvents(stable);
 
       if (previous == null) {
         RuntimeDiagnosticsLog.recordSnapshotComparison(
@@ -1237,6 +1239,53 @@ class PokemonJournalTracker {
         'recoveredFromHallOfFame': true,
       },
     );
+  }
+
+  /// Recupera victorias observadas y verificadas en partidas B2W2 que se
+  /// produjeron antes de instalar el detector por TrainerFlag.
+  Future<void> _ensureB2w2TrainerFlagEvents(
+    PokemonMemorySnapshot current,
+  ) async {
+    if (_b2w2TrainerEventsRepaired ||
+        (current.profile.version != PokemonGameVersion.black2 &&
+            current.profile.version != PokemonGameVersion.white2)) {
+      return;
+    }
+    _b2w2TrainerEventsRepaired = true;
+
+    // Confirmada empíricamente: tras la victoria de Ruta 20 se activa 1684;
+    // TrainerFlag usa base 0x550, por lo que el trainerId real es 324.
+    const verifiedFlags = <int, int>{1684: 324};
+    final active = current.defeatedTrainerIds.toSet();
+    if (!verifiedFlags.keys.any(active.contains)) return;
+
+    final events = await database.getProgressEventsByGame(gameId);
+    final recordedFlags = <int>{};
+    for (final event in events) {
+      if (event.eventType != 'trainer_defeated') continue;
+      try {
+        final decoded = jsonDecode(event.metadataJson ?? '');
+        if (decoded is Map && decoded['trainerFlagId'] != null) {
+          final value = int.tryParse(decoded['trainerFlagId'].toString());
+          if (value != null) recordedFlags.add(value);
+        }
+      } catch (_) {}
+    }
+
+    for (final entry in verifiedFlags.entries) {
+      if (!active.contains(entry.key) || recordedFlags.contains(entry.key)) {
+        continue;
+      }
+      debugPrint(
+        '[RetroHub.Gen5Battle] recovering B2W2 TrainerFlag '
+        'flag=${entry.key} trainerId=${entry.value}',
+      );
+      await _recordNdsTrainerVictory(
+        current: current,
+        trainerId: entry.value,
+        trainerFlagId: entry.key,
+      );
+    }
   }
 
   String? _trainerNameFromEvent(GameProgressEvent event) {
