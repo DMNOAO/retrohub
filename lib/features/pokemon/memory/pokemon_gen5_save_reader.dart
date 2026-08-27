@@ -97,6 +97,14 @@ final class PokemonGen5SaveReader {
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
     final List<int> defeatedTrainers = _changedTrainerFlagIds(layout);
+    final List<List<int>> badgeTeams = layout.hasBadgeTeams
+        ? _decodeBadgeTeams(misc)
+        : const <List<int>>[];
+    final List<int> hallOfFameSpeciesIds = layout.hallOfFameOffset == null
+        ? const <int>[]
+        : _decodeHallOfFameSpecies(
+            read(layout.hallOfFameOffset!, layout.hallOfFameLength),
+          );
     final int placeNameZoneId = layout.hasPlaceNameZoneId
         ? _u16(position, _placeNameZoneIdOffset)
         : _u32(position, _zoneIdOffset);
@@ -109,6 +117,8 @@ final class PokemonGen5SaveReader {
       'party=$count, decoded=${party.length}, seen=${seen.length}, '
       'caught=${caught.length}, placeNameZone=$placeNameZoneId, zone=$zoneId, '
       'position=($playerX,$playerY), '
+      'badgeTeams=${badgeTeams.where((team) => team.isNotEmpty).length}, '
+      'hallOfFame=${hallOfFameSpeciesIds.length}, '
       'defeatedTrainers=${defeatedTrainers.length}',
     );
 
@@ -130,6 +140,9 @@ final class PokemonGen5SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
+      badgeTeams: badgeTeams,
+      hallOfFameSpeciesIds: hallOfFameSpeciesIds,
+      leagueWins: hallOfFameSpeciesIds.isEmpty ? 0 : 1,
       defeatedTrainerIds: defeatedTrainers,
       gamePlayTimeMinutes: _u16(trainer, 0x24) * 60 + trainer[0x26],
     );
@@ -244,6 +257,33 @@ final class PokemonGen5SaveReader {
     return result;
   }
 
+  /// B2W2 conserva seis especies (u16) por gimnasio a partir de Trainer2+5C.
+  static List<List<int>> _decodeBadgeTeams(List<int> trainer2) {
+    const int firstTeamOffset = 0x5C;
+    const int teamSize = 12;
+    return List<List<int>>.generate(8, (int badgeIndex) {
+      final int start = firstTeamOffset + badgeIndex * teamSize;
+      if (start + teamSize > trainer2.length) return const <int>[];
+      return <int>[
+        for (int slot = 0; slot < 6; slot++)
+          _u16(trainer2, start + slot * 2),
+      ].where((int species) => species > 0 && species <= 649).toList(
+        growable: false,
+      );
+    }, growable: false);
+  }
+
+  /// La primera entrada del Hall de la Fama usa seis registros de 0x3C bytes.
+  static List<int> _decodeHallOfFameSpecies(List<int> hallOfFame) {
+    const int memberSize = 0x3C;
+    if (hallOfFame.length < memberSize * 6) return const <int>[];
+    return <int>[
+      for (int slot = 0; slot < 6; slot++) _u16(hallOfFame, slot * memberSize),
+    ].where((int species) => species > 0 && species <= 649).toList(
+      growable: false,
+    );
+  }
+
   static String _decodeString(List<int> bytes, int offset, int maximum) {
     final List<int> glyphs = <int>[];
     for (int index = 0; index < maximum; index++) {
@@ -279,6 +319,9 @@ final class _Gen5SaveLayout {
   final int eventFlagCount;
   final bool hasVerifiedTrainerFlags;
   final bool hasPlaceNameZoneId;
+  final bool hasBadgeTeams;
+  final int? hallOfFameOffset;
+  final int hallOfFameLength;
 
   const _Gen5SaveLayout({
     required this.label,
@@ -295,6 +338,9 @@ final class _Gen5SaveLayout {
     required this.eventFlagCount,
     this.hasVerifiedTrainerFlags = true,
     this.hasPlaceNameZoneId = false,
+    this.hasBadgeTeams = false,
+    this.hallOfFameOffset,
+    this.hallOfFameLength = 0,
   });
 
   static const bw = _Gen5SaveLayout(
@@ -327,6 +373,9 @@ final class _Gen5SaveLayout {
     eventFlagCount: 0xBF8,
     hasVerifiedTrainerFlags: false,
     hasPlaceNameZoneId: true,
+    hasBadgeTeams: true,
+    hallOfFameOffset: 0x23800,
+    hallOfFameLength: 0x16C,
   );
 
   static _Gen5SaveLayout? forVersion(PokemonGameVersion version) =>

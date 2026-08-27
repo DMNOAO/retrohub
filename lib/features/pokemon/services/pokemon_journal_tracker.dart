@@ -38,6 +38,7 @@ class PokemonJournalTracker {
   bool _persistentStateRestored = false;
   bool _gymLeaderEventsRepaired = false;
   bool _gen2BadgeEventsRepaired = false;
+  bool _gen5HistoricalEventsRepaired = false;
   bool _busy = false;
   int? _lastAcceptedDiagnosticPlayTime;
 
@@ -205,6 +206,15 @@ class PokemonJournalTracker {
 
       final stable = _candidate!;
       final previous = _accepted;
+      if (previous != null &&
+          (!_sameNestedList(previous.badgeTeams, stable.badgeTeams) ||
+              !_sameList(
+                previous.hallOfFameSpeciesIds,
+                stable.hallOfFameSpeciesIds,
+              ))) {
+        _gen5HistoricalEventsRepaired = false;
+      }
+      await _ensureGen5HistoricalEvents(stable);
 
       if (previous == null) {
         RuntimeDiagnosticsLog.recordSnapshotComparison(
@@ -353,6 +363,15 @@ class PokemonJournalTracker {
     if (previous.badgesMask != current.badgesMask) {
       changes.add('badges changed');
     }
+    if (!_sameNestedList(previous.badgeTeams, current.badgeTeams)) {
+      changes.add('badge teams changed');
+    }
+    if (!_sameList(
+      previous.hallOfFameSpeciesIds,
+      current.hallOfFameSpeciesIds,
+    )) {
+      changes.add('hall of fame changed');
+    }
     if (previousPlayTime != currentPlayTime) {
       changes.add(
         previousPlayTime != null && currentPlayTime < previousPlayTime
@@ -381,6 +400,9 @@ class PokemonJournalTracker {
         a.money == b.money &&
         a.badgesMask == b.badgesMask &&
         _sameParty(a.party, b.party) &&
+        _sameNestedList(a.badgeTeams, b.badgeTeams) &&
+        _sameList(a.hallOfFameSpeciesIds, b.hallOfFameSpeciesIds) &&
+        a.leagueWins == b.leagueWins &&
         a.pokedexSeen == b.pokedexSeen &&
         a.pokedexCaught == b.pokedexCaught &&
         a.nationalDexUnlocked == b.nationalDexUnlocked;
@@ -390,6 +412,14 @@ class PokemonJournalTracker {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  bool _sameNestedList(List<List<int>> a, List<List<int>> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (!_sameList(a[index], b[index])) return false;
     }
     return true;
   }
@@ -1100,6 +1130,68 @@ class PokemonJournalTracker {
     }
   }
 
+  Future<void> _ensureGen5HistoricalEvents(
+    PokemonMemorySnapshot current,
+  ) async {
+    if (_gen5HistoricalEventsRepaired || current.badgeTeams.isEmpty) return;
+    _gen5HistoricalEventsRepaired = true;
+
+    final events = await database.getProgressEventsByGame(gameId);
+    final Set<int> recordedBadgeIndices = <int>{};
+    for (final event in events) {
+      if (event.eventType != 'gym_leader_defeated') continue;
+      final raw = event.metadataJson;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map && decoded['badgeIndex'] is num) {
+          recordedBadgeIndices.add((decoded['badgeIndex'] as num).toInt());
+        }
+      } catch (_) {}
+    }
+
+    for (var index = 0; index < current.badgeTeams.length; index++) {
+      final team = current.badgeTeams[index];
+      if (team.isEmpty || recordedBadgeIndices.contains(index)) continue;
+      final leader = GymLeaderAssetResolver.forBadge(current.profile, index);
+      if (leader == null) continue;
+      await _insertEvent(
+        type: 'gym_leader_defeated',
+        title: 'Derrotó a ${leader.name}',
+        description: 'Venció al líder de gimnasio ${leader.name}.',
+        metadata: <String, dynamic>{
+          ..._metadata(current),
+          'leaderName': leader.name,
+          'spritePath': leader.spritePath,
+          'badgeIndex': index,
+          'teamSpeciesIds': team,
+          'recoveredFromBadgeTeam': true,
+        },
+      );
+    }
+
+    if (current.hallOfFameSpeciesIds.isEmpty ||
+        events.any((event) => event.eventType == 'champion_defeated')) {
+      return;
+    }
+    final assets = GameAssetProfile.fromTitle(
+      title: gameTitle,
+      console: 'NDS',
+    );
+    await _insertEvent(
+      type: 'champion_defeated',
+      title: 'Derrotó a Iris',
+      description: 'Entró al Hall de la Fama de Teselia.',
+      metadata: <String, dynamic>{
+        ..._metadata(current),
+        'trainerClass': 'Iris',
+        'spritePath': CharacterAssetResolver.champion(assets),
+        'teamSpeciesIds': current.hallOfFameSpeciesIds,
+        'recoveredFromHallOfFame': true,
+      },
+    );
+  }
+
   String? _trainerNameFromEvent(GameProgressEvent event) {
     const supportedTypes = <String>{
       'trainer_defeated',
@@ -1189,6 +1281,9 @@ class PokemonJournalTracker {
                 'index': index,
                 'obtained': (value.badgesMask & (1 << index)) != 0,
                 'playerGender': value.isFemale ? 'female' : 'male',
+                if (index < value.badgeTeams.length &&
+                    value.badgeTeams[index].isNotEmpty)
+                  'teamSpeciesIds': value.badgeTeams[index],
               },
             ),
           ),
@@ -1202,7 +1297,7 @@ class PokemonJournalTracker {
               : jsonEncode(_lastCapturedPokemon!.toJson()),
         ),
         lastDefeatedTrainer: Value(_lastDefeatedTrainer),
-        leagueWins: const Value(0),
+        leagueWins: Value(value.leagueWins),
       ),
     );
     _lastSnapshotSavedAt = DateTime.now();
@@ -1246,6 +1341,10 @@ class PokemonJournalTracker {
       'badgesMask': value.badgesMask,
       'partySpeciesIds': value.partySpeciesIds,
       'party': value.party.map((pokemon) => pokemon.toJson()).toList(),
+      if (value.badgeTeams.isNotEmpty) 'badgeTeams': value.badgeTeams,
+      if (value.hallOfFameSpeciesIds.isNotEmpty)
+        'hallOfFameSpeciesIds': value.hallOfFameSpeciesIds,
+      'leagueWins': value.leagueWins,
       'pokedexSeen': value.pokedexSeen,
       'pokedexCaught': value.pokedexCaught,
       'nationalDexUnlocked': value.nationalDexUnlocked,
