@@ -891,7 +891,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                           (constraints.maxWidth - touchScreenWidth) / 2;
                       final double shoulderRowTop = topHeight + 14;
                       final double logoTop = screenHeight + 6;
-                      final double mainControlsTop = screenHeight + 56;
+                      final double mainControlsTop = logoTop;
                       final double controlOpacity = _preferences.ndsControlOpacity;
                       final Color ndsA = visualTheme.accent;
                       final Color ndsB = Color.lerp(visualTheme.accent, visualTheme.background, .28)!;
@@ -1641,15 +1641,15 @@ class _EmulatorVisualTheme {
     } else if (identity.contains('black') ||
         identity.contains('negra') ||
         identity.contains('negro')) {
-      primary = const Color(0xFF0D0E12);
-      secondary = const Color(0xFF252832);
-      accent = const Color(0xFFB9C6DD);
+      primary = const Color(0xFF070A10);
+      secondary = const Color(0xFF183451);
+      accent = const Color(0xFF43C7E8);
     } else if (identity.contains('white') ||
         identity.contains('blanca') ||
         identity.contains('blanco')) {
-      primary = const Color(0xFF3B3B40);
-      secondary = const Color(0xFF72737A);
-      accent = const Color(0xFFF5F5F2);
+      primary = const Color(0xFF555B63);
+      secondary = const Color(0xFFA94343);
+      accent = const Color(0xFFFFF3DF);
     } else if (pokemonVersion == PokemonGameVersion.fireRed) {
       primary = const Color(0xFFF05A24);
       secondary = const Color(0xFF7A260E);
