@@ -124,11 +124,15 @@ final class NdsTrainerResolver {
         version == PokemonGameVersion.white2;
     final isHgss = version == PokemonGameVersion.heartGold ||
         version == PokemonGameVersion.soulSilver;
-    final specialClasses = isGen5
-        ? _unovaSpecialClasses
-        : isHgss
-            ? _johtoSpecialClasses
-            : _sinnohSpecialClasses;
+    final isB2w2 = version == PokemonGameVersion.black2 ||
+        version == PokemonGameVersion.white2;
+    final specialClasses = isB2w2
+        ? _unovaB2w2SpecialClasses
+        : isGen5
+            ? _unovaSpecialClasses
+            : isHgss
+                ? _johtoSpecialClasses
+                : _sinnohSpecialClasses;
     final special = specialClasses[classId];
     if (special != null) {
       final path = classId == 63 && !isGen5
@@ -209,7 +213,8 @@ final class NdsTrainerResolver {
               version == PokemonGameVersion.white ||
               version == PokemonGameVersion.black2 ||
               version == PokemonGameVersion.white2
-          ? 'a/0/9/2'
+          // BW/B2W2: a/0/9/1 es TRDATA; a/0/9/2 contiene los equipos.
+          ? 'a/0/9/1'
           : 'poketool/trainer/trdata.narc';
       final fileId = _findNitroFileId(fnt, path);
       if (fileId == null) return null;
@@ -246,7 +251,7 @@ final class NdsTrainerResolver {
               version == PokemonGameVersion.white ||
               version == PokemonGameVersion.black2 ||
               version == PokemonGameVersion.white2
-          ? 'a/0/9/2'
+          ? 'a/0/9/1'
           : 'poketool/trainer/trdata.narc';
       final fileId = _findNitroFileId(fnt, path);
       if (fileId == null) return result;
@@ -535,6 +540,11 @@ final class NdsTrainerResolver {
     81: ('Lotto', 'assets/sprites/characters/elite_four/nds/Unova/marshal_unova.gif'),
     82: ('Ghechis', 'assets/sprites/characters/villains/plasma/ghetsis_bw.png'),
     89: ('Mirto', 'assets/sprites/characters/champions/alder_unova.gif'),
+  };
+
+  static const Map<int, (String, String)> _unovaB2w2SpecialClasses = {
+    ..._unovaSpecialClasses,
+    145: ('Matis', 'assets/sprites/characters/rivals/hugh_bw2.gif'),
   };
 
   static const Map<int, int> _unovaTrainerFlagClasses = {

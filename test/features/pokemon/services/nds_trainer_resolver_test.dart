@@ -39,6 +39,17 @@ void main() {
     expect(schoolKid?.spritePath, endsWith('escolar_chica_unova_gen5.gif'));
   });
 
+  test('resuelve a Matis con la clase propia de B2W2', () {
+    final hugh = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.black2,
+      trainerId: 161,
+      classId: 145,
+    );
+
+    expect(hugh?.className, 'Matis');
+    expect(hugh?.spritePath, endsWith('hugh_bw2.gif'));
+  });
+
   test('mantiene respaldo para clases especiales todavía no mapeadas', () {
     expect(
       NdsTrainerResolver.forClassId(

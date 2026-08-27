@@ -628,14 +628,13 @@ class PokemonJournalTracker {
             );
           } else if (current.profile.version == PokemonGameVersion.black2 ||
               current.profile.version == PokemonGameVersion.white2) {
-            // En B2W2 melonDS no conserva el TRData crudo en RAM, pero
-            // TrainerFlag sigue usando la base 0x550. Filtrar las flags recién
-            // activadas contra el NARC real de la ROM descarta automáticamente
-            // las flags de historia y recupera el trainerId exacto.
+            // En B2W2 melonDS no siempre conserva el TRData crudo en RAM.
+            // Las EventWork flags observadas no coinciden directamente con
+            // el índice del NARC, por lo que solo se aceptan pares verificados.
             final candidates = <(int, int)>[];
             for (final flagId in newTrainerIds) {
-              final trainerId = flagId - 0x550;
-              if (trainerId <= 0) continue;
+              final trainerId = _verifiedB2w2TrainerId(flagId, current);
+              if (trainerId == null) continue;
               final info = await NdsTrainerResolver.resolve(
                 romPath: romPath,
                 version: current.profile.version,
@@ -1284,9 +1283,13 @@ class PokemonJournalTracker {
     }
     _b2w2TrainerEventsRepaired = true;
 
-    // Confirmada empíricamente: tras la victoria de Ruta 20 se activa 1684;
-    // TrainerFlag usa base 0x550, por lo que el trainerId real es 324.
-    const verifiedFlags = <int, int>{1684: 324};
+    // Confirmadas empíricamente en el inicio de B2W2. Estas EventWork flags
+    // no son índices directos del NARC: 1684 es Matis y 1685 el Joven de
+    // Ruta 20. El equipo inicial determina cuál entrada de Matis corresponde.
+    final verifiedFlags = <int, int?>{
+      1684: _verifiedB2w2TrainerId(1684, current),
+      1685: _verifiedB2w2TrainerId(1685, current),
+    };
     final active = current.defeatedTrainerIds.toSet();
     if (!verifiedFlags.keys.any(active.contains)) return;
 
@@ -1298,25 +1301,82 @@ class PokemonJournalTracker {
         final decoded = jsonDecode(event.metadataJson ?? '');
         if (decoded is Map && decoded['trainerFlagId'] != null) {
           final value = int.tryParse(decoded['trainerFlagId'].toString());
-          if (value != null) recordedFlags.add(value);
+          if (value == null) continue;
+          recordedFlags.add(value);
+
+          // Repara eventos creados mientras se leía por error a/0/9/2
+          // (TRPOKE) en vez de a/0/9/1 (TRDATA). Conserva el evento y su
+          // fecha, reemplazando únicamente su identidad y sprite genéricos.
+          if (decoded['trainerClassId'] == null) {
+            final trainerId = _verifiedB2w2TrainerId(value, current);
+            if (trainerId == null) continue;
+            final trainer = await NdsTrainerResolver.resolve(
+              romPath: romPath,
+              version: current.profile.version,
+              trainerId: trainerId,
+            );
+            if (trainer != null) {
+              final metadata = Map<String, dynamic>.from(decoded);
+              metadata['trainerId'] = trainerId;
+              metadata['trainerClassId'] = trainer.classId;
+              metadata['trainerClass'] = trainer.className;
+              metadata['spritePath'] = trainer.spritePath;
+              await database.updateProgressEvent(
+                eventId: event.id,
+                eventType: trainer.spritePath.contains('/rivals/')
+                    ? 'rival_defeated'
+                    : 'trainer_defeated',
+                title: trainer.spritePath.contains('/rivals/')
+                    ? 'Derrotó a ${trainer.className}'
+                    : 'Ganó contra ${trainer.className}',
+                description: trainer.spritePath.contains('/rivals/')
+                    ? 'Ganó el combate contra su rival.'
+                    : 'Venció a un entrenador durante su aventura.',
+                metadataJson: jsonEncode(metadata),
+              );
+              debugPrint(
+                '[RetroHub.Gen5Battle] repaired TrainerFlag '
+                'flag=$value trainerId=$trainerId '
+                'class=${trainer.className}',
+              );
+            }
+          }
         }
       } catch (_) {}
     }
 
     for (final entry in verifiedFlags.entries) {
-      if (!active.contains(entry.key) || recordedFlags.contains(entry.key)) {
+      if (entry.value == null ||
+          !active.contains(entry.key) ||
+          recordedFlags.contains(entry.key)) {
         continue;
       }
       debugPrint(
         '[RetroHub.Gen5Battle] recovering B2W2 TrainerFlag '
-        'flag=${entry.key} trainerId=${entry.value}',
+        'flag=${entry.key} trainerId=${entry.value!}',
       );
       await _recordNdsTrainerVictory(
         current: current,
-        trainerId: entry.value,
+        trainerId: entry.value!,
         trainerFlagId: entry.key,
       );
     }
+  }
+
+  int? _verifiedB2w2TrainerId(
+    int trainerFlagId,
+    PokemonMemorySnapshot current,
+  ) {
+    if (trainerFlagId == 1685) return 164; // Joven con Patrat, Ruta 20.
+    if (trainerFlagId != 1684 || current.party.isEmpty) return null;
+
+    // Primer combate contra Matis. Su inicial tiene ventaja sobre el elegido.
+    return switch (current.party.first.pokedexId) {
+      495 => 161, // Snivy -> Tepig
+      498 => 162, // Tepig -> Oshawott
+      501 => 163, // Oshawott -> Snivy
+      _ => null,
+    };
   }
 
   /// PlayerProfile de Gen IV conserva gameClear como bit persistente. Esto
