@@ -253,6 +253,10 @@ class LibretroGameView extends StatefulWidget {
   final bool autoLoadState;
   final double? displayAspectRatio;
   final bool splitNdsScreens;
+  final double ndsTopScreenScale;
+  final double ndsBottomScreenScale;
+  final bool ndsSwapScreens;
+  final double ndsScreensScale;
 
   const LibretroGameView({
     super.key,
@@ -267,6 +271,10 @@ class LibretroGameView extends StatefulWidget {
     this.autoLoadState = false,
     this.displayAspectRatio,
     this.splitNdsScreens = false,
+    this.ndsTopScreenScale = 1,
+    this.ndsBottomScreenScale = 1,
+    this.ndsSwapScreens = false,
+    this.ndsScreensScale = 1,
   });
 
   @override
@@ -1251,6 +1259,10 @@ class _LibretroGameViewState extends State<LibretroGameView> {
                     painter: _NdsDualScreenPainter(
                       image: image,
                       filterQuality: widget.filterQuality,
+                      topScreenScale: widget.ndsTopScreenScale,
+                      bottomScreenScale: widget.ndsBottomScreenScale,
+                      swapScreens: widget.ndsSwapScreens,
+                      screensScale: widget.ndsScreensScale,
                     ),
                     child: const SizedBox.expand(),
                   )
@@ -1467,17 +1479,23 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
 
 class _NdsDualScreenPainter extends CustomPainter {
-  static const double _topWidthFactor = 1;
-  static const double _bottomWidthFactor = 1;
   static const double _screenAspectRatio = 4 / 3;
   static const double _gap = 4;
 
   final ui.Image image;
   final FilterQuality filterQuality;
+  final double topScreenScale;
+  final double bottomScreenScale;
+  final bool swapScreens;
+  final double screensScale;
 
   const _NdsDualScreenPainter({
     required this.image,
     required this.filterQuality,
+    required this.topScreenScale,
+    required this.bottomScreenScale,
+    required this.swapScreens,
+    required this.screensScale,
   });
 
   @override
@@ -1486,12 +1504,13 @@ class _NdsDualScreenPainter extends CustomPainter {
 
     final double availableHeight = size.height - _gap;
     final double widthFromHeight = availableHeight /
-        ((_topWidthFactor / _screenAspectRatio) +
-            (_bottomWidthFactor / _screenAspectRatio));
-    final double layoutWidth = widthFromHeight.clamp(0, size.width).toDouble();
+        ((topScreenScale / _screenAspectRatio) +
+            (bottomScreenScale / _screenAspectRatio));
+    final double layoutWidth =
+        widthFromHeight.clamp(0, size.width).toDouble() * screensScale;
 
-    final double topWidth = layoutWidth * _topWidthFactor;
-    final double bottomWidth = layoutWidth * _bottomWidthFactor;
+    final double topWidth = layoutWidth * topScreenScale;
+    final double bottomWidth = layoutWidth * bottomScreenScale;
     final double topHeight = topWidth / _screenAspectRatio;
     final double bottomHeight = bottomWidth / _screenAspectRatio;
     final double contentHeight = topHeight + _gap + bottomHeight;
@@ -1515,15 +1534,21 @@ class _NdsDualScreenPainter extends CustomPainter {
       ..filterQuality = filterQuality
       ..isAntiAlias = false;
 
+    final Rect sourceTop = Rect.fromLTWH(
+      0, 0, image.width.toDouble(), sourceHeight,
+    );
+    final Rect sourceBottom = Rect.fromLTWH(
+      0, sourceHeight, image.width.toDouble(), sourceHeight,
+    );
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), sourceHeight),
+      swapScreens ? sourceBottom : sourceTop,
       topDestination,
       paint,
     );
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(0, sourceHeight, image.width.toDouble(), sourceHeight),
+      swapScreens ? sourceTop : sourceBottom,
       bottomDestination,
       paint,
     );
@@ -1532,6 +1557,10 @@ class _NdsDualScreenPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _NdsDualScreenPainter oldDelegate) {
     return oldDelegate.image != image ||
-        oldDelegate.filterQuality != filterQuality;
+        oldDelegate.filterQuality != filterQuality ||
+        oldDelegate.topScreenScale != topScreenScale ||
+        oldDelegate.bottomScreenScale != bottomScreenScale ||
+        oldDelegate.swapScreens != swapScreens ||
+        oldDelegate.screensScale != screensScale;
   }
 }
