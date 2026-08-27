@@ -122,7 +122,14 @@ final class NdsTrainerResolver {
         version == PokemonGameVersion.white ||
         version == PokemonGameVersion.black2 ||
         version == PokemonGameVersion.white2;
-    final special = (isGen5 ? _unovaSpecialClasses : _sinnohSpecialClasses)[classId];
+    final isHgss = version == PokemonGameVersion.heartGold ||
+        version == PokemonGameVersion.soulSilver;
+    final specialClasses = isGen5
+        ? _unovaSpecialClasses
+        : isHgss
+            ? _johtoSpecialClasses
+            : _sinnohSpecialClasses;
+    final special = specialClasses[classId];
     if (special != null) {
       final path = classId == 63 && !isGen5
           ? (version == PokemonGameVersion.platinum
@@ -136,10 +143,19 @@ final class NdsTrainerResolver {
         spritePath: path,
       );
     }
-    final entry = (isGen5 ? _unovaClasses : _sinnohClasses)[classId];
+    final classes = isGen5
+        ? _unovaClasses
+        : isHgss
+            ? _johtoClasses
+            : _sinnohClasses;
+    final entry = classes[classId];
     if (entry == null) return null;
-    final region = isGen5 ? 'Unova' : 'Sinnoh';
-    final suffix = isGen5 ? 'unova_gen5.gif' : 'sinnoh_gen4.png';
+    final region = isGen5 ? 'Unova' : isHgss ? 'Johto' : 'Sinnoh';
+    final suffix = isGen5
+        ? 'unova_gen5.gif'
+        : isHgss
+            ? 'johto_hgss.png'
+            : 'sinnoh_gen4.png';
     return NdsTrainerInfo(
       trainerId: trainerId,
       classId: classId,
@@ -165,6 +181,8 @@ final class NdsTrainerResolver {
         PokemonGameVersion.diamond ||
         PokemonGameVersion.pearl ||
         PokemonGameVersion.platinum ||
+        PokemonGameVersion.heartGold ||
+        PokemonGameVersion.soulSilver ||
         PokemonGameVersion.black ||
         PokemonGameVersion.white ||
         PokemonGameVersion.black2 ||
@@ -397,6 +415,66 @@ final class NdsTrainerResolver {
     89: ('Júpiter', 'assets/sprites/characters/villains/galactic/jupiter.png'),
     90: ('Saturno', 'assets/sprites/characters/villains/galactic/saturn.png'),
     91: ('Recluta Galaxia', 'assets/sprites/characters/villains/galactic/grunt_female.png'),
+  };
+
+  // IDs oficiales de include/constants/trainer_class.h de pret/pokeheartgold.
+  static const Map<int, (String, String)> _johtoClasses = {
+    2: ('Joven', 'joven'), 3: ('Chica', 'chica'),
+    4: ('Campista', 'campista'), 5: ('Dominguera', 'dominguera'),
+    6: ('Cazabichos', 'cazabichos'), 8: ('Gemelas', 'gemelas'),
+    9: ('Montañero', 'montanero'), 11: ('Pescador', 'pescador'),
+    14: ('Karateka', 'karateka'), 19: ('Corredor', 'corredor'),
+    20: ('Pokéfan', 'pokefan_hombre'), 21: ('Pokéfan', 'pokefan_mujer'),
+    24: ('Entrenador Guay', 'entrenador_guay'),
+    25: ('Entrenadora Guay', 'entrenadora_guay'),
+    29: ('Domadragón', 'domadragon'), 30: ('Ornitólogo', 'ornitologo'),
+    31: ('Malabarista', 'malabarista'), 33: ('Damisela', 'damisela'),
+    36: ('Modelo', 'modelo'), 38: ('Policía', 'policia'),
+    41: ('Científico', 'cientifico'), 42: ('Nadador', 'nadador'),
+    43: ('Nadadora', 'nadadora'), 46: ('Marinero', 'marinero'),
+    47: ('Chica Kimono', 'chica_kimono'), 49: ('Mentalista', 'medium_hombre'),
+    50: ('Mentalista', 'medium_mujer'), 52: ('Guitarrista', 'guitarrista'),
+    56: ('Esquiadora', 'esquiadora'), 57: ('Calvo', 'calvo'),
+    60: ('Escolar', 'escolar_chico'), 63: ('Ladrón', 'ladron'),
+    64: ('Comefuego', 'comefuego'), 65: ('Motorista', 'motorista'),
+    68: ('Pokémaniaco', 'pokemaniaco'), 77: ('Maestra', 'maestra'),
+    78: ('Supernecio', 'supernecio'), 79: ('Pensador', 'pensador'),
+    82: ('Médium', 'medium_mujer'), 111: ('Anciano', 'anciano'),
+    115: ('Snowboarder', 'snow_boarder'), 121: ('Dúo', 'duo'),
+    122: ('Pareja Joven', 'pareja_joven'),
+  };
+
+  static const Map<int, (String, String)> _johtoSpecialClasses = {
+    23: ('Silver', 'assets/sprites/characters/rivals/silver_hgss.gif'),
+    55: ('Recluta Team Rocket', 'assets/sprites/characters/villains/rocket/grunt_male_johto_hgss.png'),
+    62: ('Recluta Team Rocket', 'assets/sprites/characters/villains/rocket/grunt_female_johto_hgss.png'),
+    66: ('Pegaso', 'assets/sprites/characters/gym_leaders/nds/Johto/falkner_johto_hgss.gif'),
+    67: ('Antón', 'assets/sprites/characters/gym_leaders/nds/Johto/bugsy_johto_hgss.gif'),
+    70: ('Blanca', 'assets/sprites/characters/gym_leaders/nds/Johto/whitney_johto_hgss.gif'),
+    72: ('Morti', 'assets/sprites/characters/gym_leaders/nds/Johto/morty_johto_hgss.gif'),
+    73: ('Fredo', 'assets/sprites/characters/gym_leaders/nds/Johto/pryce_johto_hgss.gif'),
+    74: ('Yasmina', 'assets/sprites/characters/gym_leaders/nds/Johto/jasmine_johto_hgss.gif'),
+    75: ('Aníbal', 'assets/sprites/characters/gym_leaders/nds/Johto/chuck_johto_hgss.gif'),
+    76: ('Débora', 'assets/sprites/characters/gym_leaders/nds/Johto/clair_johto_hgss.gif'),
+    86: ('Lance', 'assets/sprites/characters/champions/lance_johto_hgss.gif'),
+    87: ('Mento', 'assets/sprites/characters/elite_four/nds/Johto/will_johto_hgss.gif'),
+    88: ('Karen', 'assets/sprites/characters/elite_four/nds/Johto/karen_johto_hgss.gif'),
+    89: ('Koga', 'assets/sprites/characters/elite_four/nds/Johto/koga_johto_hgss.gif'),
+    98: ('Brock', 'assets/sprites/characters/gym_leaders/nds/Johto/brock_kanto_hgss.gif'),
+    103: ('Misty', 'assets/sprites/characters/gym_leaders/nds/Johto/misty_kanto_hgss.gif'),
+    104: ('Lt. Surge', 'assets/sprites/characters/gym_leaders/nds/Johto/lt_surge_kanto_hgss.gif'),
+    105: ('Erika', 'assets/sprites/characters/gym_leaders/nds/Johto/erika_kanto_hgss.gif'),
+    106: ('Sachiko', 'assets/sprites/characters/gym_leaders/nds/Johto/janine_kanto_hgss.gif'),
+    107: ('Sabrina', 'assets/sprites/characters/gym_leaders/nds/Johto/sabrina_kanto_hgss.gif'),
+    108: ('Blaine', 'assets/sprites/characters/gym_leaders/nds/Johto/blaine_kanto_hgss.gif'),
+    110: ('Azul', 'assets/sprites/characters/gym_leaders/nds/Johto/blue_kanto_hgss.gif'),
+    112: ('Bruno', 'assets/sprites/characters/elite_four/nds/Johto/bruno_johto_hgss.gif'),
+    114: ('Ariana', 'assets/sprites/characters/villains/rocket/ariana_johto_hgss.png'),
+    116: ('Archer', 'assets/sprites/characters/villains/rocket/archer_johto_hgss.png'),
+    117: ('Protón', 'assets/sprites/characters/villains/rocket/proton_johto.png'),
+    118: ('Petrel', 'assets/sprites/characters/villains/rocket/petrel_johto.png'),
+    123: ('Lance', 'assets/sprites/characters/champions/lance_johto_hgss.gif'),
+    124: ('Giovanni', 'assets/sprites/characters/villains/rocket/giovanni_johto_hgss.png'),
   };
 
   static const Map<int, (String, String)> _unovaClasses = {

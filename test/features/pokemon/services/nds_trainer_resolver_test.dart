@@ -68,6 +68,31 @@ void main() {
     expect(cilan?.spritePath, endsWith('cilan_unova.gif'));
   });
 
+  test('resuelve clases y entrenadores especiales de HGSS', () {
+    final youngster = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.heartGold,
+      trainerId: 1,
+      classId: 2,
+    );
+    final silver = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.soulSilver,
+      trainerId: 10,
+      classId: 23,
+    );
+    final lance = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.heartGold,
+      trainerId: 20,
+      classId: 86,
+    );
+
+    expect(youngster?.className, 'Joven');
+    expect(youngster?.spritePath, endsWith('joven_johto_hgss.png'));
+    expect(silver?.className, 'Silver');
+    expect(silver?.spritePath, endsWith('silver_hgss.gif'));
+    expect(lance?.className, 'Lance');
+    expect(lance?.spritePath, endsWith('lance_johto_hgss.gif'));
+  });
+
   test('mantiene respaldo histórico para una bandera Gen V verificada', () {
     final trainer = NdsTrainerResolver.forGen5TrainerFlag(145);
 
