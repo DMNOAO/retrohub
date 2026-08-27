@@ -1641,15 +1641,15 @@ class _EmulatorVisualTheme {
     } else if (identity.contains('black') ||
         identity.contains('negra') ||
         identity.contains('negro')) {
-      primary = const Color(0xFF070A10);
-      secondary = const Color(0xFF183451);
-      accent = const Color(0xFF43C7E8);
-    } else if (identity.contains('white') ||
-        identity.contains('blanca') ||
-        identity.contains('blanco')) {
       primary = const Color(0xFF555B63);
       secondary = const Color(0xFFA94343);
       accent = const Color(0xFFFFF3DF);
+    } else if (identity.contains('white') ||
+        identity.contains('blanca') ||
+        identity.contains('blanco')) {
+      primary = const Color(0xFF070A10);
+      secondary = const Color(0xFF183451);
+      accent = const Color(0xFF43C7E8);
     } else if (pokemonVersion == PokemonGameVersion.fireRed) {
       primary = const Color(0xFFF05A24);
       secondary = const Color(0xFF7A260E);
