@@ -40,6 +40,7 @@ class PokemonJournalTracker {
   bool _gen2BadgeEventsRepaired = false;
   bool _gen5HistoricalEventsRepaired = false;
   bool _b2w2TrainerEventsRepaired = false;
+  bool _gen4LeagueEventRepaired = false;
   bool _busy = false;
   int? _lastAcceptedDiagnosticPlayTime;
 
@@ -218,6 +219,7 @@ class PokemonJournalTracker {
       }
       await _ensureGen5HistoricalEvents(stable);
       await _ensureB2w2TrainerFlagEvents(stable);
+      await _ensureGen4LeagueEvent(stable);
 
       if (previous == null) {
         RuntimeDiagnosticsLog.recordSnapshotComparison(
@@ -854,12 +856,41 @@ class PokemonJournalTracker {
         name: 'RetroHub.PokemonJournalTracker',
       );
     }
+    // Las medallas ya producen su propio evento con líder y equipo. Evitar
+    // duplicar el mismo combate como entrenador genérico.
+    if (trainer?.spritePath.contains('/gym_leaders/') == true) return;
+
+    final spritePath = trainer?.spritePath;
+    final isRival = spritePath?.contains('/rivals/') == true;
+    final isEliteFour = spritePath?.contains('/elite_four/') == true;
+    final isChampion = spritePath?.contains('/champions/') == true;
+    final eventType = isRival
+        ? 'rival_defeated'
+        : isEliteFour
+        ? 'elite_four_defeated'
+        : isChampion
+        ? 'champion_defeated'
+        : 'trainer_defeated';
+    final title = trainer == null
+        ? 'Ganó un combate de entrenador'
+        : isRival
+        ? 'Derrotó a ${trainer.className}'
+        : isEliteFour
+        ? 'Derrotó a ${trainer.className}'
+        : isChampion
+        ? 'Derrotó a ${trainer.className}'
+        : 'Ganó contra ${trainer.className}';
+    final description = isRival
+        ? 'Ganó el combate contra su rival.'
+        : isEliteFour
+        ? 'Venció a un miembro del Alto Mando.'
+        : isChampion
+        ? 'Se convirtió en Campeón Pokémon.'
+        : 'Venció a un entrenador durante su aventura.';
     await _insertEvent(
-      type: 'trainer_defeated',
-      title: trainer == null
-          ? 'Ganó un combate de entrenador'
-          : 'Ganó contra ${trainer.className}',
-      description: 'Venció a un entrenador durante su aventura.',
+      type: eventType,
+      title: title,
+      description: description,
       metadata: <String, dynamic>{
         ..._metadata(current),
         if (current.profile.isGen5 && !detectedFromActiveRam)
@@ -1286,6 +1317,37 @@ class PokemonJournalTracker {
         trainerFlagId: entry.key,
       );
     }
+  }
+
+  /// PlayerProfile de Gen IV conserva gameClear como bit persistente. Esto
+  /// permite reconstruir el hito de Campeón incluso si RetroHub se instaló
+  /// después de terminar la Liga.
+  Future<void> _ensureGen4LeagueEvent(PokemonMemorySnapshot current) async {
+    if (_gen4LeagueEventRepaired || !current.profile.isGen4) return;
+    _gen4LeagueEventRepaired = true;
+    if (current.leagueWins < 1) return;
+
+    final events = await database.getProgressEventsByGame(gameId);
+    if (events.any((event) => event.eventType == 'champion_defeated')) return;
+
+    final isHgss = current.profile.version == PokemonGameVersion.heartGold ||
+        current.profile.version == PokemonGameVersion.soulSilver;
+    final champion = isHgss ? 'Lance' : 'Cintia';
+    final assets = GameAssetProfile.fromTitle(
+      title: gameTitle,
+      console: 'NDS',
+    );
+    await _insertEvent(
+      type: 'champion_defeated',
+      title: 'Derrotó a $champion',
+      description: 'Entró al Hall de la Fama.',
+      metadata: <String, dynamic>{
+        ..._metadata(current),
+        'trainerClass': champion,
+        'spritePath': CharacterAssetResolver.champion(assets),
+        'recoveredFromGameClear': true,
+      },
+    );
   }
 
   String? _trainerNameFromEvent(GameProgressEvent event) {

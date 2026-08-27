@@ -90,6 +90,7 @@ final class PokemonGen4SaveReader {
     }
 
     final int progressFlags = general[layout.trainerOffset + 0x1D];
+    final bool gameCleared = (progressFlags & 0x01) != 0;
     final List<int> caught = _dexIds(general, layout.dexOffset + 4);
     final List<int> seen = _dexIds(
       general,
@@ -130,6 +131,10 @@ final class PokemonGen4SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
+      // PlayerProfile::gameCleared (pret/pokediamond, pokeplatinum y
+      // pokeheartgold). El perfil solo conserva si la Liga fue superada, no
+      // un contador de reingresos, por lo que se expone como mínimo una vez.
+      leagueWins: gameCleared ? 1 : 0,
       defeatedTrainerIds: defeatedTrainers,
       gamePlayTimeMinutes:
           _u16(general, layout.trainerOffset + 0x22) * 60 +

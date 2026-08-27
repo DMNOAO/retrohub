@@ -94,4 +94,20 @@ void main() {
     expect(GymLeaderAssetResolver.forBadge(profile, 8)?.name, 'Brock');
     expect(GymLeaderAssetResolver.forBadge(profile, 15)?.name, 'Blue');
   });
+
+  test('Negro y Blanco usan su octavo líder correspondiente', () {
+    final black = PokemonGameProfile.fromRomPath('Pokemon Negro.nds');
+    final white = PokemonGameProfile.fromRomPath('Pokemon Blanca.nds');
+
+    expect(GymLeaderAssetResolver.forBadge(black, 7)?.name, 'Lirio');
+    expect(
+      GymLeaderAssetResolver.forBadge(black, 7)?.spritePath,
+      endsWith('drayden_unova.gif'),
+    );
+    expect(GymLeaderAssetResolver.forBadge(white, 7)?.name, 'Iris');
+    expect(
+      GymLeaderAssetResolver.forBadge(white, 7)?.spritePath,
+      endsWith('iris_unova.png'),
+    );
+  });
 }
