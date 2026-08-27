@@ -20,6 +20,11 @@ final class PokemonGen5SaveReader {
   static const int _partyPokemonSize = 0xDC;
   static const int _trainerDefeatedFlagStart = 0x550;
   static const int _dexBitBytes = 0x54;
+  // PlayerSaveData documentado por Swan para B2W2: el nombre visible no es
+  // ZoneID, sino PlaceNameZoneID.
+  static const int _placeNameZoneIdOffset = 0x76;
+  static const int _zoneIdOffset = 0x80;
+  static const int _positionVectorOffset = 0x84;
   static const List<String> _blockOrders = <String>[
     'ABCD', 'ABDC', 'ACBD', 'ACDB', 'ADBC', 'ADCB',
     'BACD', 'BADC', 'BCAD', 'BCDA', 'BDAC', 'BDCA',
@@ -92,11 +97,23 @@ final class PokemonGen5SaveReader {
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
     final List<int> defeatedTrainers = _changedTrainerFlagIds(layout);
+    final int placeNameZoneId = layout.hasSwanPlayerSave
+        ? _u16(position, _placeNameZoneIdOffset)
+        : _u32(position, _zoneIdOffset);
+    final int zoneId = _u16(position, _zoneIdOffset);
+    final int playerX = layout.hasSwanPlayerSave
+        ? _fixedPointTile(position, _positionVectorOffset)
+        : _u16(position, 0x86);
+    final int playerZ = layout.hasSwanPlayerSave
+        ? _fixedPointTile(position, _positionVectorOffset + 8)
+        : _u16(position, 0x8E);
 
     recordDiagnostic(
       'SAVE_RAM=$requiredSaveSize bytes, ${layout.label} blocks valid, '
       'party=$count, decoded=${party.length}, seen=${seen.length}, '
-      'caught=${caught.length}, defeatedTrainers=${defeatedTrainers.length}',
+      'caught=${caught.length}, placeNameZone=$placeNameZoneId, zone=$zoneId, '
+      'position=($playerX,$playerZ), '
+      'defeatedTrainers=${defeatedTrainers.length}',
     );
 
     return PokemonMemorySnapshot(
@@ -106,9 +123,9 @@ final class PokemonGen5SaveReader {
       playerName: playerName,
       trainerId: _u16(trainer, 0x14),
       isFemale: trainer[0x21] == 1,
-      currentMapId: _u32(position, 0x80),
-      playerX: _u16(position, 0x86),
-      playerY: _u16(position, 0x8E),
+      currentMapId: placeNameZoneId,
+      playerX: playerX,
+      playerY: playerZ,
       money: _u32(misc, 0),
       badgesMask: misc[4],
       pokedexSeen: seen.length,
@@ -248,6 +265,16 @@ final class PokemonGen5SaveReader {
       bytes[offset] | (bytes[offset + 1] << 8);
   static int _u32(List<int> bytes, int offset) =>
       _u16(bytes, offset) | (_u16(bytes, offset + 2) << 16);
+
+  static int _s32(List<int> bytes, int offset) {
+    final int value = _u32(bytes, offset);
+    return value >= 0x80000000 ? value - 0x100000000 : value;
+  }
+
+  /// VecFx32 usa 20.12 bits fijos. La bitácora trabaja con la casilla del
+  /// mapa, por lo que se descartan los 12 bits fraccionarios.
+  static int _fixedPointTile(List<int> bytes, int offset) =>
+      _s32(bytes, offset) >> 12;
 }
 
 final class _Gen5SaveLayout {
@@ -264,6 +291,7 @@ final class _Gen5SaveLayout {
   final int eventFlagOffset;
   final int eventFlagCount;
   final bool hasVerifiedTrainerFlags;
+  final bool hasSwanPlayerSave;
 
   const _Gen5SaveLayout({
     required this.label,
@@ -279,6 +307,7 @@ final class _Gen5SaveLayout {
     required this.eventFlagOffset,
     required this.eventFlagCount,
     this.hasVerifiedTrainerFlags = true,
+    this.hasSwanPlayerSave = false,
   });
 
   static const bw = _Gen5SaveLayout(
@@ -310,6 +339,7 @@ final class _Gen5SaveLayout {
     eventFlagOffset: 0x1FF00 + 0x35E,
     eventFlagCount: 0xBF8,
     hasVerifiedTrainerFlags: false,
+    hasSwanPlayerSave: true,
   );
 
   static _Gen5SaveLayout? forVersion(PokemonGameVersion version) =>
