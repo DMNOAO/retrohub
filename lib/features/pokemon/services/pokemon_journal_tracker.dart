@@ -56,6 +56,7 @@ class PokemonJournalTracker {
   // mecanismo de estabilidad el estado de combate quedaría atascado.
   PokemonMemorySnapshot? _lastRawSnapshot;
   Set<int>? _lastLoadedNdsTrainerIds;
+  Set<int>? _lastLoggedLoadedNdsTrainerIds;
   NdsTrainerInfo? _pendingNdsTrainer;
   PokemonMemorySnapshot? _pendingNdsBattleSnapshot;
 
@@ -860,6 +861,14 @@ class PokemonJournalTracker {
       systemRam: ram,
     );
     final ids = trainers.map((trainer) => trainer.trainerId).toSet();
+    if (_lastLoggedLoadedNdsTrainerIds == null ||
+        !_sameIntSet(_lastLoggedLoadedNdsTrainerIds!, ids)) {
+      debugPrint(
+        '[RetroHub.Gen5Battle] RAM trainer scan: found=${ids.length} '
+        'ids=${ids.toList()..sort()}',
+      );
+      _lastLoggedLoadedNdsTrainerIds = ids;
+    }
     final previous = _lastLoadedNdsTrainerIds;
     _lastLoadedNdsTrainerIds = ids;
     if (previous == null) return;
@@ -888,6 +897,9 @@ class PokemonJournalTracker {
       'map=${current.currentMapId}',
     );
   }
+
+  static bool _sameIntSet(Set<int> a, Set<int> b) =>
+      a.length == b.length && a.containsAll(b);
 
   Future<void> _recordGen3TrainerVictory({
     required PokemonMemorySnapshot current,

@@ -34,6 +34,8 @@ final class PokemonGen5SaveReader {
 
   static String lastDiagnostic = 'Gen V reader not started';
   static String? _lastLoggedDiagnostic;
+  static final Map<PokemonGameVersion, Set<int>> _lastEventWorkFlags =
+      <PokemonGameVersion, Set<int>>{};
 
   static void recordDiagnostic(String value) {
     lastDiagnostic = value;
@@ -96,6 +98,9 @@ final class PokemonGen5SaveReader {
     }
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
+    if (!layout.hasVerifiedTrainerFlags) {
+      _recordEventWorkChanges(layout);
+    }
     final List<int> defeatedTrainers = _changedTrainerFlagIds(layout);
     final List<List<int>> badgeTeams = layout.hasBadgeTeams
         ? _decodeBadgeTeams(misc)
@@ -117,6 +122,7 @@ final class PokemonGen5SaveReader {
       'party=$count, decoded=${party.length}, seen=${seen.length}, '
       'caught=${caught.length}, placeNameZone=$placeNameZoneId, zone=$zoneId, '
       'position=($playerX,$playerY), '
+      'money=${_u32(misc, 0)}, badges=0x${misc[4].toRadixString(16)}, '
       'badgeTeams=${badgeTeams.where((team) => team.isNotEmpty).length}, '
       'hallOfFame=${hallOfFameSpeciesIds.length}, '
       'defeatedTrainers=${defeatedTrainers.length}',
@@ -148,19 +154,58 @@ final class PokemonGen5SaveReader {
     );
   }
 
+  /// B2W2 usa EventWork para las victorias, pero todavía no conocemos qué
+  /// índices corresponden a TrainerFlag. Registrar únicamente las transiciones
+  /// permite obtener esa tabla de una partida real sin convertir flags de
+  /// historia, diálogos o objetos en falsos combates de la bitácora.
+  void _recordEventWorkChanges(_Gen5SaveLayout layout) {
+    final int byteCount = layout.eventFlagCount ~/ 8;
+    final List<int> flags = read(layout.eventFlagOffset, byteCount);
+    if (flags.length != byteCount) return;
+    final current = <int>{};
+    for (int flag = 0; flag < layout.eventFlagCount; flag++) {
+      if ((flags[flag >> 3] & (1 << (flag & 7))) != 0) current.add(flag);
+    }
+    final previous = _lastEventWorkFlags[profile.version];
+    _lastEventWorkFlags[profile.version] = current;
+    if (previous == null) {
+      debugPrint(
+        '[RetroHub.Gen5Battle] EventWork baseline: ${current.length} flags set',
+      );
+      return;
+    }
+    final activated = current.difference(previous).toList()..sort();
+    final cleared = previous.difference(current).toList()..sort();
+    if (activated.isEmpty && cleared.isEmpty) return;
+    debugPrint(
+      '[RetroHub.Gen5Battle] EventWork changed: '
+      'set=${activated.join(',')} cleared=${cleared.join(',')}',
+    );
+  }
+
   /// Devuelve los IDs de entrenador con su bandera persistente activa.
   ///
   /// Blanco/Negro reserva las banderas desde 0x550. Los comandos de script
   /// TrainerFlagSet/Get reciben el trainerId y el juego aplica internamente
   /// esa base; por eso aquí se devuelve el índice relativo como trainerId.
   List<int> _changedTrainerFlagIds(_Gen5SaveLayout layout) {
-    // La tabla de EventWork de B2W2 no comparte la base de TrainerFlag de BW.
-    // Hasta verificarla, los combates de las secuelas se detectan mediante la
-    // RAM activa para no confundir flags de historia iniciales con victorias.
-    if (!layout.hasVerifiedTrainerFlags) return const <int>[];
-    final List<int> flags = read(layout.eventFlagOffset, layout.eventFlagCount ~/ 8);
+    final List<int> flags = read(
+      layout.eventFlagOffset,
+      layout.eventFlagCount ~/ 8,
+    );
     if (flags.length != layout.eventFlagCount ~/ 8) return const <int>[];
     final List<int> result = <int>[];
+    // En B2W2 aún no está verificada la relación flag -> trainerId. Devolver
+    // los índices absolutos permite detectar únicamente flags recién
+    // activadas; el tracker exige además que un TRData real haya aparecido en
+    // RAM antes de registrar la victoria, por lo que una flag de historia por
+    // sí sola nunca crea un combate falso.
+    if (!layout.hasVerifiedTrainerFlags) {
+      for (int flag = 0; flag < layout.eventFlagCount; flag++) {
+        if ((flags[flag >> 3] & (1 << (flag & 7))) != 0) result.add(flag);
+      }
+      return result;
+    }
     final int trainerFlagCount =
         layout.eventFlagCount - _trainerDefeatedFlagStart;
     for (int trainerId = 1; trainerId < trainerFlagCount; trainerId++) {

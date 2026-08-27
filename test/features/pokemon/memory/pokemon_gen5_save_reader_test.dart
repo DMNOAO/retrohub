@@ -90,8 +90,9 @@ void main() {
     expect(snapshot.badgeTeams[3], <int>[523]);
     expect(snapshot.hallOfFameSpeciesIds, <int>[500, 503]);
     expect(snapshot.leagueWins, 1);
-    // Los EventWork de B2W2 no se interpretan como TrainerFlag de BW.
-    expect(snapshot.defeatedTrainerIds, isEmpty);
+    // En B2W2 se conservan como índices absolutos de EventWork. El tracker
+    // solo confirma una victoria si además identificó un entrenador en RAM.
+    expect(snapshot.defeatedTrainerIds, <int>[trainerFlag]);
   });
 
 }
