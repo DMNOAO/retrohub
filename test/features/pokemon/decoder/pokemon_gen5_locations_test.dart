@@ -26,9 +26,25 @@ void main() {
       white2,
     ]) {
       expect(PokemonDecoder.mapName(profile, 428), 'Ciudad Engobe');
+      expect(PokemonDecoder.mapName(profile, 427), 'Ciudad Engobe');
+      expect(PokemonDecoder.mapName(profile, 435), 'Ciudad Engobe');
       expect(
         PokemonDecoder.locationFor(profile, 428)?.kind,
         PokemonLocationKind.city,
+      );
+    }
+  });
+
+  test('Negro 2 y Blanco 2 agrupan la salida de Engobe como Ruta 19', () {
+    for (final PokemonGameProfile profile in <PokemonGameProfile>[
+      black2,
+      white2,
+    ]) {
+      expect(PokemonDecoder.mapName(profile, 437), 'Ruta 19');
+      expect(PokemonDecoder.mapName(profile, 438), 'Ruta 19');
+      expect(
+        PokemonDecoder.locationFor(profile, 438)?.kind,
+        PokemonLocationKind.route,
       );
     }
   });
