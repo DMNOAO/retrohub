@@ -3,8 +3,12 @@ import 'dart:developer' as developer;
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../../core/assets/character_asset_resolver.dart';
+import '../../../core/assets/game_asset_profile.dart';
 import '../../../data/database/app_database.dart';
+import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
 import '../memory/pokemon_controller_memory_reader.dart';
@@ -14,6 +18,7 @@ import '../models/pokemon_memory_snapshot.dart';
 import '../models/emerald_trainer.dart';
 import '../models/ruby_sapphire_trainer.dart';
 import '../models/trainer_class.dart';
+import 'nds_trainer_resolver.dart';
 
 class PokemonJournalTracker {
   final AppDatabase database;
@@ -49,6 +54,9 @@ class PokemonJournalTracker {
   // un combate el dinero/equipo/ubicación normalmente no cambian, y con el
   // mecanismo de estabilidad el estado de combate quedaría atascado.
   PokemonMemorySnapshot? _lastRawSnapshot;
+  Set<int>? _lastLoadedNdsTrainerIds;
+  NdsTrainerInfo? _pendingNdsTrainer;
+  PokemonMemorySnapshot? _pendingNdsBattleSnapshot;
 
   // IDs reales de clase de entrenador (constants/trainer_constants.asm,
   // Gen2 Crystal/Gold, pegado por el usuario). Rival y Campeón se
@@ -133,6 +141,9 @@ class PokemonJournalTracker {
           'memory reader returned null',
         );
         return;
+      }
+      if (profile.isGen5) {
+        await _sampleActiveGen5Trainer(current);
       }
       final String? plausibilityError = _plausibilityError(current);
       if (plausibilityError != null) {
@@ -555,7 +566,9 @@ class PokemonJournalTracker {
   ) async {
     if (current.profile.version == PokemonGameVersion.emerald ||
         current.profile.version == PokemonGameVersion.ruby ||
-        current.profile.version == PokemonGameVersion.sapphire) {
+        current.profile.version == PokemonGameVersion.sapphire ||
+        current.profile.isGen4 ||
+        current.profile.isGen5) {
       final Set<int> previousIds = previous.defeatedTrainerIds.toSet();
       final List<int> newTrainerIds = current.defeatedTrainerIds
           .where((id) => !previousIds.contains(id))
@@ -567,11 +580,37 @@ class PokemonJournalTracker {
         _pendingTrainerClass = null;
         _pendingTrainerId = null;
         _pendingBattleResult = null;
+        if (current.profile.isGen5) {
+          final trainer = _pendingNdsTrainer;
+          final battleSnapshot = _pendingNdsBattleSnapshot;
+          _pendingNdsTrainer = null;
+          _pendingNdsBattleSnapshot = null;
+          if (trainer != null && battleSnapshot != null) {
+            await _recordNdsTrainerVictory(
+              current: battleSnapshot,
+              trainerId: trainer.trainerId,
+              detectedFromActiveRam: true,
+            );
+          } else {
+            debugPrint(
+              '[RetroHub.Gen5Battle] ignored ${newTrainerIds.length} EventWork '
+              'flags without an active-RAM trainer match',
+            );
+          }
+          return;
+        }
         for (final int trainerId in newTrainerIds) {
-          await _recordGen3TrainerVictory(
-            current: current,
-            trainerId: trainerId,
-          );
+          if (current.profile.isGen4 || current.profile.isGen5) {
+            await _recordNdsTrainerVictory(
+              current: current,
+              trainerId: trainerId,
+            );
+          } else {
+            await _recordGen3TrainerVictory(
+              current: current,
+              trainerId: trainerId,
+            );
+          }
         }
         return;
       }
@@ -714,6 +753,110 @@ class PokemonJournalTracker {
       },
     );
     await _rememberLastDefeatedTrainer(info?.name ?? 'Entrenador', current);
+  }
+
+  Future<void> _recordNdsTrainerVictory({
+    required PokemonMemorySnapshot current,
+    required int trainerId,
+    bool detectedFromActiveRam = false,
+  }) async {
+    if (trainerId <= 0) return;
+    final String generation = current.profile.isGen5 ? 'V' : 'IV';
+    final assetProfile = GameAssetProfile.fromTitle(
+      title: gameTitle,
+      console: 'NDS',
+    );
+    final trainer = current.profile.isGen5
+        ? (await NdsTrainerResolver.resolve(
+              romPath: romPath,
+              version: current.profile.version,
+              trainerId: trainerId,
+            ) ??
+            NdsTrainerResolver.forGen5TrainerFlag(trainerId))
+        : await NdsTrainerResolver.resolve(
+            romPath: romPath,
+            version: current.profile.version,
+            trainerId: trainerId,
+          );
+    if (current.profile.isGen5) {
+      developer.log(
+        'Gen V trainer victory flag=$trainerId trainerId=$trainerId '
+        'classId=${trainer?.classId} class=${trainer?.className} '
+        'map=${current.currentMapId}',
+        name: 'RetroHub.PokemonJournalTracker',
+      );
+    }
+    await _insertEvent(
+      type: 'trainer_defeated',
+      title: trainer == null
+          ? 'Ganó un combate de entrenador'
+          : 'Ganó contra ${trainer.className}',
+      description: 'Venció a un entrenador durante su aventura.',
+      metadata: <String, dynamic>{
+        ..._metadata(current),
+        if (current.profile.isGen5 && !detectedFromActiveRam)
+          'trainerFlagId': trainerId
+        else
+          'trainerId': trainerId,
+        'trainerClassId': trainer?.classId,
+        'trainerClass': trainer?.className,
+        'generation': generation,
+        'spritePath': trainer?.spritePath ??
+            CharacterAssetResolver.genericTrainer(assetProfile),
+        'detectedFromTrainerFlag': !detectedFromActiveRam,
+        'detectedFromActiveRam': detectedFromActiveRam,
+      },
+    );
+    await _rememberLastDefeatedTrainer(
+      trainer?.className ?? 'Entrenador',
+      current,
+    );
+  }
+
+  Future<void> _sampleActiveGen5Trainer(
+    PokemonMemorySnapshot current,
+  ) async {
+    final int size = controller.inspectMemoryRegions()['systemRam'] ?? 0;
+    if (size < 12) return;
+    final List<int> ram = controller.readMemoryBlock(
+      memoryId: LibretroMemoryRegion.systemRam,
+      offset: 0,
+      length: size,
+    );
+    if (ram.length != size) return;
+    final trainers = await NdsTrainerResolver.findLoadedTrainers(
+      romPath: romPath,
+      version: current.profile.version,
+      systemRam: ram,
+    );
+    final ids = trainers.map((trainer) => trainer.trainerId).toSet();
+    final previous = _lastLoadedNdsTrainerIds;
+    _lastLoadedNdsTrainerIds = ids;
+    if (previous == null) return;
+    final newlyLoaded = trainers
+        .where((trainer) => !previous.contains(trainer.trainerId))
+        .toList(growable: false);
+    if (newlyLoaded.isEmpty) return;
+    // Gen V puede precargar el TRData del siguiente NPC mientras todavía
+    // conserva en memoria el combate que acaba de terminar. El primer
+    // entrenador observado es el rival real; no permitir que una carga
+    // posterior lo reemplace antes de que SAVE_RAM confirme la victoria.
+    if (_pendingNdsTrainer != null) {
+      debugPrint(
+        '[RetroHub.Gen5Battle] ignored preloaded trainerIds='
+        '${newlyLoaded.map((trainer) => trainer.trainerId).join(',')} '
+        'pending=${_pendingNdsTrainer!.trainerId}',
+      );
+      return;
+    }
+    final trainer = newlyLoaded.first;
+    _pendingNdsTrainer = trainer;
+    _pendingNdsBattleSnapshot = current;
+    debugPrint(
+      '[RetroHub.Gen5Battle] active trainerId=${trainer.trainerId} '
+      'classId=${trainer.classId} class=${trainer.className} '
+      'map=${current.currentMapId}',
+    );
   }
 
   Future<void> _recordGen3TrainerVictory({
@@ -915,6 +1058,28 @@ class PokemonJournalTracker {
   Future<void> _restorePersistentState() async {
     if (_persistentStateRestored) return;
     _persistentStateRestored = true;
+
+    final restoredProfile = PokemonGameProfile.fromGameIdentity(
+      gameTitle: gameTitle,
+      romPath: romPath,
+    );
+    if (restoredProfile.isGen5) {
+      final events = await database.getProgressEventsByGame(gameId);
+      for (final event in events) {
+        final raw = event.metadataJson;
+        if (raw == null || raw.isEmpty) continue;
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is! Map || decoded['trainerFlagId'] == null) continue;
+          debugPrint(
+            '[RetroHub.Gen5Battle] latest trainerFlagId='
+            '${decoded['trainerFlagId']} map=${decoded['mapId']} '
+            'createdAt=${event.createdAt.toIso8601String()}',
+          );
+          break;
+        } catch (_) {}
+      }
+    }
 
     final latest = await database.getLatestProgressSnapshot(gameId);
     final storedName = latest?.lastDefeatedTrainer?.trim();

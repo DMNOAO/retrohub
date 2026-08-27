@@ -24,6 +24,10 @@ final class PokemonGen5SaveReader {
   static const int _trainerOffset = 0x19400;
   static const int _positionOffset = 0x19500;
   static const int _miscOffset = 0x21200;
+  static const int _eventWorkOffset = 0x20100;
+  static const int _eventFlagOffset = _eventWorkOffset + 0x27C;
+  static const int _trainerDefeatedFlagStart = 0x550;
+  static const int _trainerDefeatedFlagCount = 0xB60 - _trainerDefeatedFlagStart;
   static const int _dexOffset = 0x21600;
   static const int _dexBitBytes = 0x54;
   static const List<String> _blockOrders = <String>[
@@ -97,10 +101,12 @@ final class PokemonGen5SaveReader {
     }
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
+    final List<int> defeatedTrainers = _changedTrainerFlagIds();
 
     recordDiagnostic(
       'SAVE_RAM=$requiredSaveSize bytes, BW blocks valid, '
-      'party=$count, decoded=${party.length}, seen=${seen.length}, caught=${caught.length}',
+      'party=$count, decoded=${party.length}, seen=${seen.length}, '
+      'caught=${caught.length}, defeatedTrainers=${defeatedTrainers.length}',
     );
 
     return PokemonMemorySnapshot(
@@ -121,8 +127,25 @@ final class PokemonGen5SaveReader {
       seenPokemonIds: seen,
       caughtPokemonIds: caught,
       party: party,
+      defeatedTrainerIds: defeatedTrainers,
       gamePlayTimeMinutes: _u16(trainer, 0x24) * 60 + trainer[0x26],
     );
+  }
+
+  /// Devuelve los IDs de entrenador con su bandera persistente activa.
+  ///
+  /// Blanco/Negro reserva las banderas desde 0x550. Los comandos de script
+  /// TrainerFlagSet/Get reciben el trainerId y el juego aplica internamente
+  /// esa base; por eso aquí se devuelve el índice relativo como trainerId.
+  List<int> _changedTrainerFlagIds() {
+    final List<int> flags = read(_eventFlagOffset, 0xB60 ~/ 8);
+    if (flags.length != 0xB60 ~/ 8) return const <int>[];
+    final List<int> result = <int>[];
+    for (int trainerId = 1; trainerId < _trainerDefeatedFlagCount; trainerId++) {
+      final int flag = _trainerDefeatedFlagStart + trainerId;
+      if ((flags[flag >> 3] & (1 << (flag & 7))) != 0) result.add(trainerId);
+    }
+    return result;
   }
 
   static PokemonPartyMember? _decodePartyPokemon(List<int> encrypted) {

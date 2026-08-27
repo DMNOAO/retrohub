@@ -91,6 +91,28 @@ void main() {
     );
   });
 
+  test('resuelve un sprite neutral para combates NDS sin clase', () {
+    final platinum = GameAssetProfile.fromTitle(
+      title: 'Pokémon Platino',
+      console: 'NDS',
+    );
+    final white = GameAssetProfile.fromTitle(
+      title: 'Pokémon Blanca',
+      console: 'NDS',
+    );
+
+    expect(
+      CharacterAssetResolver.genericTrainer(platinum),
+      'assets/sprites/characters/trainers/nds/Sinnoh/'
+      'entrenador_guay_sinnoh_gen4.png',
+    );
+    expect(
+      CharacterAssetResolver.genericTrainer(white),
+      'assets/sprites/characters/trainers/nds/Unova/'
+      'entrenador_guay_unova_gen5.gif',
+    );
+  });
+
   test('resuelve los Jefes Metro de Blanco 2 y Negro 2', () {
     expect(
       CharacterAssetResolver.specialTrainer('Caril'),
