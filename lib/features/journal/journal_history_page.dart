@@ -13,6 +13,7 @@ import '../../data/database/database_provider.dart';
 import '../pokemon/services/nds_trainer_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
 import '../pokemon/models/pokemon_game_profile.dart';
+import '../pokemon/models/trainer_class.dart';
 import '../../shared/theme/app_appearance.dart';
 import 'pokedex_grid.dart';
 import 'widgets/journal_chrome.dart';
@@ -433,6 +434,10 @@ class _TimelineCard extends StatelessWidget {
       case 'trainer_defeated':
         final trainerClass = item.metadata['trainerClass']?.toString();
         final explicitPath = item.metadata['spritePath']?.toString();
+        final trainerClassId = _toInt(item.metadata['trainerClassId']);
+        final gen2Trainer = trainerClassId == null
+            ? null
+            : TrainerClassResolver.forClassId(trainerClassId);
         final trainerFlagId = _toInt(item.metadata['trainerFlagId']);
         final flagTrainer = trainerFlagId == null
             ? null
@@ -440,6 +445,7 @@ class _TimelineCard extends StatelessWidget {
         return _Visual(
           flagTrainer?.spritePath ??
               explicitPath ??
+              gen2Trainer?.spritePath ??
               (trainerClass == null
                   ? CharacterAssetResolver.genericTrainer(profile)
                   : CharacterAssetResolver.trainer(

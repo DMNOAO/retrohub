@@ -50,7 +50,10 @@ class TrainerClassResolver {
     0x11: TrainerClassInfo('Brock'),
     0x12: TrainerClassInfo('Misty'),
     0x13: TrainerClassInfo('Lt. Surge'),
-    0x14: TrainerClassInfo('Científico'),
+    0x14: TrainerClassInfo(
+      'Científico',
+      'assets/sprites/characters/villains/rocket/scientist_johto.png',
+    ),
     0x15: TrainerClassInfo('Erika'),
     0x16: TrainerClassInfo(
       'Joven',
@@ -156,7 +159,10 @@ class TrainerClassResolver {
       'Cinturón Negro',
       'assets/sprites/characters/trainers/gbc/black_belt.png',
     ),
-    0x33: TrainerClassInfo('Ejecutivo (M)'),
+    0x33: TrainerClassInfo(
+      'Ejecutivo (M)',
+      'assets/sprites/characters/villains/rocket/archer_johto.png',
+    ),
     0x34: TrainerClassInfo(
       'Médium (psíquico)',
       'assets/sprites/characters/trainers/gbc/psychic.png',
@@ -169,7 +175,10 @@ class TrainerClassResolver {
       'Campista',
       'assets/sprites/characters/trainers/gbc/camper.png',
     ),
-    0x37: TrainerClassInfo('Ejecutiva (F)'),
+    0x37: TrainerClassInfo(
+      'Ejecutiva (F)',
+      'assets/sprites/characters/villains/rocket/ariana_johto.png',
+    ),
     0x38: TrainerClassInfo(
       'Sabio',
       'assets/sprites/characters/trainers/gbc/sage.png',
