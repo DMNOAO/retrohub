@@ -643,9 +643,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     ? _ndsBottomScreenScale(_preferences)
                                     : 1,
                                 ndsSwapScreens: isNds && _preferences.ndsSwapScreens,
-                                ndsScreensScale: isNds
-                                    ? _preferences.ndsScreensScale
-                                    : 1,
+                                ndsScreensScale: 1,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -870,30 +868,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     }
 
                     if (isNds) {
-                      final double screenHeight =
-                          (constraints.maxWidth * 1.5) + 4;
                       final double topFactor = _ndsTopScreenScale(_preferences);
                       final double bottomFactor = _ndsBottomScreenScale(_preferences);
-                      final double layoutWidth = ((screenHeight - 4) /
-                              ((topFactor / (4 / 3)) + (bottomFactor / (4 / 3))))
-                          .clamp(0, constraints.maxWidth)
-                          .toDouble() * _preferences.ndsScreensScale;
+                      final double layoutWidth =
+                          constraints.maxWidth * _preferences.ndsScreensScale;
                       final double topWidth = layoutWidth * topFactor;
                       final double bottomWidth = layoutWidth * bottomFactor;
                       final double topHeight = topWidth / (4 / 3);
                       final double bottomHeight = bottomWidth / (4 / 3);
-                      final double contentTop =
-                          (screenHeight - topHeight - bottomHeight - 4) / 2;
+                      final double screenHeight = topHeight + bottomHeight + 4;
+                      final double screenLeft =
+                          (constraints.maxWidth - layoutWidth) / 2;
                       final bool touchIsTop = _preferences.ndsSwapScreens;
                       final double touchScreenTop = touchIsTop
-                          ? contentTop
-                          : contentTop + topHeight + 4;
+                          ? 0
+                          : topHeight + 4;
                       final double touchScreenWidth =
                           touchIsTop ? topWidth : bottomWidth;
                       final double touchScreenHeight =
                           touchIsTop ? topHeight : bottomHeight;
                       final double touchScreenLeft =
                           (constraints.maxWidth - touchScreenWidth) / 2;
+                      final double shoulderRowTop = topHeight + 14;
+                      final double mainControlsTop = screenHeight + 10;
+                      final double logoTop = screenHeight + 78;
                       final double controlOpacity = _preferences.ndsControlOpacity;
                       final Color ndsA = visualTheme.accent;
                       final Color ndsB = Color.lerp(visualTheme.accent, visualTheme.background, .28)!;
@@ -905,8 +903,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         children: [
                           Positioned(
                             top: 0,
-                            left: 0,
-                            right: 0,
+                            left: screenLeft,
+                            width: layoutWidth,
                             height: screenHeight,
                             child: gameView,
                           ),
@@ -994,7 +992,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                           Positioned(
-                            top: screenHeight + 8,
+                            top: shoulderRowTop,
                             left: 10,
                             right: 10,
                             child: Opacity(
@@ -1024,9 +1022,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                           Positioned(
+                            top: mainControlsTop,
                             left: 12,
                             right: 12,
-                            bottom: 30,
                             child: Opacity(
                               opacity: controlOpacity,
                               child: Row(
@@ -1066,9 +1064,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                           Positioned(
+                            top: logoTop,
                             left: 0,
                             right: 0,
-                            bottom: 16,
                             child: IgnorePointer(
                               child: Center(
                                 child: FittedBox(
