@@ -19,13 +19,66 @@ class NdsTrainerInfo {
 }
 
 /// Resuelve la clase real de un entrenador leyendo su entrada en el NARC de
-/// la propia ROM. El índice del miembro coincide con el trainerId persistido
-/// por las banderas de victoria de Gen IV/V.
+/// la propia ROM. El índice del miembro coincide con el trainerId usado por
+/// el motor de combate.
 final class NdsTrainerResolver {
   const NdsTrainerResolver._();
 
   static final Map<String, Map<int, NdsTrainerInfo?>> _cache =
       <String, Map<int, NdsTrainerInfo?>>{};
+  static final Map<String, Map<int, Uint8List>> _trainerDataCache =
+      <String, Map<int, Uint8List>>{};
+
+  /// Busca en la RAM activa entradas TRData completas cargadas por el juego.
+  /// A diferencia de las banderas de EventWork, el índice encontrado aquí sí
+  /// es el trainerId real usado por la ROM.
+  static Future<List<NdsTrainerInfo>> findLoadedTrainers({
+    required String romPath,
+    required PokemonGameVersion version,
+    required List<int> systemRam,
+  }) async {
+    if (!_isSupported(version) || systemRam.length < 12) {
+      return const <NdsTrainerInfo>[];
+    }
+    final records = await _readAllTrainerData(
+      romPath: romPath,
+      version: version,
+    );
+    if (records.isEmpty) return const <NdsTrainerInfo>[];
+
+    final prefixes = <int, List<int>>{};
+    for (final entry in records.entries) {
+      if (entry.key <= 0 || entry.value.length < 12) continue;
+      prefixes.putIfAbsent(_u32(entry.value, 0), () => <int>[]).add(entry.key);
+    }
+    final found = <NdsTrainerInfo>[];
+    final seen = <int>{};
+    for (var offset = 0; offset + 12 <= systemRam.length; offset += 4) {
+      final candidates = prefixes[_u32(systemRam, offset)];
+      if (candidates == null) continue;
+      for (final trainerId in candidates) {
+        if (seen.contains(trainerId)) continue;
+        final record = records[trainerId]!;
+        if (offset + record.length > systemRam.length) continue;
+        var matches = true;
+        for (var i = 0; i < record.length; i++) {
+          if (systemRam[offset + i] != record[i]) {
+            matches = false;
+            break;
+          }
+        }
+        if (!matches) continue;
+        seen.add(trainerId);
+        final info = forClassId(
+          version: version,
+          trainerId: trainerId,
+          classId: record[1],
+        );
+        if (info != null) found.add(info);
+      }
+    }
+    return found;
+  }
 
   static Future<NdsTrainerInfo?> resolve({
     required String romPath,
@@ -59,23 +112,6 @@ final class NdsTrainerResolver {
       return null;
     }
   }
-
-  /// Resuelve una victoria persistida de Blanco/Negro.
-  ///
-  /// El guardado almacena las victorias en las banderas de entrenador que
-  /// comienzan en 0x550. [PokemonGen5SaveReader] elimina esa base al crear el
-  /// snapshot, de modo que el valor recibido aquí vuelve a ser el trainerId
-  /// usado por los comandos TrainerFlagSet/Get y por TRData.
-  static Future<NdsTrainerInfo?> resolveGen5TrainerFlag({
-    required String romPath,
-    required PokemonGameVersion version,
-    required int trainerFlagId,
-  }) =>
-      resolve(
-        romPath: romPath,
-        version: version,
-        trainerId: trainerFlagId,
-      );
 
   static NdsTrainerInfo? forClassId({
     required PokemonGameVersion version,
@@ -163,6 +199,60 @@ final class NdsTrainerResolver {
     } finally {
       await handle.close();
     }
+  }
+
+  static Future<Map<int, Uint8List>> _readAllTrainerData({
+    required String romPath,
+    required PokemonGameVersion version,
+  }) async {
+    final key = '$romPath:${version.name}';
+    final cached = _trainerDataCache[key];
+    if (cached != null) return cached;
+    final result = <int, Uint8List>{};
+    final file = File(romPath);
+    if (!await file.exists()) return result;
+    final handle = await file.open();
+    try {
+      final header = await _readAt(handle, 0, 0x50);
+      final fntOffset = _u32(header, 0x40);
+      final fntSize = _u32(header, 0x44);
+      final fatOffset = _u32(header, 0x48);
+      final fnt = await _readAt(handle, fntOffset, fntSize);
+      final path = version == PokemonGameVersion.black ||
+              version == PokemonGameVersion.white
+          ? 'a/0/9/2'
+          : 'poketool/trainer/trdata.narc';
+      final fileId = _findNitroFileId(fnt, path);
+      if (fileId == null) return result;
+      final fat = await _readAt(handle, fatOffset + fileId * 8, 8);
+      final start = _u32(fat, 0);
+      final end = _u32(fat, 4);
+      final narc = await _readAt(handle, start, end - start);
+      final count = _narcMemberCount(narc);
+      for (var trainerId = 1; trainerId < count; trainerId++) {
+        final member = _narcMember(narc, trainerId);
+        if (member != null && member.length >= 12) result[trainerId] = member;
+      }
+      _trainerDataCache[key] = result;
+      return result;
+    } finally {
+      await handle.close();
+    }
+  }
+
+  static int _narcMemberCount(Uint8List narc) {
+    if (narc.length < 0x20 || ascii.decode(narc.sublist(0, 4)) != 'NARC') {
+      return 0;
+    }
+    var cursor = _u16(narc, 0x0C);
+    while (cursor + 10 <= narc.length) {
+      final tag = ascii.decode(narc.sublist(cursor, cursor + 4));
+      final size = _u32(narc, cursor + 4);
+      if (size < 8 || cursor + size > narc.length) return 0;
+      if (tag == 'BTAF') return _u16(narc, cursor + 8);
+      cursor += size;
+    }
+    return 0;
   }
 
   static Future<Uint8List> _readAt(

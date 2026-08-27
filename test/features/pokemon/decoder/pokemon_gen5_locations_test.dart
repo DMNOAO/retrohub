@@ -22,6 +22,12 @@ void main() {
     }
   });
 
+  test('Blanco y Negro traducen el Solar de los Sueños', () {
+    for (final PokemonGameProfile profile in <PokemonGameProfile>[black, white]) {
+      expect(PokemonDecoder.mapName(profile, 152), 'Solar de los Sueños');
+    }
+  });
+
   test('Blanco y Negro traducen el exterior inicial a Ruta 2', () {
     for (final PokemonGameProfile profile in <PokemonGameProfile>[black, white]) {
       expect(PokemonDecoder.mapName(profile, 319), 'Ruta 2');

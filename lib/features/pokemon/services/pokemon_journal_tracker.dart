@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/assets/character_asset_resolver.dart';
 import '../../../core/assets/game_asset_profile.dart';
 import '../../../data/database/app_database.dart';
+import '../../emulator/data/libretro_bridge.dart';
 import '../../emulator/presentation/widget/libretro_game_view.dart';
 import '../decoder/pokemon_decoder.dart';
 import '../memory/pokemon_controller_memory_reader.dart';
@@ -53,6 +54,9 @@ class PokemonJournalTracker {
   // un combate el dinero/equipo/ubicación normalmente no cambian, y con el
   // mecanismo de estabilidad el estado de combate quedaría atascado.
   PokemonMemorySnapshot? _lastRawSnapshot;
+  Set<int>? _lastLoadedNdsTrainerIds;
+  NdsTrainerInfo? _pendingNdsTrainer;
+  PokemonMemorySnapshot? _pendingNdsBattleSnapshot;
 
   // IDs reales de clase de entrenador (constants/trainer_constants.asm,
   // Gen2 Crystal/Gold, pegado por el usuario). Rival y Campeón se
@@ -137,6 +141,9 @@ class PokemonJournalTracker {
           'memory reader returned null',
         );
         return;
+      }
+      if (profile.isGen5) {
+        await _sampleActiveGen5Trainer(current);
       }
       final String? plausibilityError = _plausibilityError(current);
       if (plausibilityError != null) {
@@ -573,6 +580,25 @@ class PokemonJournalTracker {
         _pendingTrainerClass = null;
         _pendingTrainerId = null;
         _pendingBattleResult = null;
+        if (current.profile.isGen5) {
+          final trainer = _pendingNdsTrainer;
+          final battleSnapshot = _pendingNdsBattleSnapshot;
+          _pendingNdsTrainer = null;
+          _pendingNdsBattleSnapshot = null;
+          if (trainer != null && battleSnapshot != null) {
+            await _recordNdsTrainerVictory(
+              current: battleSnapshot,
+              trainerId: trainer.trainerId,
+              detectedFromActiveRam: true,
+            );
+          } else {
+            debugPrint(
+              '[RetroHub.Gen5Battle] ignored ${newTrainerIds.length} EventWork '
+              'flags without an active-RAM trainer match',
+            );
+          }
+          return;
+        }
         for (final int trainerId in newTrainerIds) {
           if (current.profile.isGen4 || current.profile.isGen5) {
             await _recordNdsTrainerVictory(
@@ -732,6 +758,7 @@ class PokemonJournalTracker {
   Future<void> _recordNdsTrainerVictory({
     required PokemonMemorySnapshot current,
     required int trainerId,
+    bool detectedFromActiveRam = false,
   }) async {
     if (trainerId <= 0) return;
     final String generation = current.profile.isGen5 ? 'V' : 'IV';
@@ -740,10 +767,10 @@ class PokemonJournalTracker {
       console: 'NDS',
     );
     final trainer = current.profile.isGen5
-        ? (await NdsTrainerResolver.resolveGen5TrainerFlag(
+        ? (await NdsTrainerResolver.resolve(
               romPath: romPath,
               version: current.profile.version,
-              trainerFlagId: trainerId,
+              trainerId: trainerId,
             ) ??
             NdsTrainerResolver.forGen5TrainerFlag(trainerId))
         : await NdsTrainerResolver.resolve(
@@ -767,7 +794,7 @@ class PokemonJournalTracker {
       description: 'Venció a un entrenador durante su aventura.',
       metadata: <String, dynamic>{
         ..._metadata(current),
-        if (current.profile.isGen5)
+        if (current.profile.isGen5 && !detectedFromActiveRam)
           'trainerFlagId': trainerId
         else
           'trainerId': trainerId,
@@ -776,12 +803,47 @@ class PokemonJournalTracker {
         'generation': generation,
         'spritePath': trainer?.spritePath ??
             CharacterAssetResolver.genericTrainer(assetProfile),
-        'detectedFromTrainerFlag': true,
+        'detectedFromTrainerFlag': !detectedFromActiveRam,
+        'detectedFromActiveRam': detectedFromActiveRam,
       },
     );
     await _rememberLastDefeatedTrainer(
       trainer?.className ?? 'Entrenador',
       current,
+    );
+  }
+
+  Future<void> _sampleActiveGen5Trainer(
+    PokemonMemorySnapshot current,
+  ) async {
+    final int size = controller.inspectMemoryRegions()['systemRam'] ?? 0;
+    if (size < 12) return;
+    final List<int> ram = controller.readMemoryBlock(
+      memoryId: LibretroMemoryRegion.systemRam,
+      offset: 0,
+      length: size,
+    );
+    if (ram.length != size) return;
+    final trainers = await NdsTrainerResolver.findLoadedTrainers(
+      romPath: romPath,
+      version: current.profile.version,
+      systemRam: ram,
+    );
+    final ids = trainers.map((trainer) => trainer.trainerId).toSet();
+    final previous = _lastLoadedNdsTrainerIds;
+    _lastLoadedNdsTrainerIds = ids;
+    if (previous == null) return;
+    final newlyLoaded = trainers
+        .where((trainer) => !previous.contains(trainer.trainerId))
+        .toList(growable: false);
+    if (newlyLoaded.isEmpty) return;
+    final trainer = newlyLoaded.first;
+    _pendingNdsTrainer = trainer;
+    _pendingNdsBattleSnapshot = current;
+    debugPrint(
+      '[RetroHub.Gen5Battle] active trainerId=${trainer.trainerId} '
+      'classId=${trainer.classId} class=${trainer.className} '
+      'map=${current.currentMapId}',
     );
   }
 
