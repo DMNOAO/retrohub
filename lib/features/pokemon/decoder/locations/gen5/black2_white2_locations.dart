@@ -15,4 +15,6 @@ const Map<int, PokemonLocation> black2White2Locations =
       // mientras ZoneID puede ser 437. Ambos deben mostrarse como Ruta 19.
       437: PokemonLocation('Ruta 19', PokemonLocationKind.route),
       438: PokemonLocation('Ruta 19', PokemonLocationKind.route),
+      // Primer sector con entrenadores tras abandonar Ciudad Engobe.
+      446: PokemonLocation('Ruta 20', PokemonLocationKind.route),
     };

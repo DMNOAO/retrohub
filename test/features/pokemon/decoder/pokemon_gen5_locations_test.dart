@@ -49,6 +49,11 @@ void main() {
     }
   });
 
+  test('Negro 2 y Blanco 2 traducen el primer sector de Ruta 20', () {
+    expect(PokemonDecoder.mapName(black2, 446), 'Ruta 20');
+    expect(PokemonDecoder.mapName(white2, 446), 'Ruta 20');
+  });
+
   test('Blanco y Negro traducen el dormitorio inicial a Pueblo Arcilla', () {
     for (final PokemonGameProfile profile in <PokemonGameProfile>[black, white]) {
       expect(PokemonDecoder.mapName(profile, 391), 'Pueblo Arcilla');

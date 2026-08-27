@@ -622,6 +622,40 @@ class PokemonJournalTracker {
               trainerId: trainer.trainerId,
               detectedFromActiveRam: true,
             );
+          } else if (current.profile.version == PokemonGameVersion.black2 ||
+              current.profile.version == PokemonGameVersion.white2) {
+            // En B2W2 melonDS no conserva el TRData crudo en RAM, pero
+            // TrainerFlag sigue usando la base 0x550. Filtrar las flags recién
+            // activadas contra el NARC real de la ROM descarta automáticamente
+            // las flags de historia y recupera el trainerId exacto.
+            final candidates = <(int, int)>[];
+            for (final flagId in newTrainerIds) {
+              final trainerId = flagId - 0x550;
+              if (trainerId <= 0) continue;
+              final info = await NdsTrainerResolver.resolve(
+                romPath: romPath,
+                version: current.profile.version,
+                trainerId: trainerId,
+              );
+              if (info != null) candidates.add((flagId, trainerId));
+            }
+            if (candidates.length == 1) {
+              final candidate = candidates.single;
+              debugPrint(
+                '[RetroHub.Gen5Battle] B2W2 TrainerFlag '
+                'flag=${candidate.$1} trainerId=${candidate.$2}',
+              );
+              await _recordNdsTrainerVictory(
+                current: current,
+                trainerId: candidate.$2,
+                trainerFlagId: candidate.$1,
+              );
+            } else {
+              debugPrint(
+                '[RetroHub.Gen5Battle] ignored ${newTrainerIds.length} '
+                'EventWork flags; valid trainer candidates=$candidates',
+              );
+            }
           } else {
             debugPrint(
               '[RetroHub.Gen5Battle] ignored ${newTrainerIds.length} EventWork '
@@ -790,6 +824,7 @@ class PokemonJournalTracker {
     required PokemonMemorySnapshot current,
     required int trainerId,
     bool detectedFromActiveRam = false,
+    int? trainerFlagId,
   }) async {
     if (trainerId <= 0) return;
     final String generation = current.profile.isGen5 ? 'V' : 'IV';
@@ -826,7 +861,7 @@ class PokemonJournalTracker {
       metadata: <String, dynamic>{
         ..._metadata(current),
         if (current.profile.isGen5 && !detectedFromActiveRam)
-          'trainerFlagId': trainerId
+          'trainerFlagId': trainerFlagId ?? trainerId
         else
           'trainerId': trainerId,
         'trainerClassId': trainer?.classId,
