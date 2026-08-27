@@ -76,9 +76,9 @@ class GameAssetProfile {
         pokemonSpriteSet: savedSpriteSet ?? 'nds/gen5',
         pokemonExtension: 'png',
         trainerSpriteSet: 'nds/Unova',
-        protagonistAsset: 'assets/sprites/characters/protagonists/hilbert_bw2.gif',
-        femaleProtagonistAsset: 'assets/sprites/characters/protagonists/hilda_bw2.gif',
-        rivalAsset: 'assets/sprites/characters/rivals/cheren_bw2.gif',
+        protagonistAsset: 'assets/sprites/characters/protagonists/nate_bw2.gif',
+        femaleProtagonistAsset: 'assets/sprites/characters/protagonists/rosa_bw2.gif',
+        rivalAsset: 'assets/sprites/characters/rivals/hugh_bw2.gif',
         championAsset: 'assets/sprites/characters/champions/iris_unova_bw2.gif',
         sourceTitle: value,
       );

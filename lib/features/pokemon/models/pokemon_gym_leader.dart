@@ -50,6 +50,11 @@ class GymLeaderAssetResolver {
             : null;
       case PokemonGameVersion.black:
       case PokemonGameVersion.white:
+        if (badgeIndex == 7) {
+          return profile.version == PokemonGameVersion.black
+              ? _unovaBlackFinalLeader
+              : _unovaWhiteFinalLeader;
+        }
         return badgeIndex < _unovaBlackWhite.length
             ? _unovaBlackWhite[badgeIndex]
             : null;
@@ -64,15 +69,24 @@ class GymLeaderAssetResolver {
   }
 
   static const List<GymLeaderInfo> _unovaBlackWhite = <GymLeaderInfo>[
-    GymLeaderInfo('Millo, Maíz o Zeos', 'assets/sprites/characters/gym_leaders/nds/Unova/cilan_unova.gif'),
+    GymLeaderInfo('Millo, Maíz o Zeo', 'assets/sprites/characters/gym_leaders/nds/Unova/cilan_unova.gif'),
     GymLeaderInfo('Aloe', 'assets/sprites/characters/gym_leaders/nds/Unova/lenora_unova.gif'),
     GymLeaderInfo('Camus', 'assets/sprites/characters/gym_leaders/nds/Unova/burgh_unova.gif'),
     GymLeaderInfo('Camila', 'assets/sprites/characters/gym_leaders/nds/Unova/elesa_unova.png'),
     GymLeaderInfo('Yakón', 'assets/sprites/characters/gym_leaders/nds/Unova/clay_unova.gif'),
     GymLeaderInfo('Gerania', 'assets/sprites/characters/gym_leaders/nds/Unova/skyla_unova.gif'),
     GymLeaderInfo('Junco', 'assets/sprites/characters/gym_leaders/nds/Unova/brycen_unova.gif'),
-    GymLeaderInfo('Lirio o Iris', 'assets/sprites/characters/gym_leaders/nds/Unova/drayden_unova.gif'),
+    _unovaBlackFinalLeader,
   ];
+
+  static const GymLeaderInfo _unovaBlackFinalLeader = GymLeaderInfo(
+    'Lirio',
+    'assets/sprites/characters/gym_leaders/nds/Unova/drayden_unova.gif',
+  );
+  static const GymLeaderInfo _unovaWhiteFinalLeader = GymLeaderInfo(
+    'Iris',
+    'assets/sprites/characters/gym_leaders/nds/Unova/iris_unova.png',
+  );
 
   static const List<GymLeaderInfo> _unovaBlack2White2 = <GymLeaderInfo>[
     GymLeaderInfo('Cheren', 'assets/sprites/characters/gym_leaders/nds/Unova/cheren_unova.gif'),

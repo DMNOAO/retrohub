@@ -32,6 +32,7 @@ class _PokedexGridState extends State<PokedexGrid> {
   bool get _isGen3 => _isHoenn || _isGen3Kanto;
   bool get _isSinnoh => widget.profile.region == PokemonAssetRegion.sinnoh;
   bool get _isUnova => widget.profile.region == PokemonAssetRegion.unova;
+  bool get _isB2W2 => widget.profile.game == PokemonAssetGame.black2White2;
 
   @override
   void initState() {
@@ -57,7 +58,9 @@ class _PokedexGridState extends State<PokedexGrid> {
         ? sinnohPlatinumPokedexOrder
         : sinnohDiamondPearlPokedexOrder;
     final ids = _isUnova && _order == PokedexOrder.unova
-        ? unovaBlackWhitePokedexOrder
+        ? (_isB2W2
+              ? unovaBlack2White2PokedexOrder
+              : unovaBlackWhitePokedexOrder)
         : _isSinnoh && _order == PokedexOrder.sinnoh
         ? sinnoh
         : _isGen2 && _order == PokedexOrder.johto

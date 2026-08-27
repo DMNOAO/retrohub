@@ -252,6 +252,7 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> updateProgressEvent({
     required int eventId,
+    String? eventType,
     required String title,
     required String description,
     required String metadataJson,
@@ -260,6 +261,9 @@ class AppDatabase extends _$AppDatabase {
           ..where((table) => table.id.equals(eventId)))
         .write(
       GameProgressEventsCompanion(
+        eventType: eventType == null
+            ? const Value<String>.absent()
+            : Value(eventType),
         title: Value(title),
         description: Value(description),
         metadataJson: Value(metadataJson),

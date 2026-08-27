@@ -113,6 +113,9 @@ class PokemonMemorySnapshot {
   final List<int> seenPokemonIds;
   final List<int> caughtPokemonIds;
   final List<PokemonPartyMember> party;
+  final List<List<int>> badgeTeams;
+  final List<int> hallOfFameSpeciesIds;
+  final int leagueWins;
   final int? gamePlayTimeMinutes;
   final int? battleState;
   final int? otherTrainerClassId;
@@ -138,6 +141,9 @@ class PokemonMemorySnapshot {
     required this.seenPokemonIds,
     required this.caughtPokemonIds,
     required this.party,
+    this.badgeTeams = const <List<int>>[],
+    this.hallOfFameSpeciesIds = const <int>[],
+    this.leagueWins = 0,
     this.gamePlayTimeMinutes,
     this.battleState,
     this.otherTrainerClassId,

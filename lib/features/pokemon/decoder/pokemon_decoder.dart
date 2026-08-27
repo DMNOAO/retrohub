@@ -6,6 +6,7 @@ import 'locations/gen3/fire_red_leaf_green_locations.dart';
 import 'locations/gen4/heart_gold_soul_silver_locations.dart';
 import 'locations/gen4/platinum_locations.dart';
 import 'locations/gen5/black_white_locations.dart';
+import 'locations/gen5/black2_white2_locations.dart';
 
 export '../models/pokemon_location.dart';
 
@@ -158,7 +159,7 @@ class PokemonDecoder {
         return blackWhiteLocations[mapId];
       case PokemonGameVersion.black2:
       case PokemonGameVersion.white2:
-        return null;
+        return black2White2Locations[mapId];
       case PokemonGameVersion.unsupported:
         return null;
     }
@@ -167,8 +168,10 @@ class PokemonDecoder {
   static String badgeName(PokemonGameProfile profile, int index) {
     final isHgss = profile.version == PokemonGameVersion.heartGold ||
         profile.version == PokemonGameVersion.soulSilver;
+    final isB2W2 = profile.version == PokemonGameVersion.black2 ||
+        profile.version == PokemonGameVersion.white2;
     final names = profile.isGen5
-        ? _unovaBlackWhiteBadges
+        ? (isB2W2 ? _unovaBlack2White2Badges : _unovaBlackWhiteBadges)
         : profile.isGen4
         ? (isHgss
               ? _gen2Badges
@@ -203,6 +206,16 @@ class PokemonDecoder {
     'Medalla Jet',
     'Medalla Candelero',
     'Medalla Leyenda',
+  ];
+  static const _unovaBlack2White2Badges = <String>[
+    'Medalla Base',
+    'Medalla Tóxica',
+    'Medalla Élitro',
+    'Medalla Voltio',
+    'Medalla Temblor',
+    'Medalla Jet',
+    'Medalla Leyenda',
+    'Medalla Ola',
   ];
   static const _gen2Badges = <String>[
     'Medalla Céfiro',

@@ -11,6 +11,8 @@ import '../../core/assets/sprite_resolver.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../pokemon/services/nds_trainer_resolver.dart';
+import '../pokemon/decoder/pokemon_decoder.dart';
+import '../pokemon/models/pokemon_game_profile.dart';
 import '../../shared/theme/app_appearance.dart';
 import 'pokedex_grid.dart';
 import 'widgets/journal_chrome.dart';
@@ -107,6 +109,10 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final profile = GameAssetProfile.fromGame(widget.game);
+    final locationProfile = PokemonGameProfile.fromGameIdentity(
+      gameTitle: widget.game.title,
+      romPath: widget.game.romPath,
+    );
     final filtered = _filter == 'all'
         ? _items
         : _items.where((item) => item.category == _filter).toList();
@@ -164,6 +170,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                         return _TimelineCard(
                           item: item,
                           profile: profile,
+                          locationProfile: locationProfile,
                           isLast: index == filtered.length - 1,
                         );
                       },
@@ -229,9 +236,15 @@ abstract final class _HistoryFilters {
 class _TimelineCard extends StatelessWidget {
   final _TimelineItem item;
   final GameAssetProfile profile;
+  final PokemonGameProfile locationProfile;
   final bool isLast;
 
-  const _TimelineCard({required this.item, required this.profile, required this.isLast});
+  const _TimelineCard({
+    required this.item,
+    required this.profile,
+    required this.locationProfile,
+    required this.isLast,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -296,9 +309,10 @@ class _TimelineCard extends StatelessWidget {
                               Text(_formatDate(item.createdAt), style: Theme.of(context).textTheme.labelMedium),
                             ],
                           ),
-                          if (item.description?.trim().isNotEmpty == true) ...[
+                          if (_resolvedDescription(item, locationProfile)
+                              case final description?) ...[
                             const SizedBox(height: 6),
-                            Text(item.description!),
+                            Text(description),
                           ],
                           const SizedBox(height: 9),
                           Wrap(
@@ -306,8 +320,11 @@ class _TimelineCard extends StatelessWidget {
                             runSpacing: 6,
                             children: [
                               _MetaChip(icon: Icons.schedule, label: _formatPlayTime(item.playTimeMinutes)),
-                              if (item.metadata['mapName'] != null)
-                                _MetaChip(icon: Icons.place_outlined, label: item.metadata['mapName'].toString()),
+                              if (_resolvedMapName(item, locationProfile) case final mapName?)
+                                _MetaChip(
+                                  icon: Icons.place_outlined,
+                                  label: mapName,
+                                ),
                               if (item.metadata['playerName'] != null &&
                                   item.metadata['playerName'].toString().isNotEmpty)
                                 _MetaChip(
@@ -343,6 +360,31 @@ class _TimelineCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String? _resolvedMapName(
+    _TimelineItem item,
+    PokemonGameProfile profile,
+  ) {
+    final stored = item.metadata['mapName']?.toString();
+    final mapId = _toInt(item.metadata['mapId']);
+    if (mapId == null) return stored;
+    final resolved = PokemonDecoder.mapName(profile, mapId);
+    if (!resolved.startsWith('Zona ')) return resolved;
+    return stored ?? resolved;
+  }
+
+  static String? _resolvedDescription(
+    _TimelineItem item,
+    PokemonGameProfile profile,
+  ) {
+    final description = item.description?.trim();
+    if (description == null || description.isEmpty) return null;
+    if (item.type != 'location_changed' ||
+        !description.startsWith('Zona ')) {
+      return description;
+    }
+    return _resolvedMapName(item, profile) ?? description;
   }
 
   _Visual _resolveVisual(_TimelineItem item, GameAssetProfile profile) {
@@ -430,7 +472,7 @@ class _TimelineCard extends StatelessWidget {
     return 0;
   }
 
-  int? _toInt(dynamic value) {
+  static int? _toInt(dynamic value) {
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? '');
   }

@@ -39,6 +39,17 @@ void main() {
     expect(schoolKid?.spritePath, endsWith('escolar_chica_unova_gen5.gif'));
   });
 
+  test('resuelve a Matis con la clase propia de B2W2', () {
+    final hugh = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.black2,
+      trainerId: 161,
+      classId: 145,
+    );
+
+    expect(hugh?.className, 'Matis');
+    expect(hugh?.spritePath, endsWith('hugh_bw2.gif'));
+  });
+
   test('mantiene respaldo para clases especiales todavía no mapeadas', () {
     expect(
       NdsTrainerResolver.forClassId(
@@ -66,6 +77,31 @@ void main() {
     expect(barry?.spritePath, endsWith('barry_pt.gif'));
     expect(cilan?.className, 'Millo');
     expect(cilan?.spritePath, endsWith('cilan_unova.gif'));
+  });
+
+  test('resuelve clases y entrenadores especiales de HGSS', () {
+    final youngster = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.heartGold,
+      trainerId: 1,
+      classId: 2,
+    );
+    final silver = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.soulSilver,
+      trainerId: 10,
+      classId: 23,
+    );
+    final lance = NdsTrainerResolver.forClassId(
+      version: PokemonGameVersion.heartGold,
+      trainerId: 20,
+      classId: 86,
+    );
+
+    expect(youngster?.className, 'Joven');
+    expect(youngster?.spritePath, endsWith('joven_johto_hgss.png'));
+    expect(silver?.className, 'Silver');
+    expect(silver?.spritePath, endsWith('silver_hgss.gif'));
+    expect(lance?.className, 'Lance');
+    expect(lance?.spritePath, endsWith('lance_johto_hgss.gif'));
   });
 
   test('mantiene respaldo histórico para una bandera Gen V verificada', () {

@@ -26,4 +26,17 @@ void main() {
       'assets/sprites/badges/Sinnoh/relic.png',
     );
   });
+
+  test('usa las medallas propias de Negro 2 y Blanco 2', () {
+    final profile = GameAssetProfile.fromTitle(
+      title: 'Pokémon Negro 2',
+      console: 'NDS',
+    );
+
+    expect(BadgeAssetResolver.resolve(profile, 0).key, 'basic');
+    expect(BadgeAssetResolver.resolve(profile, 1).key, 'toxic');
+    expect(BadgeAssetResolver.resolve(profile, 6).key, 'legend');
+    expect(BadgeAssetResolver.resolve(profile, 7).key, 'wave');
+    expect(BadgeAssetResolver.resolve(profile, 7).displayName, 'Medalla Ola');
+  });
 }

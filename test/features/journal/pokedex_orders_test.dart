@@ -9,6 +9,15 @@ void main() {
     expect(unovaBlackWhitePokedexOrder.last, 649);
   });
 
+  test('Blanco 2 y Negro 2 usan la Pokédex ampliada de Teselia', () {
+    expect(unovaBlack2White2PokedexOrder, hasLength(301));
+    expect(unovaBlack2White2PokedexOrder.toSet(), hasLength(301));
+    expect(unovaBlack2White2PokedexOrder.first, 494);
+    expect(unovaBlack2White2PokedexOrder[1], 495);
+    expect(unovaBlack2White2PokedexOrder.last, 649);
+    expect(unovaBlack2White2PokedexOrder, containsAll(<int>[19, 25, 133]));
+  });
+
   test('Hoenn keeps the official 202-species regional order', () {
     expect(hoennPokedexOrder, hasLength(202));
     expect(hoennPokedexOrder.toSet(), hasLength(202));

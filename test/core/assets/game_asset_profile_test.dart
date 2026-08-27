@@ -93,6 +93,9 @@ void main() {
     );
 
     expect(profile.game, PokemonAssetGame.black2White2);
+    expect(profile.protagonistAsset, contains('nate_bw2'));
+    expect(profile.femaleProtagonistAsset, contains('rosa_bw2'));
+    expect(profile.rivalAsset, contains('hugh_bw2'));
     expect(profile.championAsset, contains('iris_unova_bw2'));
   });
 

@@ -338,6 +338,7 @@ class _ProgressJournal extends StatelessWidget {
           _SectionTitle(title: 'Medallas ${snapshot.badgesCount}/8'),
           _BadgeGrid(
             region: profile.region,
+            profile: profile,
             badges: badges,
             badgeIndices: List<int>.generate(8, (index) => index),
           ),
@@ -763,11 +764,13 @@ class _KantoUnlockSectionState extends State<_KantoUnlockSection>
 
 class _BadgeGrid extends StatelessWidget {
   final PokemonAssetRegion region;
+  final GameAssetProfile? profile;
   final List<Map<String, dynamic>> badges;
   final List<int> badgeIndices;
 
   const _BadgeGrid({
     required this.region,
+    this.profile,
     required this.badges,
     required this.badgeIndices,
   });
@@ -800,10 +803,9 @@ class _BadgeGrid extends StatelessWidget {
           itemBuilder: (context, visualIndex) {
             final fullIndex = badgeIndices[visualIndex];
             final obtained = _isObtained(fullIndex);
-            final asset = BadgeAssetResolver.resolveForRegion(
-              region,
-              visualIndex,
-            );
+            final asset = profile == null
+                ? BadgeAssetResolver.resolveForRegion(region, visualIndex)
+                : BadgeAssetResolver.resolve(profile!, visualIndex);
             return AnimatedOpacity(
               duration: const Duration(milliseconds: 280),
               opacity: obtained ? 1 : .34,

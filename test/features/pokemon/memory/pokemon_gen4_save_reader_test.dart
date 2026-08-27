@@ -20,7 +20,7 @@ void main() {
     _u32(bytes, trainer + 0x14, 54321);
     bytes[trainer + 0x18] = 1;
     bytes[trainer + 0x1A] = 0x05;
-    bytes[trainer + 0x1D] = 0x02;
+    bytes[trainer + 0x1D] = 0x03;
     _u16(bytes, trainer + 0x22, 12);
     bytes[trainer + 0x24] = 34;
     _u16(bytes, 0x1238, 411);
@@ -59,6 +59,7 @@ void main() {
     expect(snapshot.playerY, 9);
     expect(snapshot.gamePlayTimeMinutes, 12 * 60 + 34);
     expect(snapshot.nationalDexUnlocked, isTrue);
+    expect(snapshot.leagueWins, 1);
     expect(snapshot.caughtPokemonIds, <int>[1]);
     expect(snapshot.seenPokemonIds, <int>[1, 2]);
     expect(snapshot.defeatedTrainerIds, <int>[37]);
@@ -89,7 +90,7 @@ void main() {
     bytes[trainer + 0x18] = 1;
     bytes[trainer + 0x1A] = 0xFF;
     bytes[trainer + 0x1F] = 0x05;
-    bytes[trainer + 0x1D] = 0x02;
+    bytes[trainer + 0x1D] = 0x03;
     _u16(bytes, 0x1234, 99);
     _u16(bytes, 0x123C, 12);
     _u16(bytes, 0x1240, 18);
@@ -123,6 +124,7 @@ void main() {
     expect(snapshot.playerX, 12);
     expect(snapshot.playerY, 18);
     expect(snapshot.nationalDexUnlocked, isTrue);
+    expect(snapshot.leagueWins, 1);
     expect(snapshot.caughtPokemonIds, <int>[152]);
     expect(snapshot.defeatedTrainerIds, <int>[52]);
     expect(snapshot.party.single.pokedexId, 152);
