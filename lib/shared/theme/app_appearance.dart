@@ -40,7 +40,7 @@ enum AppAppearance {
       sprite: 'assets/sprites/pokemon/nds/gen5/0643.png'),
   white2('Blanco 2', 0xFFF2F4F7, 0xFFD9DEE5, 0xFF2779D8, 0xFFD84A43,
       sprite: 'assets/sprites/pokemon/nds/gen5/0646-white.png'),
-  black2('Negro 2', 0xFF0B0D12, 0xFF181D27, 0xFFD84242, 0xFF3285E6,
+  black2('Negro 2', 0xFF0B0D12, 0xFF181D27, 0xFFF1D13A, 0xFF3285E6,
       sprite: 'assets/sprites/pokemon/nds/gen5/0646-black.png'),
   heartGold('HeartGold', 0xFF4A2A0B, 0xFF8A321B, 0xFFFFC934, 0xFF3E9A61,
       sprite: 'assets/sprites/pokemon/nds/gen5/0250.png'),

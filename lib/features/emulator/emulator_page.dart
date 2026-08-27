@@ -890,8 +890,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       final double touchScreenLeft =
                           (constraints.maxWidth - touchScreenWidth) / 2;
                       final double shoulderRowTop = topHeight + 14;
-                      final double mainControlsTop = screenHeight + 10;
-                      final double logoTop = screenHeight + 78;
+                      final double logoTop = screenHeight + 6;
+                      final double mainControlsTop = screenHeight + 56;
                       final double controlOpacity = _preferences.ndsControlOpacity;
                       final Color ndsA = visualTheme.accent;
                       final Color ndsB = Color.lerp(visualTheme.accent, visualTheme.background, .28)!;
@@ -1635,9 +1635,9 @@ class _EmulatorVisualTheme {
     } else if (identity.contains('white 2') ||
         identity.contains('blanco 2') ||
         identity.contains('blanca 2')) {
-      primary = const Color(0xFF34343A);
-      secondary = const Color(0xFF6D7180);
-      accent = const Color(0xFFF2F4FF);
+      primary = const Color(0xFF334E63);
+      secondary = const Color(0xFFB83243);
+      accent = const Color(0xFFF7FCFF);
     } else if (identity.contains('black') ||
         identity.contains('negra') ||
         identity.contains('negro')) {
