@@ -837,6 +837,18 @@ class PokemonJournalTracker {
         .where((trainer) => !previous.contains(trainer.trainerId))
         .toList(growable: false);
     if (newlyLoaded.isEmpty) return;
+    // Gen V puede precargar el TRData del siguiente NPC mientras todavía
+    // conserva en memoria el combate que acaba de terminar. El primer
+    // entrenador observado es el rival real; no permitir que una carga
+    // posterior lo reemplace antes de que SAVE_RAM confirme la victoria.
+    if (_pendingNdsTrainer != null) {
+      debugPrint(
+        '[RetroHub.Gen5Battle] ignored preloaded trainerIds='
+        '${newlyLoaded.map((trainer) => trainer.trainerId).join(',')} '
+        'pending=${_pendingNdsTrainer!.trainerId}',
+      );
+      return;
+    }
     final trainer = newlyLoaded.first;
     _pendingNdsTrainer = trainer;
     _pendingNdsBattleSnapshot = current;
