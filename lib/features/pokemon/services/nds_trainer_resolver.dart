@@ -119,7 +119,9 @@ final class NdsTrainerResolver {
     required int classId,
   }) {
     final isGen5 = version == PokemonGameVersion.black ||
-        version == PokemonGameVersion.white;
+        version == PokemonGameVersion.white ||
+        version == PokemonGameVersion.black2 ||
+        version == PokemonGameVersion.white2;
     final special = (isGen5 ? _unovaSpecialClasses : _sinnohSpecialClasses)[classId];
     if (special != null) {
       final path = classId == 63 && !isGen5
@@ -164,7 +166,9 @@ final class NdsTrainerResolver {
         PokemonGameVersion.pearl ||
         PokemonGameVersion.platinum ||
         PokemonGameVersion.black ||
-        PokemonGameVersion.white => true,
+        PokemonGameVersion.white ||
+        PokemonGameVersion.black2 ||
+        PokemonGameVersion.white2 => true,
         _ => false,
       };
 
@@ -184,7 +188,9 @@ final class NdsTrainerResolver {
       if (fntOffset <= 0 || fntSize <= 0 || fatOffset <= 0) return null;
       final fnt = await _readAt(handle, fntOffset, fntSize);
       final path = version == PokemonGameVersion.black ||
-              version == PokemonGameVersion.white
+              version == PokemonGameVersion.white ||
+              version == PokemonGameVersion.black2 ||
+              version == PokemonGameVersion.white2
           ? 'a/0/9/2'
           : 'poketool/trainer/trdata.narc';
       final fileId = _findNitroFileId(fnt, path);
@@ -219,7 +225,9 @@ final class NdsTrainerResolver {
       final fatOffset = _u32(header, 0x48);
       final fnt = await _readAt(handle, fntOffset, fntSize);
       final path = version == PokemonGameVersion.black ||
-              version == PokemonGameVersion.white
+              version == PokemonGameVersion.white ||
+              version == PokemonGameVersion.black2 ||
+              version == PokemonGameVersion.white2
           ? 'a/0/9/2'
           : 'poketool/trainer/trdata.narc';
       final fileId = _findNitroFileId(fnt, path);

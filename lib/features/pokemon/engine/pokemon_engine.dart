@@ -31,9 +31,7 @@ class PokemonEngine implements GameEngine<PokemonMemorySnapshot> {
   @override
   bool get isSupported =>
       profile.isGen4 ||
-      (profile.isGen5 &&
-          (profile.version == PokemonGameVersion.black ||
-              profile.version == PokemonGameVersion.white)) ||
+      profile.isGen5 ||
       profile.memoryMapVerified ||
       profile.version == PokemonGameVersion.emerald ||
       profile.version == PokemonGameVersion.ruby ||

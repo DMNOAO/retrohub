@@ -10,25 +10,15 @@ import '../models/pokemon_memory_snapshot.dart';
 
 typedef Gen5SaveRead = List<int> Function(int offset, int length);
 
-/// Lector del guardado de Pokémon Blanco y Negro.
+/// Lector del guardado de Pokémon Blanco/Negro y Blanco 2/Negro 2.
 ///
 /// Gen V divide el guardado principal en bloques con CRC independientes. Los
 /// campos usados por la bitácora están en bloques estables del archivo SRAM de
 /// 512 KiB, por lo que no se deben tratar como el bloque general de Gen IV.
 final class PokemonGen5SaveReader {
   static const int requiredSaveSize = 0x80000;
-  static const int _partyOffset = 0x18E00;
-  static const int _partyCountOffset = _partyOffset + 4;
-  static const int _partyStart = _partyOffset + 8;
   static const int _partyPokemonSize = 0xDC;
-  static const int _trainerOffset = 0x19400;
-  static const int _positionOffset = 0x19500;
-  static const int _miscOffset = 0x21200;
-  static const int _eventWorkOffset = 0x20100;
-  static const int _eventFlagOffset = _eventWorkOffset + 0x27C;
   static const int _trainerDefeatedFlagStart = 0x550;
-  static const int _trainerDefeatedFlagCount = 0xB60 - _trainerDefeatedFlagStart;
-  static const int _dexOffset = 0x21600;
   static const int _dexBitBytes = 0x54;
   static const List<String> _blockOrders = <String>[
     'ABCD', 'ABDC', 'ACBD', 'ACDB', 'ADBC', 'ADCB',
@@ -54,20 +44,20 @@ final class PokemonGen5SaveReader {
   const PokemonGen5SaveReader({required this.profile, required this.read});
 
   PokemonMemorySnapshot? capture() {
-    if (profile.version != PokemonGameVersion.black &&
-        profile.version != PokemonGameVersion.white) {
+    final _Gen5SaveLayout? layout = _Gen5SaveLayout.forVersion(profile.version);
+    if (layout == null) {
       recordDiagnostic('unsupported Gen V layout: ${profile.version.name}');
       return null;
     }
 
-    final List<int> trainer = read(_trainerOffset, 0x68);
-    final List<int> position = read(_positionOffset, 0x9C);
-    final List<int> misc = read(_miscOffset, 0xEC);
-    final List<int> dex = read(_dexOffset, 0x4D4);
-    if (trainer.length != 0x68 ||
-        position.length != 0x9C ||
-        misc.length != 0xEC ||
-        dex.length != 0x4D4) {
+    final List<int> trainer = read(layout.trainerOffset, layout.trainerLength);
+    final List<int> position = read(layout.positionOffset, layout.positionLength);
+    final List<int> misc = read(layout.miscOffset, layout.miscLength);
+    final List<int> dex = read(layout.dexOffset, layout.dexLength);
+    if (trainer.length != layout.trainerLength ||
+        position.length != layout.positionLength ||
+        misc.length != layout.miscLength ||
+        dex.length != layout.dexLength) {
       recordDiagnostic('incomplete Gen V save blocks');
       return null;
     }
@@ -78,7 +68,7 @@ final class PokemonGen5SaveReader {
       return null;
     }
 
-    final List<int> countBytes = read(_partyCountOffset, 1);
+    final List<int> countBytes = read(layout.partyOffset + 4, 1);
     if (countBytes.isEmpty || countBytes.first > 6) {
       recordDiagnostic('invalid Gen V party count');
       return null;
@@ -87,7 +77,7 @@ final class PokemonGen5SaveReader {
     final List<PokemonPartyMember> party = <PokemonPartyMember>[];
     for (int slot = 0; slot < count; slot++) {
       final List<int> encrypted = read(
-        _partyStart + slot * _partyPokemonSize,
+        layout.partyOffset + 8 + slot * _partyPokemonSize,
         _partyPokemonSize,
       );
       final PokemonPartyMember? member = _decodePartyPokemon(encrypted);
@@ -101,10 +91,10 @@ final class PokemonGen5SaveReader {
     }
     final List<int> seen = seenSet.toList()..sort();
     final int packedDexFlags = _u32(dex, 4);
-    final List<int> defeatedTrainers = _changedTrainerFlagIds();
+    final List<int> defeatedTrainers = _changedTrainerFlagIds(layout);
 
     recordDiagnostic(
-      'SAVE_RAM=$requiredSaveSize bytes, BW blocks valid, '
+      'SAVE_RAM=$requiredSaveSize bytes, ${layout.label} blocks valid, '
       'party=$count, decoded=${party.length}, seen=${seen.length}, '
       'caught=${caught.length}, defeatedTrainers=${defeatedTrainers.length}',
     );
@@ -137,11 +127,13 @@ final class PokemonGen5SaveReader {
   /// Blanco/Negro reserva las banderas desde 0x550. Los comandos de script
   /// TrainerFlagSet/Get reciben el trainerId y el juego aplica internamente
   /// esa base; por eso aquí se devuelve el índice relativo como trainerId.
-  List<int> _changedTrainerFlagIds() {
-    final List<int> flags = read(_eventFlagOffset, 0xB60 ~/ 8);
-    if (flags.length != 0xB60 ~/ 8) return const <int>[];
+  List<int> _changedTrainerFlagIds(_Gen5SaveLayout layout) {
+    final List<int> flags = read(layout.eventFlagOffset, layout.eventFlagCount ~/ 8);
+    if (flags.length != layout.eventFlagCount ~/ 8) return const <int>[];
     final List<int> result = <int>[];
-    for (int trainerId = 1; trainerId < _trainerDefeatedFlagCount; trainerId++) {
+    final int trainerFlagCount =
+        layout.eventFlagCount - _trainerDefeatedFlagStart;
+    for (int trainerId = 1; trainerId < trainerFlagCount; trainerId++) {
       final int flag = _trainerDefeatedFlagStart + trainerId;
       if ((flags[flag >> 3] & (1 << (flag & 7))) != 0) result.add(trainerId);
     }
@@ -252,4 +244,71 @@ final class PokemonGen5SaveReader {
       bytes[offset] | (bytes[offset + 1] << 8);
   static int _u32(List<int> bytes, int offset) =>
       _u16(bytes, offset) | (_u16(bytes, offset + 2) << 16);
+}
+
+final class _Gen5SaveLayout {
+  final String label;
+  final int partyOffset;
+  final int trainerOffset;
+  final int trainerLength;
+  final int positionOffset;
+  final int positionLength;
+  final int miscOffset;
+  final int miscLength;
+  final int dexOffset;
+  final int dexLength;
+  final int eventFlagOffset;
+  final int eventFlagCount;
+
+  const _Gen5SaveLayout({
+    required this.label,
+    required this.partyOffset,
+    required this.trainerOffset,
+    required this.trainerLength,
+    required this.positionOffset,
+    required this.positionLength,
+    required this.miscOffset,
+    required this.miscLength,
+    required this.dexOffset,
+    required this.dexLength,
+    required this.eventFlagOffset,
+    required this.eventFlagCount,
+  });
+
+  static const bw = _Gen5SaveLayout(
+    label: 'BW',
+    partyOffset: 0x18E00,
+    trainerOffset: 0x19400,
+    trainerLength: 0x68,
+    positionOffset: 0x19500,
+    positionLength: 0x9C,
+    miscOffset: 0x21200,
+    miscLength: 0xEC,
+    dexOffset: 0x21600,
+    dexLength: 0x4D4,
+    eventFlagOffset: 0x20100 + 0x27C,
+    eventFlagCount: 0xB60,
+  );
+
+  static const b2w2 = _Gen5SaveLayout(
+    label: 'B2W2',
+    partyOffset: 0x18E00,
+    trainerOffset: 0x19400,
+    trainerLength: 0xB0,
+    positionOffset: 0x19500,
+    positionLength: 0xA8,
+    miscOffset: 0x21100,
+    miscLength: 0xF0,
+    dexOffset: 0x21400,
+    dexLength: 0x4DC,
+    eventFlagOffset: 0x1FF00 + 0x35E,
+    eventFlagCount: 0xBF8,
+  );
+
+  static _Gen5SaveLayout? forVersion(PokemonGameVersion version) =>
+      switch (version) {
+        PokemonGameVersion.black || PokemonGameVersion.white => bw,
+        PokemonGameVersion.black2 || PokemonGameVersion.white2 => b2w2,
+        _ => null,
+      };
 }

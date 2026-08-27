@@ -167,8 +167,10 @@ class PokemonDecoder {
   static String badgeName(PokemonGameProfile profile, int index) {
     final isHgss = profile.version == PokemonGameVersion.heartGold ||
         profile.version == PokemonGameVersion.soulSilver;
+    final isB2W2 = profile.version == PokemonGameVersion.black2 ||
+        profile.version == PokemonGameVersion.white2;
     final names = profile.isGen5
-        ? _unovaBlackWhiteBadges
+        ? (isB2W2 ? _unovaBlack2White2Badges : _unovaBlackWhiteBadges)
         : profile.isGen4
         ? (isHgss
               ? _gen2Badges
@@ -203,6 +205,16 @@ class PokemonDecoder {
     'Medalla Jet',
     'Medalla Candelero',
     'Medalla Leyenda',
+  ];
+  static const _unovaBlack2White2Badges = <String>[
+    'Medalla Base',
+    'Medalla Tóxica',
+    'Medalla Élitro',
+    'Medalla Voltio',
+    'Medalla Temblor',
+    'Medalla Jet',
+    'Medalla Leyenda',
+    'Medalla Ola',
   ];
   static const _gen2Badges = <String>[
     'Medalla Céfiro',
