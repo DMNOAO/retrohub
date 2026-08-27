@@ -348,6 +348,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
               CoreLoader.isGameBoyRom(game.romPath) ||
               CoreLoader.isGbaRom(game.romPath),
           supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
+          supportsNdsOptions: CoreLoader.isNdsRom(game.romPath),
           supportsGbaFullscreen: CoreLoader.isGbaRom(game.romPath),
           initialPreferences: _preferences,
           saveStateService: SaveStateService(
@@ -556,7 +557,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
     final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
     final bool consoleFullscreen = snesFullscreen || gbaFullscreen;
-    _gameController.hapticsEnabled = !isSnes && _preferences.vibrationEnabled;
+    _gameController.hapticsEnabled = !isSnes &&
+        (isNds
+            ? _preferences.ndsVibrationEnabled
+            : _preferences.vibrationEnabled);
 
     return PopScope(
       canPop: _isClosing,
@@ -632,6 +636,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     _preferences.autoLoadOnStart && !isSnes,
                                 displayAspectRatio: isSnes ? 4 / 3 : null,
                                 splitNdsScreens: isNds,
+                                ndsTopScreenScale: isNds
+                                    ? _ndsTopScreenScale(_preferences)
+                                    : 1,
+                                ndsBottomScreenScale: isNds
+                                    ? _ndsBottomScreenScale(_preferences)
+                                    : 1,
+                                ndsSwapScreens: isNds && _preferences.ndsSwapScreens,
+                                ndsScreensScale: 1,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -789,8 +801,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               width: 138,
                               child: _LandscapeLeftControls(
                                 controller: _gameController,
-                                directionalControl:
-                                    _preferences.directionalControl,
+                                directionalControl: isNds
+                                    ? _preferences.ndsDirectionalControl
+                                    : _preferences.directionalControl,
                                 buttonUp: _buttonUp,
                                 buttonDown: _buttonDown,
                                 buttonLeft: _buttonLeft,
@@ -823,26 +836,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               width: 166,
                               child: _LandscapeRightControls(
                                 controller: _gameController,
-                                buttonA: _buttonA,
-                                buttonB: _buttonB,
+                                buttonA: isNds && _preferences.ndsSwapAB
+                                    ? _buttonB
+                                    : _buttonA,
+                                buttonB: isNds && _preferences.ndsSwapAB
+                                    ? _buttonA
+                                    : _buttonB,
                                 buttonX: _buttonX,
                                 buttonY: _buttonY,
                                 buttonStart: _buttonStart,
                                 buttonR: _buttonR,
                                 showShoulder: isGba || isSnes || isNds,
                                 isSnes: isSnes || isNds,
-                                buttonAColor: Color(
-                                  _preferences.snesButtonAColor,
-                                ),
-                                buttonBColor: Color(
-                                  _preferences.snesButtonBColor,
-                                ),
-                                buttonXColor: Color(
-                                  _preferences.snesButtonXColor,
-                                ),
-                                buttonYColor: Color(
-                                  _preferences.snesButtonYColor,
-                                ),
+                                buttonAColor: isNds
+                                    ? visualTheme.accent
+                                    : Color(_preferences.snesButtonAColor),
+                                buttonBColor: isNds
+                                    ? Color.lerp(visualTheme.accent, visualTheme.background, .28)!
+                                    : Color(_preferences.snesButtonBColor),
+                                buttonXColor: isNds
+                                    ? Color.lerp(visualTheme.accent, Colors.white, .22)!
+                                    : Color(_preferences.snesButtonXColor),
+                                buttonYColor: isNds
+                                    ? Color.lerp(visualTheme.accent, visualTheme.gradient.colors[2], .48)!
+                                    : Color(_preferences.snesButtonYColor),
                               ),
                             ),
                           ],
@@ -851,30 +868,51 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     }
 
                     if (isNds) {
-                      final double screenHeight =
-                          (constraints.maxWidth * 1.5) + 4;
-                      final double touchScreenTop =
-                          (constraints.maxWidth * .75) + 4;
-                      final double controlOpacity =
-                          (_preferences.controlOpacity * .82)
-                              .clamp(0.35, .82)
-                              .toDouble();
+                      final double topFactor = _ndsTopScreenScale(_preferences);
+                      final double bottomFactor = _ndsBottomScreenScale(_preferences);
+                      final double layoutWidth =
+                          constraints.maxWidth * _preferences.ndsScreensScale;
+                      final double topWidth = layoutWidth * topFactor;
+                      final double bottomWidth = layoutWidth * bottomFactor;
+                      final double topHeight = topWidth / (4 / 3);
+                      final double bottomHeight = bottomWidth / (4 / 3);
+                      final double screenHeight = topHeight + bottomHeight + 4;
+                      final double screenLeft =
+                          (constraints.maxWidth - layoutWidth) / 2;
+                      final bool touchIsTop = _preferences.ndsSwapScreens;
+                      final double touchScreenTop = touchIsTop
+                          ? 0
+                          : topHeight + 4;
+                      final double touchScreenWidth =
+                          touchIsTop ? topWidth : bottomWidth;
+                      final double touchScreenHeight =
+                          touchIsTop ? topHeight : bottomHeight;
+                      final double touchScreenLeft =
+                          (constraints.maxWidth - touchScreenWidth) / 2;
+                      final double shoulderRowTop = topHeight + 14;
+                      final double logoTop = screenHeight + 6;
+                      final double mainControlsTop = logoTop;
+                      final double controlOpacity = _preferences.ndsControlOpacity;
+                      final Color ndsA = visualTheme.accent;
+                      final Color ndsB = Color.lerp(visualTheme.accent, visualTheme.background, .28)!;
+                      final Color ndsX = Color.lerp(visualTheme.accent, Colors.white, .22)!;
+                      final Color ndsY = Color.lerp(visualTheme.accent, visualTheme.gradient.colors[2], .48)!;
 
                       return Stack(
                         clipBehavior: Clip.hardEdge,
                         children: [
                           Positioned(
                             top: 0,
-                            left: 0,
-                            right: 0,
+                            left: screenLeft,
+                            width: layoutWidth,
                             height: screenHeight,
                             child: gameView,
                           ),
                           Positioned(
                             top: touchScreenTop,
-                            left: 0,
-                            right: 0,
-                            height: constraints.maxWidth * .75,
+                            left: touchScreenLeft,
+                            width: touchScreenWidth,
+                            height: touchScreenHeight,
                             child: Listener(
                               behavior: HitTestBehavior.opaque,
                               onPointerDown: (PointerDownEvent event) {
@@ -882,13 +920,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 _ndsTouchPointer = event.pointer;
                                 _gameController.setTouchState(
                                   x: ((event.localPosition.dx /
-                                              constraints.maxWidth) *
+                                              touchScreenWidth) *
                                           255)
                                       .round()
                                       .clamp(0, 255)
                                       .toInt(),
                                   y: ((event.localPosition.dy /
-                                              (constraints.maxWidth * .75)) *
+                                              touchScreenHeight) *
                                           191)
                                       .round()
                                       .clamp(0, 191)
@@ -900,13 +938,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 if (_ndsTouchPointer != event.pointer) return;
                                 _gameController.setTouchState(
                                   x: ((event.localPosition.dx /
-                                              constraints.maxWidth) *
+                                              touchScreenWidth) *
                                           255)
                                       .round()
                                       .clamp(0, 255)
                                       .toInt(),
                                   y: ((event.localPosition.dy /
-                                              (constraints.maxWidth * .75)) *
+                                              touchScreenHeight) *
                                           191)
                                       .round()
                                       .clamp(0, 191)
@@ -954,7 +992,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                           Positioned(
-                            top: touchScreenTop + 10,
+                            top: shoulderRowTop,
                             left: 10,
                             right: 10,
                             child: Opacity(
@@ -963,52 +1001,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  _GameBoyShoulderButton(
-                                    label: 'L',
-                                    buttonId: _buttonL,
-                                    controller: _gameController,
+                                  Transform.scale(
+                                    scale: _preferences.ndsShoulderScale,
+                                    child: _GameBoyShoulderButton(label: 'L', buttonId: _buttonL, controller: _gameController),
                                   ),
-                                  _GameBoyShoulderButton(
-                                    label: 'R',
-                                    buttonId: _buttonR,
-                                    controller: _gameController,
+                                  Transform.scale(
+                                    scale: _preferences.ndsSystemScale,
+                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                      _GameBoySystemButton(width: 64, height: 25, label: 'SELECT', buttonId: _buttonSelect, controller: _gameController),
+                                      const SizedBox(width: 8),
+                                      _GameBoySystemButton(width: 64, height: 25, label: 'START', buttonId: _buttonStart, controller: _gameController),
+                                    ]),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: touchScreenTop + 56,
-                            left: 0,
-                            right: 0,
-                            child: Opacity(
-                              opacity: controlOpacity,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _GameBoySystemButton(
-                                    width: 72,
-                                    height: 25,
-                                    label: 'SELECT',
-                                    buttonId: _buttonSelect,
-                                    controller: _gameController,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _GameBoySystemButton(
-                                    width: 72,
-                                    height: 25,
-                                    label: 'START',
-                                    buttonId: _buttonStart,
-                                    controller: _gameController,
+                                  Transform.scale(
+                                    scale: _preferences.ndsShoulderScale,
+                                    child: _GameBoyShoulderButton(label: 'R', buttonId: _buttonR, controller: _gameController),
                                   ),
                                 ],
                               ),
                             ),
                           ),
                           Positioned(
+                            top: mainControlsTop,
                             left: 12,
                             right: 12,
-                            bottom: 30,
                             child: Opacity(
                               opacity: controlOpacity,
                               child: Row(
@@ -1016,33 +1032,31 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     MainAxisAlignment.spaceBetween,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  _DirectionalControl(
-                                    type: _preferences.directionalControl,
-                                    keySize: 36,
-                                    controller: _gameController,
-                                    buttonUp: _buttonUp,
-                                    buttonDown: _buttonDown,
-                                    buttonLeft: _buttonLeft,
-                                    buttonRight: _buttonRight,
+                                  Transform.translate(
+                                    offset: Offset(_preferences.ndsDpadX * 28, _preferences.ndsDpadY * 24),
+                                    child: _DirectionalControl(
+                                      type: _preferences.ndsDirectionalControl,
+                                      keySize: 36 * _preferences.ndsDpadScale,
+                                      controller: _gameController,
+                                      buttonUp: _buttonUp,
+                                      buttonDown: _buttonDown,
+                                      buttonLeft: _buttonLeft,
+                                      buttonRight: _buttonRight,
+                                    ),
                                   ),
-                                  _SnesActionPad(
-                                    size: 38,
-                                    controller: _gameController,
-                                    buttonA: _buttonA,
-                                    buttonB: _buttonB,
-                                    buttonX: _buttonX,
-                                    buttonY: _buttonY,
-                                    buttonAColor: Color(
-                                      _preferences.snesButtonAColor,
-                                    ),
-                                    buttonBColor: Color(
-                                      _preferences.snesButtonBColor,
-                                    ),
-                                    buttonXColor: Color(
-                                      _preferences.snesButtonXColor,
-                                    ),
-                                    buttonYColor: Color(
-                                      _preferences.snesButtonYColor,
+                                  Transform.translate(
+                                    offset: Offset(_preferences.ndsActionX * 28, _preferences.ndsActionY * 24),
+                                    child: _SnesActionPad(
+                                      size: 38 * _preferences.ndsActionScale,
+                                      controller: _gameController,
+                                      buttonA: _preferences.ndsSwapAB ? _buttonB : _buttonA,
+                                      buttonB: _preferences.ndsSwapAB ? _buttonA : _buttonB,
+                                      buttonX: _buttonX,
+                                      buttonY: _buttonY,
+                                      buttonAColor: ndsA,
+                                      buttonBColor: ndsB,
+                                      buttonXColor: ndsX,
+                                      buttonYColor: ndsY,
                                     ),
                                   ),
                                 ],
@@ -1050,9 +1064,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                           Positioned(
+                            top: logoTop,
                             left: 0,
                             right: 0,
-                            bottom: 16,
                             child: IgnorePointer(
                               child: Center(
                                 child: FittedBox(
@@ -1540,6 +1554,18 @@ String _cleanGameTitle(String title) {
       .replaceAll(RegExp(r'^Pokemon\b', caseSensitive: false), 'Pokémon');
 }
 
+double _ndsTopScreenScale(EmulatorPreferences preferences) {
+  final emphasis = preferences.ndsScreenEmphasis;
+  final relative = emphasis == NdsScreenEmphasis.bottom ? .82 : 1.0;
+  return relative;
+}
+
+double _ndsBottomScreenScale(EmulatorPreferences preferences) {
+  final emphasis = preferences.ndsScreenEmphasis;
+  final relative = emphasis == NdsScreenEmphasis.top ? .82 : 1.0;
+  return relative;
+}
+
 String _pokemonSpritePath(Game game, int speciesId) {
   final profile = GameAssetProfile.fromGame(game);
 
@@ -1609,21 +1635,21 @@ class _EmulatorVisualTheme {
     } else if (identity.contains('white 2') ||
         identity.contains('blanco 2') ||
         identity.contains('blanca 2')) {
-      primary = const Color(0xFF34343A);
-      secondary = const Color(0xFF6D7180);
-      accent = const Color(0xFFF2F4FF);
+      primary = const Color(0xFF334E63);
+      secondary = const Color(0xFFB83243);
+      accent = const Color(0xFFF7FCFF);
     } else if (identity.contains('black') ||
         identity.contains('negra') ||
         identity.contains('negro')) {
-      primary = const Color(0xFF0D0E12);
-      secondary = const Color(0xFF252832);
-      accent = const Color(0xFFB9C6DD);
+      primary = const Color(0xFF555B63);
+      secondary = const Color(0xFFA94343);
+      accent = const Color(0xFFFFF3DF);
     } else if (identity.contains('white') ||
         identity.contains('blanca') ||
         identity.contains('blanco')) {
-      primary = const Color(0xFF3B3B40);
-      secondary = const Color(0xFF72737A);
-      accent = const Color(0xFFF5F5F2);
+      primary = const Color(0xFF070A10);
+      secondary = const Color(0xFF183451);
+      accent = const Color(0xFF43C7E8);
     } else if (pokemonVersion == PokemonGameVersion.fireRed) {
       primary = const Color(0xFFF05A24);
       secondary = const Color(0xFF7A260E);
@@ -1674,6 +1700,10 @@ class _EmulatorVisualTheme {
       primary = const Color(0xFF26243B);
       secondary = const Color(0xFF514B72);
       accent = const Color(0xFFC9C2F2);
+    } else if (identity.contains('nds') || identity.contains('nintendo ds')) {
+      primary = const Color(0xFF24282E);
+      secondary = const Color(0xFF4A515B);
+      accent = const Color(0xFFE6EBF0);
     } else if (identity.contains('gba')) {
       primary = const Color(0xFF202842);
       secondary = const Color(0xFF35305F);

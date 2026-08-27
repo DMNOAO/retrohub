@@ -9,6 +9,7 @@ class EmulatorSettingsPage extends StatefulWidget {
   final bool supportsGameBoyOptions;
   final bool supportsSnesOptions;
   final bool supportsGbaFullscreen;
+  final bool supportsNdsOptions;
   final EmulatorPreferences initialPreferences;
   final Future<void> Function() onRestart;
   final Future<bool> Function(int slot, String title) onSaveState;
@@ -23,6 +24,7 @@ class EmulatorSettingsPage extends StatefulWidget {
     required this.supportsGameBoyOptions,
     this.supportsSnesOptions = false,
     this.supportsGbaFullscreen = false,
+    this.supportsNdsOptions = false,
     required this.initialPreferences,
     required this.onRestart,
     required this.onSaveState,
@@ -232,9 +234,10 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 22),
-            const _SectionTitle('Controles'),
-            Card(
+            if (!widget.supportsNdsOptions) ...[
+              const SizedBox(height: 22),
+              const _SectionTitle('Controles'),
+              Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -273,7 +276,8 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                   ],
                 ),
               ),
-            ),
+              ),
+            ],
             if (widget.supportsGameBoyOptions) ...[
             const SizedBox(height: 22),
             const _SectionTitle('Controles GB · GBC · GBA'),
@@ -645,6 +649,105 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 ),
               ),
             ],
+            if (widget.supportsNdsOptions) ...[
+              const SizedBox(height: 22),
+              const _SectionTitle('Nintendo DS'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Pantallas', style: TextStyle(fontWeight: FontWeight.bold)),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Intercambiar pantallas'),
+                        subtitle: const Text('Cambia la posición de la pantalla principal y la táctil'),
+                        value: _preferences.ndsSwapScreens,
+                        onChanged: (value) => _update(_preferences.copyWith(ndsSwapScreens: value)),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<NdsScreenEmphasis>(
+                        segments: const [
+                          ButtonSegment(value: NdsScreenEmphasis.equal, label: Text('Iguales')),
+                          ButtonSegment(value: NdsScreenEmphasis.top, label: Text('Superior')),
+                          ButtonSegment(value: NdsScreenEmphasis.bottom, label: Text('Inferior')),
+                        ],
+                        selected: {_preferences.ndsScreenEmphasis},
+                        onSelectionChanged: (value) => _update(_preferences.copyWith(ndsScreenEmphasis: value.first)),
+                      ),
+                      _NdsSlider(
+                        label: 'Tamaño conjunto de pantallas',
+                        value: _preferences.ndsScreensScale,
+                        min: .7,
+                        max: 1,
+                        onChanged: (value) => _update(_preferences.copyWith(ndsScreensScale: value)),
+                      ),
+                      const Divider(height: 30),
+                      const Text('Controles propios', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      SegmentedButton<DirectionalControlType>(
+                        segments: const [
+                          ButtonSegment(value: DirectionalControlType.dPad, label: Text('Cruceta')),
+                          ButtonSegment(value: DirectionalControlType.joystick, label: Text('Palanca')),
+                        ],
+                        selected: {_preferences.ndsDirectionalControl},
+                        onSelectionChanged: (value) => _update(_preferences.copyWith(ndsDirectionalControl: value.first)),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Intercambiar A/B'),
+                        value: _preferences.ndsSwapAB,
+                        onChanged: (value) => _update(_preferences.copyWith(ndsSwapAB: value)),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Vibración al pulsar'),
+                        value: _preferences.ndsVibrationEnabled,
+                        onChanged: (value) => _update(_preferences.copyWith(ndsVibrationEnabled: value)),
+                      ),
+                      _NdsSlider(label: 'Opacidad', value: _preferences.ndsControlOpacity, min: .35, max: 1, onChanged: (value) => _update(_preferences.copyWith(ndsControlOpacity: value))),
+                      _NdsSlider(label: 'Tamaño D-pad / palanca', value: _preferences.ndsDpadScale, min: .75, max: 1.5, onChanged: (value) => _update(_preferences.copyWith(ndsDpadScale: value))),
+                      _NdsSlider(label: 'Tamaño A/B/X/Y', value: _preferences.ndsActionScale, min: .75, max: 1.5, onChanged: (value) => _update(_preferences.copyWith(ndsActionScale: value))),
+                      _NdsSlider(label: 'Tamaño L/R', value: _preferences.ndsShoulderScale, min: .75, max: 1.5, onChanged: (value) => _update(_preferences.copyWith(ndsShoulderScale: value))),
+                      _NdsSlider(label: 'Tamaño Start/Select', value: _preferences.ndsSystemScale, min: .75, max: 1.5, onChanged: (value) => _update(_preferences.copyWith(ndsSystemScale: value))),
+                      const Divider(height: 30),
+                      const Text('Posición', style: TextStyle(fontWeight: FontWeight.bold)),
+                      _NdsSlider(label: 'D-pad horizontal', value: _preferences.ndsDpadX, min: -1, max: 1, onChanged: (value) => _update(_preferences.copyWith(ndsDpadX: value))),
+                      _NdsSlider(label: 'D-pad vertical', value: _preferences.ndsDpadY, min: -1, max: 1, onChanged: (value) => _update(_preferences.copyWith(ndsDpadY: value))),
+                      _NdsSlider(label: 'A/B/X/Y horizontal', value: _preferences.ndsActionX, min: -1, max: 1, onChanged: (value) => _update(_preferences.copyWith(ndsActionX: value))),
+                      _NdsSlider(label: 'A/B/X/Y vertical', value: _preferences.ndsActionY, min: -1, max: 1, onChanged: (value) => _update(_preferences.copyWith(ndsActionY: value))),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          const defaults = EmulatorPreferences();
+                          final updated = _preferences.copyWith(
+                            ndsDirectionalControl: defaults.ndsDirectionalControl,
+                            ndsControlOpacity: defaults.ndsControlOpacity,
+                            ndsSwapAB: defaults.ndsSwapAB,
+                            ndsVibrationEnabled: defaults.ndsVibrationEnabled,
+                            ndsDpadScale: defaults.ndsDpadScale,
+                            ndsActionScale: defaults.ndsActionScale,
+                            ndsShoulderScale: defaults.ndsShoulderScale,
+                            ndsSystemScale: defaults.ndsSystemScale,
+                            ndsDpadX: defaults.ndsDpadX,
+                            ndsDpadY: defaults.ndsDpadY,
+                            ndsActionX: defaults.ndsActionX,
+                            ndsActionY: defaults.ndsActionY,
+                            ndsScreensScale: defaults.ndsScreensScale,
+                            ndsScreenEmphasis: defaults.ndsScreenEmphasis,
+                            ndsSwapScreens: defaults.ndsSwapScreens,
+                          );
+                          await _update(updated);
+                        },
+                        icon: const Icon(Icons.restore),
+                        label: const Text('Restablecer solamente Nintendo DS'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -666,6 +769,36 @@ class _SectionTitle extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: 1.1,
             ),
+      ),
+    );
+  }
+}
+
+class _NdsSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  const _NdsSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label · ${(value * 100).round()}%'),
+          Slider(value: value, min: min, max: max, divisions: 15, onChanged: onChanged),
+        ],
       ),
     );
   }

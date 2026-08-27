@@ -38,6 +38,14 @@ enum AppAppearance {
       sprite: 'assets/sprites/pokemon/nds/gen5/0644.png'),
   black('Negro', 0xFF000000, 0xFF121212, 0xFFFFFFFF, 0xFF9EA7B3,
       sprite: 'assets/sprites/pokemon/nds/gen5/0643.png'),
+  white2('Blanco 2', 0xFFF2F4F7, 0xFFD9DEE5, 0xFF2779D8, 0xFFD84A43,
+      sprite: 'assets/sprites/pokemon/nds/gen5/0646-white.png'),
+  black2('Negro 2', 0xFF0B0D12, 0xFF181D27, 0xFFF1D13A, 0xFF3285E6,
+      sprite: 'assets/sprites/pokemon/nds/gen5/0646-black.png'),
+  heartGold('HeartGold', 0xFF4A2A0B, 0xFF8A321B, 0xFFFFC934, 0xFF3E9A61,
+      sprite: 'assets/sprites/pokemon/nds/gen5/0250.png'),
+  soulSilver('SoulSilver', 0xFF101D31, 0xFF243A55, 0xFFE7EEF5, 0xFF5CB9E8,
+      sprite: 'assets/sprites/pokemon/nds/gen5/0249.png'),
   diamond('Diamante', 0xFF78BFD0, 0xFF173C56, 0xFF5DE4ED, 0xFFD9E7EC,
       sprite: 'assets/sprites/pokemon/nds/gen5/0483.png'),
   pearl('Perla', 0xFFC64A91, 0xFF4B183A, 0xFFF4EEF5, 0xFFD9A4CF,
@@ -171,8 +179,12 @@ enum AppAppearance {
         AppAppearance.diamond => 400,
         AppAppearance.pearl => 410,
         AppAppearance.platinum => 420,
+        AppAppearance.heartGold => 430,
+        AppAppearance.soulSilver => 440,
         AppAppearance.black => 500,
         AppAppearance.white => 510,
+        AppAppearance.black2 => 520,
+        AppAppearance.white2 => 530,
         AppAppearance.gengar => 1094,
         AppAppearance.mewtwo => 1150,
         AppAppearance.shinyUmbreon => 2197,
@@ -242,6 +254,18 @@ enum AppAppearance {
     }
     if (normalized.contains('platino') || normalized.contains('platinum')) {
       return AppAppearance.platinum;
+    }
+    if (normalized.contains('heartgold') || normalized.contains('heart gold')) {
+      return AppAppearance.heartGold;
+    }
+    if (normalized.contains('soulsilver') || normalized.contains('soul silver')) {
+      return AppAppearance.soulSilver;
+    }
+    if (normalized.contains('blanco 2') || normalized.contains('blanca 2') || normalized.contains('white 2')) {
+      return AppAppearance.white2;
+    }
+    if (normalized.contains('negro 2') || normalized.contains('negra 2') || normalized.contains('black 2')) {
+      return AppAppearance.black2;
     }
     if (normalized.contains('plata') || normalized.contains('silver')) {
       return AppAppearance.silver;

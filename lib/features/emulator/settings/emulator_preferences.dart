@@ -14,6 +14,8 @@ enum EmulatorOrientation { automatic, portrait, landscape }
 
 enum SnesButtonColorStyle { violet, multicolor, monochrome, custom }
 
+enum NdsScreenEmphasis { equal, top, bottom }
+
 class EmulatorPreferences {
   static const _layoutKey = 'emulator_gb_control_layout';
   static const _sizeKey = 'emulator_gb_control_size';
@@ -37,6 +39,21 @@ class EmulatorPreferences {
   static const _snesButtonBColorKey = 'emulator_snes_button_b_color';
   static const _snesButtonXColorKey = 'emulator_snes_button_x_color';
   static const _snesButtonYColorKey = 'emulator_snes_button_y_color';
+  static const _ndsDirectionalControlKey = 'emulator_nds_directional_control';
+  static const _ndsOpacityKey = 'emulator_nds_control_opacity';
+  static const _ndsSwapButtonsKey = 'emulator_nds_swap_ab';
+  static const _ndsVibrationKey = 'emulator_nds_control_vibration';
+  static const _ndsDpadScaleKey = 'emulator_nds_dpad_scale';
+  static const _ndsActionScaleKey = 'emulator_nds_action_scale';
+  static const _ndsShoulderScaleKey = 'emulator_nds_shoulder_scale';
+  static const _ndsSystemScaleKey = 'emulator_nds_system_scale';
+  static const _ndsDpadXKey = 'emulator_nds_dpad_x';
+  static const _ndsDpadYKey = 'emulator_nds_dpad_y';
+  static const _ndsActionXKey = 'emulator_nds_action_x';
+  static const _ndsActionYKey = 'emulator_nds_action_y';
+  static const _ndsScreensScaleKey = 'emulator_nds_screens_scale';
+  static const _ndsScreenEmphasisKey = 'emulator_nds_screen_emphasis';
+  static const _ndsSwapScreensKey = 'emulator_nds_swap_screens';
 
   final GameBoyControlLayout layout;
   final GameBoyControlSize controlSize;
@@ -60,6 +77,21 @@ class EmulatorPreferences {
   final int snesButtonBColor;
   final int snesButtonXColor;
   final int snesButtonYColor;
+  final DirectionalControlType ndsDirectionalControl;
+  final double ndsControlOpacity;
+  final bool ndsSwapAB;
+  final bool ndsVibrationEnabled;
+  final double ndsDpadScale;
+  final double ndsActionScale;
+  final double ndsShoulderScale;
+  final double ndsSystemScale;
+  final double ndsDpadX;
+  final double ndsDpadY;
+  final double ndsActionX;
+  final double ndsActionY;
+  final double ndsScreensScale;
+  final NdsScreenEmphasis ndsScreenEmphasis;
+  final bool ndsSwapScreens;
 
   const EmulatorPreferences({
     this.layout = GameBoyControlLayout.classic,
@@ -84,6 +116,21 @@ class EmulatorPreferences {
     this.snesButtonBColor = 0xFF8173AE,
     this.snesButtonXColor = 0xFF8173AE,
     this.snesButtonYColor = 0xFF5E4B8B,
+    this.ndsDirectionalControl = DirectionalControlType.dPad,
+    this.ndsControlOpacity = .72,
+    this.ndsSwapAB = false,
+    this.ndsVibrationEnabled = true,
+    this.ndsDpadScale = 1.15,
+    this.ndsActionScale = 1.15,
+    this.ndsShoulderScale = 1,
+    this.ndsSystemScale = 1,
+    this.ndsDpadX = 0,
+    this.ndsDpadY = 0,
+    this.ndsActionX = 0,
+    this.ndsActionY = 0,
+    this.ndsScreensScale = 1,
+    this.ndsScreenEmphasis = NdsScreenEmphasis.equal,
+    this.ndsSwapScreens = false,
   });
 
   double get sizeScale => switch (controlSize) {
@@ -115,6 +162,21 @@ class EmulatorPreferences {
     int? snesButtonBColor,
     int? snesButtonXColor,
     int? snesButtonYColor,
+    DirectionalControlType? ndsDirectionalControl,
+    double? ndsControlOpacity,
+    bool? ndsSwapAB,
+    bool? ndsVibrationEnabled,
+    double? ndsDpadScale,
+    double? ndsActionScale,
+    double? ndsShoulderScale,
+    double? ndsSystemScale,
+    double? ndsDpadX,
+    double? ndsDpadY,
+    double? ndsActionX,
+    double? ndsActionY,
+    double? ndsScreensScale,
+    NdsScreenEmphasis? ndsScreenEmphasis,
+    bool? ndsSwapScreens,
   }) {
     return EmulatorPreferences(
       layout: layout ?? this.layout,
@@ -141,6 +203,21 @@ class EmulatorPreferences {
       snesButtonBColor: snesButtonBColor ?? this.snesButtonBColor,
       snesButtonXColor: snesButtonXColor ?? this.snesButtonXColor,
       snesButtonYColor: snesButtonYColor ?? this.snesButtonYColor,
+      ndsDirectionalControl: ndsDirectionalControl ?? this.ndsDirectionalControl,
+      ndsControlOpacity: ndsControlOpacity ?? this.ndsControlOpacity,
+      ndsSwapAB: ndsSwapAB ?? this.ndsSwapAB,
+      ndsVibrationEnabled: ndsVibrationEnabled ?? this.ndsVibrationEnabled,
+      ndsDpadScale: ndsDpadScale ?? this.ndsDpadScale,
+      ndsActionScale: ndsActionScale ?? this.ndsActionScale,
+      ndsShoulderScale: ndsShoulderScale ?? this.ndsShoulderScale,
+      ndsSystemScale: ndsSystemScale ?? this.ndsSystemScale,
+      ndsDpadX: ndsDpadX ?? this.ndsDpadX,
+      ndsDpadY: ndsDpadY ?? this.ndsDpadY,
+      ndsActionX: ndsActionX ?? this.ndsActionX,
+      ndsActionY: ndsActionY ?? this.ndsActionY,
+      ndsScreensScale: ndsScreensScale ?? this.ndsScreensScale,
+      ndsScreenEmphasis: ndsScreenEmphasis ?? this.ndsScreenEmphasis,
+      ndsSwapScreens: ndsSwapScreens ?? this.ndsSwapScreens,
     );
   }
 
@@ -195,6 +272,27 @@ class EmulatorPreferences {
           storage.getInt(_snesButtonXColorKey) ?? 0xFF8173AE,
       snesButtonYColor:
           storage.getInt(_snesButtonYColorKey) ?? 0xFF5E4B8B,
+      ndsDirectionalControl: DirectionalControlType.values.firstWhere(
+        (value) => value.name == storage.getString(_ndsDirectionalControlKey),
+        orElse: () => DirectionalControlType.dPad,
+      ),
+      ndsControlOpacity: (storage.getDouble(_ndsOpacityKey) ?? .72).clamp(.35, 1),
+      ndsSwapAB: storage.getBool(_ndsSwapButtonsKey) ?? false,
+      ndsVibrationEnabled: storage.getBool(_ndsVibrationKey) ?? true,
+      ndsDpadScale: (storage.getDouble(_ndsDpadScaleKey) ?? 1.15).clamp(.75, 1.5),
+      ndsActionScale: (storage.getDouble(_ndsActionScaleKey) ?? 1.15).clamp(.75, 1.5),
+      ndsShoulderScale: (storage.getDouble(_ndsShoulderScaleKey) ?? 1).clamp(.75, 1.5),
+      ndsSystemScale: (storage.getDouble(_ndsSystemScaleKey) ?? 1).clamp(.75, 1.5),
+      ndsDpadX: (storage.getDouble(_ndsDpadXKey) ?? 0).clamp(-1, 1),
+      ndsDpadY: (storage.getDouble(_ndsDpadYKey) ?? 0).clamp(-1, 1),
+      ndsActionX: (storage.getDouble(_ndsActionXKey) ?? 0).clamp(-1, 1),
+      ndsActionY: (storage.getDouble(_ndsActionYKey) ?? 0).clamp(-1, 1),
+      ndsScreensScale: (storage.getDouble(_ndsScreensScaleKey) ?? 1).clamp(.7, 1),
+      ndsScreenEmphasis: NdsScreenEmphasis.values.firstWhere(
+        (value) => value.name == storage.getString(_ndsScreenEmphasisKey),
+        orElse: () => NdsScreenEmphasis.equal,
+      ),
+      ndsSwapScreens: storage.getBool(_ndsSwapScreensKey) ?? false,
     );
   }
 
@@ -226,6 +324,21 @@ class EmulatorPreferences {
       storage.setInt(_snesButtonBColorKey, snesButtonBColor),
       storage.setInt(_snesButtonXColorKey, snesButtonXColor),
       storage.setInt(_snesButtonYColorKey, snesButtonYColor),
+      storage.setString(_ndsDirectionalControlKey, ndsDirectionalControl.name),
+      storage.setDouble(_ndsOpacityKey, ndsControlOpacity),
+      storage.setBool(_ndsSwapButtonsKey, ndsSwapAB),
+      storage.setBool(_ndsVibrationKey, ndsVibrationEnabled),
+      storage.setDouble(_ndsDpadScaleKey, ndsDpadScale),
+      storage.setDouble(_ndsActionScaleKey, ndsActionScale),
+      storage.setDouble(_ndsShoulderScaleKey, ndsShoulderScale),
+      storage.setDouble(_ndsSystemScaleKey, ndsSystemScale),
+      storage.setDouble(_ndsDpadXKey, ndsDpadX),
+      storage.setDouble(_ndsDpadYKey, ndsDpadY),
+      storage.setDouble(_ndsActionXKey, ndsActionX),
+      storage.setDouble(_ndsActionYKey, ndsActionY),
+      storage.setDouble(_ndsScreensScaleKey, ndsScreensScale),
+      storage.setString(_ndsScreenEmphasisKey, ndsScreenEmphasis.name),
+      storage.setBool(_ndsSwapScreensKey, ndsSwapScreens),
     ]);
   }
 
