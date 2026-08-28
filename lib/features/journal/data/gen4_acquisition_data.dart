@@ -196,6 +196,22 @@ class Gen4AcquisitionData {
       case 130:
         result.add(_static('Lago de la Furia', 'Encuentro único con el Gyarados rojo variocolor.'));
         break;
+      case 102:
+        result.add(_special('Golpe Cabeza', 'Árboles de Johto y Kanto', 'Exeggcute puede caer al usar Golpe Cabeza en árboles de zonas boscosas.'));
+        break;
+      case 190:
+        result.add(_special('Golpe Cabeza', 'Rutas 28, 33, 42, 44–47 y Monte Plateado', 'Aipom aparece al usar Golpe Cabeza en determinados grupos de árboles.'));
+        break;
+      case 204:
+        result.add(_special('Golpe Cabeza', 'Árboles de zonas boscosas de Johto', 'Pineco puede caer al usar Golpe Cabeza.'));
+        break;
+      case 214:
+        result.add(_special('Golpe Cabeza', 'Rutas 7, 11, 28, 33, 42, 44–47 y Monte Plateado', 'Heracross aparece al usar Golpe Cabeza en determinados grupos de árboles.'));
+        break;
+      case 123:
+      case 127:
+        result.add(_special('Concurso de Captura de Bichos', 'Parque Nacional', '${_name(id)} puede capturarse durante el concurso de los martes, jueves y sábados.'));
+        break;
       case 144:
         result.add(_static('Islas Espuma', 'Articuno espera en las profundidades de las islas.'));
         break;
@@ -275,6 +291,7 @@ class Gen4AcquisitionData {
   static PokedexAcquisition _static(String l, String d) => PokedexAcquisition(method: 'Encuentro único', location: l, detail: d);
   static PokedexAcquisition _roaming(String l, String d) => PokedexAcquisition(method: 'Pokémon errante', location: l, detail: d);
   static PokedexAcquisition _event(String l, String d) => PokedexAcquisition(method: 'Evento', location: l, detail: d);
+  static PokedexAcquisition _special(String m, String l, String d) => PokedexAcquisition(method: m, location: l, detail: d);
   static PokedexAcquisition _other(String l, String d) => PokedexAcquisition(method: 'Otra versión', location: l, detail: d);
 
   static const Set<int> _diamondOnly = {86, 87, 123, 198, 246, 247, 248, 303, 304, 305, 306, 352, 408, 409, 434, 435, 483};

@@ -150,4 +150,23 @@ void main() {
       'Intercambio con NPC',
     );
   });
+
+  test('incluye árboles y Concurso de Captura de Bichos en Johto', () {
+    final crystal = profile('Pokemon_Cristal', 'GBC');
+
+    for (final id in [102, 190, 204, 214]) {
+      expect(
+        PokedexAcquisitionData.forGame(crystal, id).map((item) => item.method),
+        contains('Golpe Cabeza'),
+      );
+    }
+    expect(
+      PokedexAcquisitionData.forGame(crystal, 123).single.location,
+      'Parque Nacional',
+    );
+    expect(
+      PokedexAcquisitionData.forGame(crystal, 127).single.method,
+      'Concurso de Captura de Bichos',
+    );
+  });
 }

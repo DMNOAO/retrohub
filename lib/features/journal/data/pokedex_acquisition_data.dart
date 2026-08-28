@@ -170,6 +170,7 @@ class PokedexAcquisitionData {
       ...?_johtoStory(profile, pokemonId),
       ...?_johtoTrade(profile, pokemonId),
       ...?_johtoPrize(profile, pokemonId),
+      ...?_johtoSpecialEncounter(profile, pokemonId),
     ];
     final unavailable = _johtoUnavailable(profile, pokemonId);
     if (unavailable != null) result.add(unavailable);
@@ -183,6 +184,57 @@ class PokedexAcquisitionData {
       );
     }
     return result;
+  }
+
+  static List<PokedexAcquisition>? _johtoSpecialEncounter(
+    GameAssetProfile profile,
+    int pokemonId,
+  ) {
+    final crystal = profile.game == PokemonAssetGame.crystal;
+    switch (pokemonId) {
+      case 102:
+        return [
+          _specialEncounter(
+            'Golpe Cabeza',
+            'Árboles de zonas boscosas de Johto',
+            'Exeggcute puede caer al usar Golpe Cabeza. La clase de árbol y las rutas disponibles varían según la edición.',
+          ),
+        ];
+      case 190:
+        return [
+          _specialEncounter(
+            'Golpe Cabeza',
+            crystal ? 'Pueblo Azalea y rutas montañosas de Johto' : 'Rutas 33 y 42–44, entre otras rutas de montaña',
+            'Aipom aparece en determinados árboles. Los árboles con encuentros raros dependen de la partida.',
+          ),
+        ];
+      case 204:
+        return [
+          _specialEncounter(
+            'Golpe Cabeza',
+            'Árboles de zonas boscosas de Johto',
+            'Pineco puede caer de los árboles especiales al usar Golpe Cabeza.',
+          ),
+        ];
+      case 214:
+        return [
+          _specialEncounter(
+            'Golpe Cabeza',
+            crystal ? 'Pueblo Azalea y rutas 33, 42 y 44' : 'Rutas de montaña de Johto, como 29–33 y 42–44',
+            'Heracross aparece únicamente en determinados árboles con encuentros raros.',
+          ),
+        ];
+      case 123:
+      case 127:
+        return [
+          _specialEncounter(
+            'Concurso de Captura de Bichos',
+            'Parque Nacional',
+            '${PokemonDecoder.pokemonName(pokemonId)} puede capturarse durante el concurso de los martes, jueves y sábados.',
+          ),
+        ];
+    }
+    return null;
   }
 
   static List<PokedexAcquisition>? _johtoStory(
@@ -307,6 +359,7 @@ class PokedexAcquisitionData {
   static PokedexAcquisition _roaming(String location, String detail) => PokedexAcquisition(method: 'Pokémon errante', location: location, detail: detail);
   static PokedexAcquisition _event(String location, String detail) => PokedexAcquisition(method: 'Evento', location: location, detail: detail);
   static PokedexAcquisition _prize(String location, String detail) => PokedexAcquisition(method: 'Premio por fichas', location: location, detail: detail);
+  static PokedexAcquisition _specialEncounter(String method, String location, String detail) => PokedexAcquisition(method: method, location: location, detail: detail);
   static PokedexAcquisition _otherVersion(String location, String detail) => PokedexAcquisition(method: 'Otra versión', location: location, detail: detail);
 
   static const Map<int, (String, String, String)> _redBlueTrades = {

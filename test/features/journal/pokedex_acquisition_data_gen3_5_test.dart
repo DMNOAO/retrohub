@@ -54,6 +54,21 @@ void main() {
     expect(PokedexAcquisitionData.forGame(heartGold, 251).single.method, 'Evento');
   });
 
+  test('incluye árboles y Concurso de Captura de Bichos en HGSS', () {
+    final heartGold = profile('Pokemon_HeartGold', 'NDS');
+
+    for (final id in [102, 190, 204, 214]) {
+      expect(
+        PokedexAcquisitionData.forGame(heartGold, id).map((item) => item.method),
+        contains('Golpe Cabeza'),
+      );
+    }
+    expect(
+      PokedexAcquisitionData.forGame(heartGold, 123).single.location,
+      'Parque Nacional',
+    );
+  });
+
   test('distingue dragones y eventos de Pokémon Negro y Blanco', () {
     final black = profile('Pokemon_Negro', 'NDS');
     final white = profile('Pokemon_Blanco', 'NDS');
