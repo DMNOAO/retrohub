@@ -1,5 +1,8 @@
 import '../../../core/assets/game_asset_profile.dart';
 import '../../pokemon/decoder/pokemon_decoder.dart';
+import 'gen3_acquisition_data.dart';
+import 'gen4_acquisition_data.dart';
+import 'gen5_acquisition_data.dart';
 import 'pokedex_models.dart';
 
 class PokedexAcquisitionData {
@@ -14,6 +17,16 @@ class PokedexAcquisitionData {
     PokemonAssetGame.gold ||
     PokemonAssetGame.silver ||
     PokemonAssetGame.crystal => _johto(profile, pokemonId),
+    PokemonAssetGame.rubySapphire ||
+    PokemonAssetGame.emerald ||
+    PokemonAssetGame.fireRedLeafGreen =>
+      Gen3AcquisitionData.forGame(profile, pokemonId),
+    PokemonAssetGame.diamondPearl ||
+    PokemonAssetGame.platinum ||
+    PokemonAssetGame.heartGoldSoulSilver =>
+      Gen4AcquisitionData.forGame(profile, pokemonId),
+    PokemonAssetGame.blackWhite || PokemonAssetGame.black2White2 =>
+      Gen5AcquisitionData.forGame(profile, pokemonId),
     _ => const <PokedexAcquisition>[],
   };
 
