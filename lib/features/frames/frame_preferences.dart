@@ -1,14 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FramePreferences {
-  static String _key(int gameId) => 'game_frame_$gameId';
+  static String _key(String gameId) => 'game_frame_$gameId';
 
-  static Future<String?> load(int gameId) async {
+  static Future<String?> load(String gameId) async {
     final storage = await SharedPreferences.getInstance();
     return storage.getString(_key(gameId));
   }
 
-  static Future<void> save(int gameId, String? frameId) async {
+  static Future<void> save(String gameId, String? frameId) async {
     final storage = await SharedPreferences.getInstance();
     if (frameId == null) {
       await storage.remove(_key(gameId));
