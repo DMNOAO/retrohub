@@ -5,6 +5,18 @@ class PokedexEncounter {
   const PokedexEncounter({required this.location, required this.method, required this.time});
 }
 
+class PokedexAcquisition {
+  final String method;
+  final String location;
+  final String detail;
+
+  const PokedexAcquisition({
+    required this.method,
+    required this.location,
+    required this.detail,
+  });
+}
+
 class PokedexMove {
   final int level;
   final String name;
