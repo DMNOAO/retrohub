@@ -68,10 +68,13 @@ class _FramesPageState extends State<FramesPage> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
-                _FrameTile(
-                  name: 'Sin marco',
-                  selected: _selectedId == null,
-                  onTap: () => _select(null),
+                SizedBox(
+                  height: 132,
+                  child: _FrameTile(
+                    name: 'Sin marco',
+                    selected: _selectedId == null,
+                    onTap: () => _select(null),
+                  ),
                 ),
                 if (frames.isEmpty) ...[
                   const SizedBox(height: 18),

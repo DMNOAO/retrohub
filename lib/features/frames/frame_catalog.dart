@@ -167,10 +167,35 @@ class FrameCatalog {
   ];
 
   static List<GameFrame> forGame(Game game) {
-    if (CoreLoader.isSnesRom(game.romPath)) return superNintendo;
-    if (CoreLoader.isGbaRom(game.romPath)) return const <GameFrame>[];
-    if (!CoreLoader.isGameBoyRom(game.romPath)) return const <GameFrame>[];
-    return game.romPath.toLowerCase().endsWith('.gbc')
+    final title = game.title.toLowerCase();
+    final console = game.console.toLowerCase();
+    final isSnes = CoreLoader.isSnesRom(game.romPath) ||
+        console.contains('snes') ||
+        console.contains('super nintendo');
+    final isGba = CoreLoader.isGbaRom(game.romPath) ||
+        console.contains('gba') ||
+        console.contains('advance');
+    final isKnownGameBoyTitle = gameBoy.any((frame) => frame.matchesTitle(title));
+    final isKnownGameBoyColorTitle =
+        gameBoyColor.any((frame) => frame.matchesTitle(title));
+
+    if (isSnes) return superNintendo;
+    if (isGba) return const <GameFrame>[];
+    if (isKnownGameBoyTitle) return gameBoy;
+    if (isKnownGameBoyColorTitle) {
+      return <GameFrame>[...gameBoyColor, gameBoy.last];
+    }
+
+    final isGameBoy = CoreLoader.isGameBoyRom(game.romPath) ||
+        console.contains('game boy') ||
+        console == 'gb' ||
+        console == 'gbc';
+    if (!isGameBoy) return const <GameFrame>[];
+
+    final isGameBoyColor = game.romPath.toLowerCase().endsWith('.gbc') ||
+        console.contains('color') ||
+        console == 'gbc';
+    return isGameBoyColor
         ? <GameFrame>[...gameBoyColor, gameBoy.last]
         : gameBoy;
   }
