@@ -10,6 +10,7 @@ class GameFrame {
   final double viewportWidth;
   final double viewportHeight;
   final double gameAspectRatio;
+  final int backgroundColorValue;
   final List<String> titleHints;
 
   const GameFrame({
@@ -21,6 +22,7 @@ class GameFrame {
     required this.viewportWidth,
     required this.viewportHeight,
     required this.gameAspectRatio,
+    required this.backgroundColorValue,
     this.titleHints = const <String>[],
   });
 
@@ -50,6 +52,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF90C860,
       titleHints: <String>['green', 'verde'],
     ),
     GameFrame(
@@ -61,6 +64,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFC888A8,
       titleHints: <String>['red', 'rojo'],
     ),
     GameFrame(
@@ -72,6 +76,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF5088D0,
       titleHints: <String>['blue', 'azul'],
     ),
     GameFrame(
@@ -83,6 +88,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF78C878,
       titleHints: <String>['yellow', 'amarillo'],
     ),
     GameFrame(
@@ -94,6 +100,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF011000,
     ),
   ];
 
@@ -107,6 +114,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFF8D078,
       titleHints: <String>['gold', 'oro'],
     ),
     GameFrame(
@@ -118,6 +126,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFC0C8D8,
       titleHints: <String>['silver', 'plata'],
     ),
     GameFrame(
@@ -129,6 +138,7 @@ class FrameCatalog {
       viewportWidth: _gbWidth,
       viewportHeight: _gbHeight,
       gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFB08840,
       titleHints: <String>['crystal', 'cristal'],
     ),
   ];
@@ -143,6 +153,7 @@ class FrameCatalog {
       viewportWidth: _fourThreeWidth,
       viewportHeight: _fourThreeHeight,
       gameAspectRatio: 4 / 3,
+      backgroundColorValue: 0xFF4D113F,
     ),
     GameFrame(
       id: 'snes_cartridge',
@@ -153,6 +164,7 @@ class FrameCatalog {
       viewportWidth: _fourThreeWidth,
       viewportHeight: _fourThreeHeight,
       gameAspectRatio: 4 / 3,
+      backgroundColorValue: 0xFF7D7785,
     ),
     GameFrame(
       id: 'snes_trinitron',
@@ -163,6 +175,7 @@ class FrameCatalog {
       viewportWidth: _fourThreeWidth,
       viewportHeight: _fourThreeHeight,
       gameAspectRatio: 4 / 3,
+      backgroundColorValue: 0xFF171717,
     ),
   ];
 

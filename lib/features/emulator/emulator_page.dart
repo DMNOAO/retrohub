@@ -708,7 +708,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   : RetroHubConsoleType.gameBoy;
 
                       return ColoredBox(
-                        color: Colors.black,
+                        color: Color(selectedFrame.backgroundColorValue),
                         child: Stack(
                           children: [
                             Positioned(
