@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,8 @@ import '../../core/utils/cover_helper.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
+import '../frames/frame_catalog.dart';
+import '../frames/frame_preferences.dart';
 import '../journal/journal_page.dart';
 import '../journal/services/journal_event_service.dart';
 import '../pokemon/services/pokemon_journal_tracker.dart';
@@ -71,6 +74,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   int? _ndsTouchPointer;
   List<int> _partySpeciesIds = const <int>[];
   EmulatorPreferences _preferences = const EmulatorPreferences();
+  GameFrame? _selectedFrame;
 
   Game get game => widget.game;
 
@@ -153,9 +157,19 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
 
   Future<void> _loadEmulatorPreferences() async {
     final preferences = await EmulatorPreferences.load();
+    final frameId = await FramePreferences.load(game.id);
     if (!mounted) return;
-    setState(() => _preferences = preferences);
+    setState(() {
+      _preferences = preferences;
+      _selectedFrame = FrameCatalog.byId(game, frameId);
+    });
     await _applyDisplayPreferences(preferences);
+  }
+
+  Future<void> _reloadSelectedFrame() async {
+    final frameId = await FramePreferences.load(game.id);
+    if (!mounted) return;
+    setState(() => _selectedFrame = FrameCatalog.byId(game, frameId));
   }
 
   Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
@@ -172,7 +186,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       );
       return;
     }
-    if (CoreLoader.isGbaRom(game.romPath) && preferences.gbaFullscreen) {
+    if ((CoreLoader.isGbaRom(game.romPath) && preferences.gbaFullscreen) ||
+        (CoreLoader.isGameBoyRom(game.romPath) &&
+            preferences.gameBoyFullscreen)) {
       await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
       await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
         DeviceOrientation.landscapeLeft,
@@ -298,9 +314,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         _showActionMessage(context, 'Captura registrada en la bitácora');
         break;
       case 'change_frame':
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => FramesPage(game: game)));
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => FramesPage(game: game)),
+        );
+        await _reloadSelectedFrame();
         break;
       case 'open_journal':
         Navigator.of(
@@ -348,6 +365,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
           supportsNdsOptions: CoreLoader.isNdsRom(game.romPath),
           supportsGbaFullscreen: CoreLoader.isGbaRom(game.romPath),
+          supportsGameBoyFullscreen: CoreLoader.isGameBoyRom(game.romPath),
           initialPreferences: _preferences,
           saveStateService: SaveStateService(
             gameId: game.id,
@@ -554,7 +572,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
     final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
     final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
-    final bool consoleFullscreen = snesFullscreen || gbaFullscreen;
+    final bool gameBoyFullscreen =
+        CoreLoader.isGameBoyRom(game.romPath) &&
+        _preferences.gameBoyFullscreen;
+    final bool consoleFullscreen =
+        snesFullscreen || gbaFullscreen || gameBoyFullscreen;
     _gameController.hapticsEnabled = !isSnes &&
         (isNds
             ? _preferences.ndsVibrationEnabled
@@ -649,6 +671,137 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               ),
                       ),
                     );
+
+                    final selectedFrame = _selectedFrame;
+                    if (consoleFullscreen &&
+                        landscape &&
+                        selectedFrame != null) {
+                      final scale = math.min(
+                        constraints.maxWidth / 1280,
+                        constraints.maxHeight / 720,
+                      );
+                      final frameWidth = 1280 * scale;
+                      final frameHeight = 720 * scale;
+                      final frameLeft = (constraints.maxWidth - frameWidth) / 2;
+                      final frameTop = (constraints.maxHeight - frameHeight) / 2;
+                      final viewportLeft = frameLeft +
+                          frameWidth * selectedFrame.viewportLeft;
+                      final viewportTop = frameTop +
+                          frameHeight * selectedFrame.viewportTop;
+                      final viewportWidth =
+                          frameWidth * selectedFrame.viewportWidth;
+                      final viewportHeight =
+                          frameHeight * selectedFrame.viewportHeight;
+                      final leftControlsWidth = math.max(132.0, viewportLeft);
+                      final rightControlsWidth = math.max(
+                        150.0,
+                        constraints.maxWidth -
+                            (viewportLeft + viewportWidth),
+                      );
+                      final showShoulders = isSnes || isGba;
+                      final consoleLogo = isSnes
+                          ? RetroHubConsoleType.superNintendo
+                          : isGba
+                              ? RetroHubConsoleType.gameBoyAdvance
+                              : isGbc
+                                  ? RetroHubConsoleType.gameBoyColor
+                                  : RetroHubConsoleType.gameBoy;
+
+                      return ColoredBox(
+                        color: Color(selectedFrame.backgroundColorValue),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: viewportLeft,
+                              top: viewportTop,
+                              width: viewportWidth,
+                              height: viewportHeight,
+                              child: ColoredBox(
+                                color: Colors.black,
+                                child: Center(
+                                  child: AspectRatio(
+                                    aspectRatio: selectedFrame.gameAspectRatio,
+                                    child: gameView,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: frameLeft,
+                              top: frameTop,
+                              width: frameWidth,
+                              height: frameHeight,
+                              child: IgnorePointer(
+                                child: Image.asset(
+                                  selectedFrame.assetPath,
+                                  fit: BoxFit.fill,
+                                  filterQuality: FilterQuality.none,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: leftControlsWidth,
+                              child: Opacity(
+                                opacity: _preferences.controlOpacity,
+                                child: _LandscapeLeftControls(
+                                  controller: _gameController,
+                                  directionalControl:
+                                      _preferences.directionalControl,
+                                  buttonUp: _buttonUp,
+                                  buttonDown: _buttonDown,
+                                  buttonLeft: _buttonLeft,
+                                  buttonRight: _buttonRight,
+                                  buttonSelect: _buttonSelect,
+                                  buttonL: _buttonL,
+                                  showShoulder: showShoulders,
+                                  consoleLogo: consoleLogo,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: rightControlsWidth,
+                              child: Opacity(
+                                opacity: _preferences.controlOpacity,
+                                child: _LandscapeRightControls(
+                                  controller: _gameController,
+                                  buttonA: _preferences.swapAB
+                                      ? _buttonB
+                                      : _buttonA,
+                                  buttonB: _preferences.swapAB
+                                      ? _buttonA
+                                      : _buttonB,
+                                  buttonX: _buttonX,
+                                  buttonY: _buttonY,
+                                  buttonStart: _buttonStart,
+                                  buttonR: _buttonR,
+                                  showShoulder: showShoulders,
+                                  isSnes: isSnes,
+                                  rotateActions: !isSnes,
+                                  buttonAColor: isSnes
+                                      ? Color(_preferences.snesButtonAColor)
+                                      : const Color(0xFF5E4B8B),
+                                  buttonBColor: isSnes
+                                      ? Color(_preferences.snesButtonBColor)
+                                      : const Color(0xFF8173AE),
+                                  buttonXColor: isSnes
+                                      ? Color(_preferences.snesButtonXColor)
+                                      : const Color(0xFF8173AE),
+                                  buttonYColor: isSnes
+                                      ? Color(_preferences.snesButtonYColor)
+                                      : const Color(0xFF5E4B8B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
                     if (snesFullscreen && landscape) {
                       final gameWidth = (constraints.maxHeight * 4 / 3)
@@ -777,6 +930,80 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   buttonStart: _buttonStart,
                                   buttonR: _buttonR,
                                   showShoulder: true,
+                                  isSnes: false,
+                                  rotateActions: false,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (gameBoyFullscreen && landscape) {
+                      final gameWidth = (constraints.maxHeight * 10 / 9)
+                          .clamp(0.0, constraints.maxWidth)
+                          .toDouble();
+                      final sideWidth =
+                          ((constraints.maxWidth - gameWidth) / 2)
+                              .clamp(0.0, constraints.maxWidth / 2)
+                              .toDouble();
+                      final consoleLogo = isGbc
+                          ? RetroHubConsoleType.gameBoyColor
+                          : RetroHubConsoleType.gameBoy;
+                      return ColoredBox(
+                        color: visualTheme.background,
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: true,
+                                opacity: _preferences.controlOpacity,
+                                topColor: visualTheme.background,
+                                bottomColor: visualTheme.gradient.colors[2],
+                                borderColor: visualTheme.accent.withValues(
+                                  alpha: .55,
+                                ),
+                                child: _LandscapeLeftControls(
+                                  controller: _gameController,
+                                  directionalControl:
+                                      _preferences.directionalControl,
+                                  buttonUp: _buttonUp,
+                                  buttonDown: _buttonDown,
+                                  buttonLeft: _buttonLeft,
+                                  buttonRight: _buttonRight,
+                                  buttonSelect: _buttonSelect,
+                                  buttonL: _buttonL,
+                                  showShoulder: false,
+                                  consoleLogo: consoleLogo,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: sideWidth,
+                              child: _SnesSidePanel(
+                                isLeft: false,
+                                opacity: _preferences.controlOpacity,
+                                topColor: visualTheme.background,
+                                bottomColor: visualTheme.gradient.colors[2],
+                                borderColor: visualTheme.accent.withValues(
+                                  alpha: .55,
+                                ),
+                                child: _LandscapeRightControls(
+                                  controller: _gameController,
+                                  buttonA: _preferences.swapAB
+                                      ? _buttonB
+                                      : _buttonA,
+                                  buttonB: _preferences.swapAB
+                                      ? _buttonA
+                                      : _buttonB,
+                                  buttonX: _buttonX,
+                                  buttonY: _buttonY,
+                                  buttonStart: _buttonStart,
+                                  buttonR: _buttonR,
+                                  showShoulder: false,
                                   isSnes: false,
                                   rotateActions: false,
                                 ),
