@@ -55,8 +55,10 @@ flutter:
     - assets/covers/snes/
     - assets/covers/nds/
 
-    - assets/frames/gb/
-    - assets/frames/gbc/
+    - assets/frames/gb/generic/
+    - assets/frames/gb/pokemon/
+    - assets/frames/gbc/pokemon/
+    - assets/frames/snes/generic/
 
     - assets/sprites/pokemon/gb/red_blue/
     - assets/sprites/pokemon/gb/yellow/

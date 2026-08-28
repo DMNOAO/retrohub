@@ -9,6 +9,7 @@ class EmulatorSettingsPage extends StatefulWidget {
   final bool supportsGameBoyOptions;
   final bool supportsSnesOptions;
   final bool supportsGbaFullscreen;
+  final bool supportsGameBoyFullscreen;
   final bool supportsNdsOptions;
   final EmulatorPreferences initialPreferences;
   final Future<void> Function() onRestart;
@@ -24,6 +25,7 @@ class EmulatorSettingsPage extends StatefulWidget {
     required this.supportsGameBoyOptions,
     this.supportsSnesOptions = false,
     this.supportsGbaFullscreen = false,
+    this.supportsGameBoyFullscreen = false,
     this.supportsNdsOptions = false,
     required this.initialPreferences,
     required this.onRestart,
@@ -380,6 +382,21 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.supportsGameBoyFullscreen) ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.fullscreen_rounded),
+                        title: const Text('Modo pantalla completa GB/GBC'),
+                        subtitle: const Text(
+                          'Juego 10:9 a toda altura, con controles y marco en los paneles laterales',
+                        ),
+                        value: _preferences.gameBoyFullscreen,
+                        onChanged: (value) => _update(
+                          _preferences.copyWith(gameBoyFullscreen: value),
+                        ),
+                      ),
+                      const Divider(height: 28),
+                    ],
                     if (widget.supportsGbaFullscreen) ...[
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,

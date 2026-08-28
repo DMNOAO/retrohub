@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/cover_helper.dart';
+import '../../core/emulation/core_loader.dart';
 import '../../core/utils/play_time_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/games_repository_provider.dart';
@@ -48,7 +49,10 @@ class _GameDetailPageState extends ConsumerState<GameDetailPage> {
           await _reload();
         }),
         _DetailOption(icon: Icons.bar_chart, title: 'Estadísticas', subtitle: PlayTimeFormatter.fromSeconds(game.playTimeSeconds), onTap: () {}),
-        _DetailOption(icon: Icons.image, title: 'Marcos', subtitle: 'Personalizar marco del juego', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FramesPage(game: game)))),
+        if (CoreLoader.isGameBoyRom(game.romPath) ||
+            CoreLoader.isGbaRom(game.romPath) ||
+            CoreLoader.isSnesRom(game.romPath))
+          _DetailOption(icon: Icons.image, title: 'Marcos', subtitle: 'Personalizar marco del juego', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FramesPage(game: game)))),
       ]),
     );
   }
