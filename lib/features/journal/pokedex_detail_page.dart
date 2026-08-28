@@ -360,8 +360,13 @@ class _EvolutionChain extends StatelessWidget {
 
 IconData _acquisitionIcon(String method) {
   if (method.startsWith('Regalo')) return Icons.card_giftcard_outlined;
+  if (method.startsWith('Huevo')) return Icons.egg_outlined;
   if (method.startsWith('Intercambio')) return Icons.swap_horiz;
+  if (method == 'Cápsula del Tiempo') return Icons.history;
   if (method == 'Otra versión') return Icons.sync_alt;
+  if (method.contains('fósil')) return Icons.science_outlined;
+  if (method.startsWith('Premio')) return Icons.emoji_events_outlined;
+  if (method == 'Pokémon errante') return Icons.directions_run;
   return Icons.event_available_outlined;
 }
 
