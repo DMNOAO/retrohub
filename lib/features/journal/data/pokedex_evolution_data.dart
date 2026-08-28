@@ -6,6 +6,8 @@ import 'gen5_evolution_data.dart';
 class PokedexEvolutionData {
   const PokedexEvolutionData._();
 
+  static final Map<PokemonAssetGame, _EvolutionGraph> _graphCache = {};
+
   static String forGame(GameAssetProfile profile, int pokemonId) {
     final generation = switch (profile.game) {
       PokemonAssetGame.redBlue || PokemonAssetGame.yellow => 1,
@@ -40,6 +42,164 @@ class PokedexEvolutionData {
     return rule;
   }
 
+  static List<String> chainForGame(GameAssetProfile profile, int pokemonId) {
+    final graph = _graphFor(profile);
+    if (graph == null) return const <String>[];
+    final names = graph.names;
+    final edges = graph.edges;
+    final family = <int>{pokemonId};
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final edge in edges) {
+        if (family.contains(edge.from) || family.contains(edge.to)) {
+          changed = family.add(edge.from) || changed;
+          changed = family.add(edge.to) || changed;
+        }
+      }
+    }
+    final incoming = <int, List<_EvolutionEdge>>{};
+    final outgoing = <int, List<_EvolutionEdge>>{};
+    for (final edge in edges.where(
+      (edge) => family.contains(edge.from) && family.contains(edge.to),
+    )) {
+      incoming.putIfAbsent(edge.to, () => []).add(edge);
+      outgoing.putIfAbsent(edge.from, () => []).add(edge);
+    }
+    final roots = family.where((id) => (incoming[id] ?? const []).isEmpty);
+    final routes = <String>[];
+    void visit(int id, String route, Set<int> visited) {
+      final next = outgoing[id] ?? const <_EvolutionEdge>[];
+      if (next.isEmpty) {
+        routes.add(route);
+        return;
+      }
+      for (final edge in next) {
+        if (visited.contains(edge.to)) continue;
+        visit(
+          edge.to,
+          '$route  — ${edge.condition} →  '
+          '${_chainName(names[edge.to]!, edge.to == pokemonId)}',
+          {...visited, edge.to},
+        );
+      }
+    }
+    for (final root in roots) {
+      visit(
+        root,
+        _chainName(names[root]!, root == pokemonId),
+        {root},
+      );
+    }
+    return routes.isEmpty
+        ? <String>[_chainName(names[pokemonId]!, true)]
+        : routes;
+  }
+
+  static List<String> evolvesFromForGame(
+    GameAssetProfile profile,
+    int pokemonId,
+  ) {
+    final graph = _graphFor(profile);
+    if (graph == null) return const <String>[];
+    return graph.edges
+        .where((edge) => edge.to == pokemonId)
+        .map(
+          (edge) =>
+              'Evoluciona de ${graph.names[edge.from]} · ${edge.condition}',
+        )
+        .toList(growable: false);
+  }
+
+  static _EvolutionGraph? _graphFor(GameAssetProfile profile) {
+    final cached = _graphCache[profile.game];
+    if (cached != null) return cached;
+    final rules = _rulesFor(profile);
+    if (rules == null) return null;
+    final maxId = _maxPokemonId(profile);
+    final names = <int, String>{
+      for (var id = 1; id <= maxId; id++) id: PokemonDecoder.pokemonName(id),
+    };
+    final graph = _EvolutionGraph(names, _edgesFromRules(rules, names));
+    _graphCache[profile.game] = graph;
+    return graph;
+  }
+
+  static Map<int, String>? _rulesFor(GameAssetProfile profile) =>
+      switch (profile.game) {
+        PokemonAssetGame.redBlue || PokemonAssetGame.yellow => _gen1,
+        PokemonAssetGame.gold ||
+        PokemonAssetGame.silver ||
+        PokemonAssetGame.crystal => _gen2,
+        PokemonAssetGame.rubySapphire || PokemonAssetGame.emerald => _gen3,
+        PokemonAssetGame.fireRedLeafGreen => _fireRedLeafGreen,
+        PokemonAssetGame.diamondPearl ||
+        PokemonAssetGame.platinum ||
+        PokemonAssetGame.heartGoldSoulSilver => gen4EvolutionData,
+        PokemonAssetGame.blackWhite || PokemonAssetGame.black2White2 =>
+          gen5EvolutionData,
+        _ => null,
+      };
+
+  static int _maxPokemonId(GameAssetProfile profile) => switch (profile.game) {
+    PokemonAssetGame.redBlue || PokemonAssetGame.yellow => 151,
+    PokemonAssetGame.gold ||
+    PokemonAssetGame.silver ||
+    PokemonAssetGame.crystal => 251,
+    PokemonAssetGame.rubySapphire ||
+    PokemonAssetGame.emerald ||
+    PokemonAssetGame.fireRedLeafGreen => 386,
+    PokemonAssetGame.diamondPearl ||
+    PokemonAssetGame.platinum ||
+    PokemonAssetGame.heartGoldSoulSilver => 493,
+    PokemonAssetGame.blackWhite || PokemonAssetGame.black2White2 => 649,
+    _ => 0,
+  };
+
+  static List<_EvolutionEdge> _edgesFromRules(
+    Map<int, String> rules,
+    Map<int, String> names,
+  ) {
+    final edges = <_EvolutionEdge>[];
+    for (final entry in rules.entries) {
+      final rule = entry.value;
+      if (rule.startsWith('No evoluciona')) continue;
+      final segments = rule.split(
+        RegExp(r'\n|(?<=\.)\s+(?=Evoluciona a )'),
+      );
+      for (var segment in segments) {
+        segment = segment.trim().replaceFirst('Evoluciona a ', '');
+        for (final target in names.entries) {
+          if (target.key == entry.key) continue;
+          final escapedName = RegExp.escape(target.value);
+          final match = RegExp(
+            '^(?:$escapedName)(?=\\s|\\.|:)|\\so $escapedName(?=\\s|\\.|:)',
+          ).firstMatch(segment);
+          if (match == null) continue;
+          var condition = segment.substring(match.end).trim();
+          if (match.start > 0 || segment.contains(' o ')) {
+            final colon = segment.indexOf(':');
+            if (colon >= 0) condition = segment.substring(colon + 1).trim();
+          }
+          if (condition.startsWith('al ')) condition = condition.substring(3);
+          if (condition.startsWith('con ')) condition = condition.substring(4);
+          condition = condition.replaceFirst(RegExp(r'\.$'), '');
+          condition = condition.isEmpty ? 'Condición especial' : condition;
+          condition = condition
+              .replaceFirst('Nv. ', 'Nivel ')
+              .replaceFirst('usando ', '')
+              .replaceFirst('mediante ', '')
+              .replaceFirst('intercambiarlo ', 'Intercambio ');
+          edges.add(_EvolutionEdge(entry.key, target.key, condition));
+        }
+      }
+    }
+    return edges;
+  }
+
+  static String _chainName(String name, bool selected) =>
+      selected ? '[$name]' : name;
+
   static String _level(int id, int level) => 'Evoluciona a ${PokemonDecoder.pokemonName(id)} al Nv. $level.';
   static String _stone(int id, String stone) => 'Evoluciona a ${PokemonDecoder.pokemonName(id)} usando $stone.';
   static String _trade(int id) => 'Evoluciona a ${PokemonDecoder.pokemonName(id)} mediante intercambio.';
@@ -73,4 +233,19 @@ class PokedexEvolutionData {
       'Espeon o Umbreon: transfiérelo a Rubí, Zafiro o Esmeralda.',
     ]),
   };
+}
+
+class _EvolutionEdge {
+  final int from;
+  final int to;
+  final String condition;
+
+  const _EvolutionEdge(this.from, this.to, this.condition);
+}
+
+class _EvolutionGraph {
+  final Map<int, String> names;
+  final List<_EvolutionEdge> edges;
+
+  const _EvolutionGraph(this.names, this.edges);
 }

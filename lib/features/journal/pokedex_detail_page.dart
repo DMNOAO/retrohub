@@ -11,6 +11,7 @@ import '../pokemon/decoder/pokemon_ability_resolver.dart';
 import '../pokemon/decoder/pokemon_decoder.dart';
 import '../pokemon/decoder/pokemon_learnset_resolver.dart';
 import 'data/pokedex_detail_data.dart';
+import 'data/pokedex_acquisition_data.dart';
 import 'data/pokedex_evolution_data.dart';
 import 'data/pokemon_form_resolver.dart';
 import 'widgets/journal_chrome.dart';
@@ -64,8 +65,18 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
   @override
   Widget build(BuildContext context) {
     final data = PokedexDetailData.forGame(widget.profile, _pokemonId);
-    final evolution = PokedexEvolutionData.forGame(widget.profile, _pokemonId);
-    final evolutionOptions = evolution.split('\n');
+    final evolutionChain = PokedexEvolutionData.chainForGame(
+      widget.profile,
+      _pokemonId,
+    );
+    final evolvesFrom = PokedexEvolutionData.evolvesFromForGame(
+      widget.profile,
+      _pokemonId,
+    );
+    final specialAcquisitions = PokedexAcquisitionData.forGame(
+      widget.profile,
+      _pokemonId,
+    );
     final abilities = PokemonAbilityResolver.possible(
       widget.profile,
       _pokemonId,
@@ -179,21 +190,9 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
             storageKey: 'pokedex-evolution',
             icon: Icons.change_circle_outlined,
             title: 'Evolución',
-            child: evolution.isEmpty
+            child: evolutionChain.isEmpty
                 ? const Text('Este Pokémon no tiene una evolución registrada.')
-                : evolutionOptions.length == 1
-                ? Text(evolution)
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: evolutionOptions
-                        .map(
-                          (option) => Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('• $option'),
-                          ),
-                        )
-                        .toList(),
-                  ),
+                : _EvolutionChain(routes: evolutionChain),
           ),
           if (PokemonAbilityResolver.supports(widget.profile))
             _ExpandableSection(
@@ -215,21 +214,39 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
             storageKey: 'pokedex-encounters',
             icon: Icons.location_on_outlined,
             title: 'Dónde encontrarlo',
-            child: data.encounters.isEmpty
+            child: data.encounters.isEmpty &&
+                    evolvesFrom.isEmpty &&
+                    specialAcquisitions.isEmpty
                 ? const Text(
                     'Datos de encuentro aún no cargados para esta especie.',
                   )
                 : Column(
-                    children: data.encounters
-                        .map(
+                    children: [
+                      ...evolvesFrom.map(
+                        (text) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.change_circle_outlined),
+                          title: const Text('Evolución'),
+                          subtitle: Text(text),
+                        ),
+                      ),
+                      ...specialAcquisitions.map(
+                        (item) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(_acquisitionIcon(item.method)),
+                          title: Text(item.method),
+                          subtitle: Text('${item.location}\n${item.detail}'),
+                        ),
+                      ),
+                      ...data.encounters.map(
                           (e) => ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: const Icon(Icons.place_outlined),
                             title: Text(e.location),
                             subtitle: Text('${e.method} · ${e.time}'),
                           ),
-                        )
-                        .toList(),
+                        ),
+                    ],
                   ),
           ),
           _ExpandableSection(icon: Icons.trending_up, storageKey: 'pokedex-level', title: 'Movimientos por nivel', unlocked: _caught, child: data.levelMoves.isEmpty ? const Text('Movimientos aún no cargados para esta especie.') : Column(children: data.levelMoves.map((m) {
@@ -303,6 +320,49 @@ class _PokedexDetailPageState extends State<PokedexDetailPage> {
       ),
     );
   }
+}
+
+class _EvolutionChain extends StatelessWidget {
+  final List<String> routes;
+
+  const _EvolutionChain({required this.routes});
+
+  @override
+  Widget build(BuildContext context) {
+    final normal = DefaultTextStyle.of(context).style;
+    final selected = normal.copyWith(
+      color: Theme.of(context).colorScheme.primary,
+      fontWeight: FontWeight.bold,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: routes.map((route) {
+        final start = route.indexOf('[');
+        final end = route.indexOf(']', start + 1);
+        if (start < 0 || end < 0) return Text(route);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text.rich(
+            TextSpan(
+              style: normal,
+              children: [
+                TextSpan(text: route.substring(0, start)),
+                TextSpan(text: route.substring(start + 1, end), style: selected),
+                TextSpan(text: route.substring(end + 1)),
+              ],
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+IconData _acquisitionIcon(String method) {
+  if (method.startsWith('Regalo')) return Icons.card_giftcard_outlined;
+  if (method.startsWith('Intercambio')) return Icons.swap_horiz;
+  if (method == 'Otra versión') return Icons.sync_alt;
+  return Icons.event_available_outlined;
 }
 
 class _ExpandableSection extends StatelessWidget {

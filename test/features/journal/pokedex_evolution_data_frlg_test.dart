@@ -77,4 +77,36 @@ void main() {
       hasLength(2),
     );
   });
+
+  test('muestra la cadena completa desde cualquier etapa', () {
+    final feraligatr = PokedexEvolutionData.chainForGame(crystalProfile, 160);
+    final raticate = PokedexEvolutionData.chainForGame(crystalProfile, 20);
+
+    expect(feraligatr, hasLength(1));
+    expect(feraligatr.single, contains('Totodile'));
+    expect(feraligatr.single, contains('Croconaw'));
+    expect(feraligatr.single, contains('[Feraligatr]'));
+    expect(raticate.single, contains('Rattata'));
+    expect(raticate.single, contains('[Raticate]'));
+  });
+
+  test('conserva todas las ramas y destaca la especie consultada', () {
+    final eevee = PokedexEvolutionData.chainForGame(crystalProfile, 133);
+
+    expect(eevee, hasLength(5));
+    expect(eevee.every((route) => route.contains('[Eevee]')), isTrue);
+    expect(eevee.any((route) => route.contains('Espeon')), isTrue);
+    expect(eevee.any((route) => route.contains('Umbreon')), isTrue);
+  });
+
+  test('expone la preevolución como método de obtención', () {
+    expect(
+      PokedexEvolutionData.evolvesFromForGame(crystalProfile, 160),
+      contains('Evoluciona de Croconaw · Nivel 30'),
+    );
+    expect(
+      PokedexEvolutionData.evolvesFromForGame(crystalProfile, 20),
+      contains('Evoluciona de Rattata · Nivel 20'),
+    );
+  });
 }
