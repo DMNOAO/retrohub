@@ -12,6 +12,7 @@ class GameFrame {
   final double gameAspectRatio;
   final int backgroundColorValue;
   final List<String> titleHints;
+  final bool onlyForMatchingTitle;
 
   const GameFrame({
     required this.id,
@@ -24,6 +25,7 @@ class GameFrame {
     required this.gameAspectRatio,
     required this.backgroundColorValue,
     this.titleHints = const <String>[],
+    this.onlyForMatchingTitle = false,
   });
 
   bool matchesTitle(String title) {
@@ -41,6 +43,10 @@ class FrameCatalog {
   static const double _fourThreeTop = 24 / 720;
   static const double _fourThreeWidth = 877 / 1280;
   static const double _fourThreeHeight = 672 / 720;
+  static const double _adaptedLeft = 240 / 1280;
+  static const double _adaptedTop = 52 / 720;
+  static const double _adaptedWidth = 800 / 1280;
+  static const double _adaptedHeight = 616 / 720;
 
   static const List<GameFrame> gameBoy = <GameFrame>[
     GameFrame(
@@ -102,6 +108,89 @@ class FrameCatalog {
       gameAspectRatio: 10 / 9,
       backgroundColorValue: 0xFF011000,
     ),
+    GameFrame(
+      id: 'gb_dmg_cyan',
+      name: 'DMG Cian',
+      assetPath: 'assets/frames/gb/generic/dmg_cyan_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF03A4F6,
+    ),
+    GameFrame(
+      id: 'gb_dmg_red',
+      name: 'DMG Rojo',
+      assetPath: 'assets/frames/gb/generic/dmg_red_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFF60303,
+    ),
+    GameFrame(
+      id: 'gb_dmg_turquoise',
+      name: 'DMG Turquesa',
+      assetPath: 'assets/frames/gb/generic/dmg_turquoise_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF03F6F6,
+    ),
+    GameFrame(
+      id: 'gb_dmg_yellow_green',
+      name: 'DMG Amarillo/Verde',
+      assetPath: 'assets/frames/gb/generic/dmg_yellow_green_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFCEF603,
+    ),
+    GameFrame(
+      id: 'gb_zelda_links_awakening',
+      name: 'Zelda: Link’s Awakening',
+      assetPath: 'assets/frames/gb/games/zelda_links_awakening_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFF3EBF3,
+      titleHints: <String>['zelda', 'link awakening', "link's awakening"],
+      onlyForMatchingTitle: true,
+    ),
+    GameFrame(
+      id: 'gb_pokemon_picross',
+      name: 'Pokémon Picross',
+      assetPath: 'assets/frames/gb/games/pokemon_picross_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF000000,
+      titleHints: <String>['picross'],
+      onlyForMatchingTitle: true,
+    ),
+    GameFrame(
+      id: 'gb_tetris',
+      name: 'Tetris',
+      assetPath: 'assets/frames/gb/games/tetris_16x9.png',
+      viewportLeft: _adaptedLeft,
+      viewportTop: _adaptedTop,
+      viewportWidth: _adaptedWidth,
+      viewportHeight: _adaptedHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFF0038C0,
+      titleHints: <String>['tetris'],
+      onlyForMatchingTitle: true,
+    ),
   ];
 
   static const List<GameFrame> gameBoyColor = <GameFrame>[
@@ -140,6 +229,19 @@ class FrameCatalog {
       gameAspectRatio: 10 / 9,
       backgroundColorValue: 0xFFB08840,
       titleHints: <String>['crystal', 'cristal'],
+    ),
+    GameFrame(
+      id: 'gbc_pokemon_trading_card_game',
+      name: 'Pokémon Trading Card Game',
+      assetPath: 'assets/frames/gbc/games/pokemon_trading_card_game_16x9.png',
+      viewportLeft: _gbLeft,
+      viewportTop: _gbTop,
+      viewportWidth: _gbWidth,
+      viewportHeight: _gbHeight,
+      gameAspectRatio: 10 / 9,
+      backgroundColorValue: 0xFFE8CFAF,
+      titleHints: <String>['trading card', 'pokemon tcg', 'cartas pokemon'],
+      onlyForMatchingTitle: true,
     ),
   ];
 
@@ -194,9 +296,12 @@ class FrameCatalog {
 
     if (isSnes) return superNintendo;
     if (isGba) return const <GameFrame>[];
-    if (isKnownGameBoyTitle) return gameBoy;
+    if (isKnownGameBoyTitle) return _visibleForTitle(gameBoy, title);
     if (isKnownGameBoyColorTitle) {
-      return <GameFrame>[...gameBoyColor, gameBoy.last];
+      return <GameFrame>[
+        ..._visibleForTitle(gameBoyColor, title),
+        ..._genericGameBoyFrames,
+      ];
     }
 
     final isGameBoy = CoreLoader.isGameBoyRom(game.romPath) ||
@@ -209,9 +314,28 @@ class FrameCatalog {
         console.contains('color') ||
         console == 'gbc';
     return isGameBoyColor
-        ? <GameFrame>[...gameBoyColor, gameBoy.last]
-        : gameBoy;
+        ? <GameFrame>[
+            ..._visibleForTitle(gameBoyColor, title),
+            ..._genericGameBoyFrames,
+          ]
+        : _visibleForTitle(gameBoy, title);
   }
+
+  static List<GameFrame> _visibleForTitle(
+    List<GameFrame> frames,
+    String title,
+  ) {
+    return frames
+        .where((frame) =>
+            !frame.onlyForMatchingTitle || frame.matchesTitle(title))
+        .toList(growable: false);
+  }
+
+  static Iterable<GameFrame> get _genericGameBoyFrames => gameBoy.where(
+        (frame) =>
+            frame.id == 'gb_super_game_boy_cabin' ||
+            frame.id.startsWith('gb_dmg_'),
+      );
 
   static GameFrame? byId(Game game, String? id) {
     if (id == null) return null;

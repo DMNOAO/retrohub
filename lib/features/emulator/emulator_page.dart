@@ -716,10 +716,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                               top: viewportTop,
                               width: viewportWidth,
                               height: viewportHeight,
-                              child: Center(
-                                child: AspectRatio(
-                                  aspectRatio: selectedFrame.gameAspectRatio,
-                                  child: gameView,
+                              child: ColoredBox(
+                                color: Colors.black,
+                                child: Center(
+                                  child: AspectRatio(
+                                    aspectRatio: selectedFrame.gameAspectRatio,
+                                    child: gameView,
+                                  ),
                                 ),
                               ),
                             ),

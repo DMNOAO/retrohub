@@ -56,7 +56,9 @@ flutter:
     - assets/covers/nds/
 
     - assets/frames/gb/generic/
+    - assets/frames/gb/games/
     - assets/frames/gb/pokemon/
+    - assets/frames/gbc/games/
     - assets/frames/gbc/pokemon/
     - assets/frames/snes/generic/
 
