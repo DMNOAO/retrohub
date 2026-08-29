@@ -35,6 +35,7 @@ class GoogleDriveSaveService {
   Future<GoogleDriveCloudBackup> uploadBackup(
     LocalCloudSaveBackup backup, {
     required String cloudGameId,
+    bool requestAuthorizationIfNeeded = true,
   }) async {
     return authService.withDriveClient((client) async {
       final manifestName = _name(cloudGameId, 'manifest.json');
@@ -74,7 +75,7 @@ class GoogleDriveSaveService {
         sramFileId: sramId,
         rtcFileId: rtcId,
       );
-    });
+    }, requestIfNeeded: requestAuthorizationIfNeeded);
   }
 
   Future<Directory?> downloadBackup({

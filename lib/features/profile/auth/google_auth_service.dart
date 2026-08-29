@@ -31,6 +31,7 @@ class GoogleAuthService {
   );
 
   final mobile.GoogleSignIn _mobileGoogleSignIn = mobile.GoogleSignIn.instance;
+  mobile.GoogleSignInAccount? _mobileAccount;
 
   late final Future<void> _mobileInitialization = _mobileGoogleSignIn.initialize(
     serverClientId: _webClientId,
@@ -57,6 +58,7 @@ class GoogleAuthService {
       final account =
           await _mobileGoogleSignIn.attemptLightweightAuthentication();
       if (account == null) return null;
+      _mobileAccount = account;
       return _userFromMobileAccount(account);
     }
 
@@ -94,6 +96,17 @@ class GoogleAuthService {
     if (Platform.isAndroid) {
       await _mobileInitialization;
       final account = await _mobileGoogleSignIn.authenticate();
+      _mobileAccount = account;
+      // El consentimiento ocurre junto al inicio de sesión explícito. Así,
+      // “Guardar y salir” nunca necesita abrir una ventana de Google.
+      try {
+        await account.authorizationClient.authorizeScopes(const [
+          _driveAppDataScope,
+        ]);
+      } catch (_) {
+        // La cuenta sigue siendo válida aunque el usuario posponga Drive. El
+        // botón manual de RetroHub Cloud podrá solicitarlo más adelante.
+      }
       return _userFromMobileAccount(account);
     }
 
@@ -111,6 +124,7 @@ class GoogleAuthService {
     if (Platform.isAndroid) {
       await _mobileInitialization;
       await _mobileGoogleSignIn.signOut();
+      _mobileAccount = null;
     }
   }
 
@@ -227,9 +241,17 @@ class GoogleAuthService {
 
     if (Platform.isAndroid) {
       await _mobileInitialization;
-      var account =
+      var account = _mobileAccount ??
           await _mobileGoogleSignIn.attemptLightweightAuthentication();
-      account ??= await _mobileGoogleSignIn.authenticate();
+      if (account == null) {
+        if (!requestIfNeeded) {
+          throw StateError(
+            'La sesión de Google ya no está disponible. Vuelve a iniciar sesión desde Perfil.',
+          );
+        }
+        account = await _mobileGoogleSignIn.authenticate();
+      }
+      _mobileAccount = account;
 
       var authorization = await account.authorizationClient
           .authorizationForScopes(const [_driveAppDataScope]);
@@ -322,4 +344,3 @@ class _BearerHttpClient extends http.BaseClient {
     super.close();
   }
 }
-

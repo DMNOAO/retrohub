@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:crypto/crypto.dart' as crypto;
 
 import '../../core/emulation/core_loader.dart';
 import '../../core/utils/play_time_formatter.dart';
@@ -13,6 +12,7 @@ import '../../shared/theme/appearance_provider.dart';
 import 'auth/auth_provider.dart';
 import 'auth/retrohub_user.dart';
 import 'cloud/cloud_save_local_service.dart';
+import 'cloud/cloud_save_coordinator.dart';
 import 'cloud/google_drive_save_service.dart';
 
 class ProfileStats {
@@ -261,14 +261,14 @@ class _AppearanceOption extends StatelessWidget {
             color: appearance.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: appearance.primary.withValues(
+              color: appearance.borderAccent.withValues(
                 alpha: selected ? 1 : 0.72,
               ),
               width: selected ? 2.5 : 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: appearance.primary.withValues(
+                color: appearance.borderAccent.withValues(
                   alpha: selected ? 0.34 : 0.12,
                 ),
                 blurRadius: selected ? 12 : 6,
@@ -488,16 +488,6 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
   bool _busy = false;
   String? _lastBackupPath;
 
-  Future<String> _cloudGameId(Game game) async {
-    final romFile = File(game.romPath);
-    if (!await romFile.exists()) {
-      throw StateError('No se encontró la ROM local de ${game.title}.');
-    }
-
-    final digest = await crypto.sha1.bind(romFile.openRead()).first;
-    return digest.toString();
-  }
-
   Game? get _selectedGame {
     if (widget.games.isEmpty) return null;
 
@@ -517,17 +507,14 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
 
     setState(() => _busy = true);
     try {
-      final cloudGameId = await _cloudGameId(game);
-      final backup = await _cloudSaveService.createBackup(
-        gameId: game.id,
-        romPath: game.romPath,
-        gameTitle: game.title,
-        romHash: cloudGameId,
-      );
-      final drive = GoogleDriveSaveService(
+      final backup = await CloudSaveCoordinator(
         authService: ref.read(googleAuthServiceProvider),
+        localService: _cloudSaveService,
+      ).uploadGame(
+        gameId: game.id,
+        gameTitle: game.title,
+        romPath: game.romPath,
       );
-      await drive.uploadBackup(backup, cloudGameId: cloudGameId);
 
       if (!mounted) return;
       setState(() => _lastBackupPath = backup.directory.path);
@@ -573,7 +560,13 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
 
     setState(() => _busy = true);
     try {
-      final cloudGameId = await _cloudGameId(game);
+      final cloudGameId = await CloudSaveCoordinator(
+        authService: ref.read(googleAuthServiceProvider),
+        localService: _cloudSaveService,
+      ).cloudGameId(
+        gameTitle: game.title,
+        romPath: game.romPath,
+      );
       final drive = GoogleDriveSaveService(
         authService: ref.read(googleAuthServiceProvider),
       );

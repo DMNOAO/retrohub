@@ -22,13 +22,13 @@ enum AppAppearance {
       sprite: 'assets/sprites/pokemon/nds/gen5/0250.png'),
   silver('Plata', 0xFFB8C5D1, 0xFF465564, 0xFFE2EAF1, 0xFFFFFFFF,
       sprite: 'assets/sprites/pokemon/nds/gen5/0249.png'),
-  crystal('Cristal', 0xFF13BDD1, 0xFF075564, 0xFF5EE9F4, 0xFFA291FF,
+  crystal('Cristal', 0xFF33206E, 0xFF17294F, 0xFF72DDF2, 0xFF9D75EA,
       sprite: 'assets/sprites/pokemon/nds/gen5/0245.png'),
   emerald('Esmeralda', 0xFF08A65C, 0xFF075A36, 0xFF43E391, 0xFFA3F5C6,
       sprite: 'assets/sprites/pokemon/nds/gen5/0384.png'),
-  ruby('Rubí', 0xFFE21855, 0xFF740B31, 0xFFFF5C87, 0xFFFFA6B5,
+  ruby('Rubí', 0xFF9E1833, 0xFF5F1025, 0xFFFF4F66, 0xFF3C8DFF,
       sprite: 'assets/sprites/pokemon/nds/gen5/0383.png'),
-  sapphire('Zafiro', 0xFF1559D6, 0xFF0A2D70, 0xFF5793FF, 0xFF83D9FF,
+  sapphire('Zafiro', 0xFF0756A6, 0xFF082E68, 0xFF43A5FF, 0xFFFF5A5F,
       sprite: 'assets/sprites/pokemon/nds/gen5/0382.png'),
   leafGreen('Verde Hoja', 0xFF62C947, 0xFF286A22, 0xFF91E56E, 0xFFD0F58F,
       sprite: 'assets/sprites/pokemon/nds/gen5/0003.png'),
@@ -163,6 +163,10 @@ enum AppAppearance {
   Color get surface => Color(_surfaceValue);
   Color get primary => Color(_primaryValue);
   Color get secondary => Color(_secondaryValue);
+  Color get borderAccent => switch (this) {
+        AppAppearance.ruby || AppAppearance.sapphire => secondary,
+        _ => primary,
+      };
 
   int get catalogOrder => switch (this) {
         AppAppearance.red => 100,
@@ -201,6 +205,7 @@ enum AppAppearance {
         surface: surface,
         primary: primary,
         secondary: secondary,
+        outlineAccent: borderAccent,
       );
 
   static AppAppearance fromName(String? value) => AppAppearance.values.firstWhere(

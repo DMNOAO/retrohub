@@ -20,6 +20,8 @@ import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
 import '../frames/frame_catalog.dart';
 import '../frames/frame_preferences.dart';
+import '../profile/auth/auth_provider.dart';
+import '../profile/cloud/cloud_save_coordinator.dart';
 import '../journal/journal_page.dart';
 import '../journal/services/journal_event_service.dart';
 import '../pokemon/services/pokemon_journal_tracker.dart';
@@ -69,6 +71,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   bool _sessionClosedLogged = false;
   bool _sessionPersisted = false;
   bool _isClosing = false;
+  bool _allowPop = false;
+  String _closingStatus = 'Guardando partida…';
   bool _exitDialogOpen = false;
   Timer? _headerRefreshTimer;
   int? _ndsTouchPointer;
@@ -456,12 +460,19 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     _exitDialogOpen = false;
 
     if (shouldExit != true || !context.mounted) return;
-    await _closeAndPop(context);
+    await _closeAndPop();
   }
 
-  Future<void> _closeAndPop(BuildContext context) async {
+  Future<void> _closeAndPop() async {
     if (_isClosing) return;
-    setState(() => _isClosing = true);
+    final navigator = Navigator.of(this.context);
+    final emulatorRoute = ModalRoute.of(this.context);
+    final messenger = ScaffoldMessenger.of(this.context);
+    setState(() {
+      _isClosing = true;
+      _allowPop = false;
+      _closingStatus = 'Guardando partida local…';
+    });
 
     if (!CoreLoader.isSnesRom(game.romPath) &&
         _preferences.autoSaveOnExit) {
@@ -471,13 +482,77 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       );
     }
     await _gameController.saveSram();
+    String? cloudError;
+    final user = ref.read(authUserProvider).value;
+    if (user != null) {
+      if (mounted) {
+        setState(() => _closingStatus = 'Subiendo a RetroHub Cloud…');
+      }
+      try {
+        await CloudSaveCoordinator(
+          authService: ref.read(googleAuthServiceProvider),
+        ).uploadGame(
+          gameId: game.id,
+          gameTitle: game.title,
+          romPath: game.romPath,
+          requestAuthorizationIfNeeded: false,
+        );
+      } catch (error) {
+        cloudError = error.toString();
+      }
+    }
+    if (mounted) setState(() => _closingStatus = 'Cerrando juego…');
     final tracker = _pokemonJournalTracker;
     if (tracker != null) await tracker.stop();
     await _logSessionClosed();
 
-    if (context.mounted) {
-      Navigator.of(context).pop();
+    if (!mounted) return;
+
+    await _waitForAppToResume();
+    if (!mounted) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    if (emulatorRoute != null && emulatorRoute.isActive) {
+      navigator.popUntil((route) => route == emulatorRoute);
+      setState(() => _allowPop = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted && emulatorRoute.isCurrent) navigator.pop();
+    } else {
+      setState(() => _allowPop = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) navigator.pop();
     }
+
+    if (cloudError != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'La partida quedó guardada localmente, pero no se pudo subir a la nube: $cloudError',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _waitForAppToResume() async {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      return;
+    }
+
+    final completer = Completer<void>();
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        if (!completer.isCompleted) completer.complete();
+        listener.dispose();
+      },
+    );
+    await completer.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => listener.dispose(),
+    );
   }
 
   Future<void> _openSaveStates(
@@ -583,7 +658,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             : _preferences.vibrationEnabled);
 
     return PopScope(
-      canPop: _isClosing,
+      canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) unawaited(_requestExit(context));
       },
@@ -1490,6 +1565,48 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                 right: 14,
                 child: _LinkStatusChip(
                   linkManager: _gameController.linkManager,
+                ),
+              ),
+            if (_isClosing)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: .72),
+                  child: Center(
+                    child: Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 38),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 24,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 18),
+                            Text(
+                              _closingStatus,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No cierres RetroHub mientras termina el respaldo.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
