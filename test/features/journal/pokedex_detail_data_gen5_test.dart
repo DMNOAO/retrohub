@@ -30,4 +30,23 @@ void main() {
     expect(PokemonAbilityResolver.current(white, 501, 1)?.name, 'Torrente');
     expect(PokemonAbilityResolver.current(white, 501, 2)?.name, 'Caparazón');
   });
+
+  test('usa las reglas de evolución vigentes en Gen V', () {
+    expect(PokedexEvolutionData.forGame(white, 513), contains('Piedra Fuego'));
+    expect(PokedexEvolutionData.forGame(white, 27), contains('Nv. 22'));
+    expect(PokedexEvolutionData.forGame(white, 52), contains('Nv. 28'));
+    expect(PokedexEvolutionData.forGame(white, 79), allOf(contains('Nv. 37'), contains('Roca del Rey')));
+    expect(PokedexEvolutionData.forGame(white, 100), contains('Nv. 30'));
+    expect(PokedexEvolutionData.forGame(white, 554), contains('Nv. 35'));
+    expect(PokedexEvolutionData.forGame(white, 588), contains('Shelmet'));
+    expect(PokedexEvolutionData.forGame(white, 616), contains('Karrablast'));
+  });
+
+  test('no deja condiciones genéricas en las evoluciones de Gen V', () {
+    for (var species = 1; species <= 649; species++) {
+      final evolution = PokedexEvolutionData.forGame(white, species);
+      expect(evolution, isNot(contains('objeto evolutivo correspondiente')), reason: 'Pokémon #$species');
+      expect(evolution, isNot(contains('condición especial')), reason: 'Pokémon #$species');
+    }
+  });
 }
