@@ -463,6 +463,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
 
   Future<void> _closeAndPop(BuildContext context) async {
     if (_isClosing) return;
+    final navigator = Navigator.of(context);
+    final emulatorRoute = ModalRoute.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _isClosing = true);
 
     if (!CoreLoader.isSnesRom(game.romPath) &&
@@ -493,18 +496,24 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     if (tracker != null) await tracker.stop();
     await _logSessionClosed();
 
-    if (context.mounted) {
-      final messenger = ScaffoldMessenger.of(context);
-      Navigator.of(context).pop();
-      if (cloudError != null) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'La partida quedó guardada localmente, pero no se pudo subir a la nube: $cloudError',
-            ),
-          ),
-        );
+    if (!mounted) return;
+
+    if (emulatorRoute != null && emulatorRoute.isActive) {
+      navigator.popUntil((route) => route == emulatorRoute);
+      final didPop = await navigator.maybePop();
+      if (!didPop && emulatorRoute.isActive) {
+        navigator.removeRoute(emulatorRoute);
       }
+    }
+
+    if (cloudError != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'La partida quedó guardada localmente, pero no se pudo subir a la nube: $cloudError',
+          ),
+        ),
+      );
     }
   }
 

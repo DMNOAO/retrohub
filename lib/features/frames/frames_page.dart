@@ -50,7 +50,40 @@ class _FramesPageState extends State<FramesPage> {
     final recommended = FrameCatalog.recommendedFor(widget.game);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Marcos')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_frames_rounded,
+              color: Theme.of(context).colorScheme.outline,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Marcos',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: .4,
+              ),
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: Builder(
+            builder: (context) => Container(
+              height: 3,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outline,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
