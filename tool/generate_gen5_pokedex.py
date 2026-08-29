@@ -7,8 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CSV = Path('/tmp/retrohub-pokeapi/data/v2/csv')
 VERSION_GROUP = 11
+EVOLUTION_VERSION_GROUP = 14
 VERSIONS = {17, 18}
 LANGUAGE = 7
+EVOLUTION_LOCATION_NAMES_ES = {
+    375: 'Bosque Azulejo',
+    379: 'Cueva Electrorroca',
+    380: 'Monte Tuerca',
+}
 
 
 def rows(name):
@@ -30,6 +36,7 @@ def main():
     ability_names = localized('ability_names.csv', 'ability_id')
     location_names = localized('location_names.csv', 'location_id')
     species_names = localized('pokemon_species_names.csv', 'pokemon_species_id')
+    item_names = localized('item_names.csv', 'item_id')
     locations = {int(r['id']): r['identifier'] for r in rows('locations.csv')}
     areas = {int(r['id']): r for r in rows('location_areas.csv')}
     slots = {int(r['id']): int(r['encounter_method_id']) for r in rows('encounter_slots.csv')}
@@ -85,23 +92,83 @@ def main():
 
     species_rows = {int(r['id']): r for r in rows('pokemon_species.csv') if int(r['id']) <= 649}
     evolutions = {}
-    evolution_rows = {int(r['evolved_species_id']): r for r in rows('pokemon_evolution.csv')}
+    evolution_rows = {}
+    for row in rows('pokemon_evolution.csv'):
+        version_group = int(row.get('version_group_id') or 0)
+        if version_group <= EVOLUTION_VERSION_GROUP:
+            target = int(row['evolved_species_id'])
+            previous = evolution_rows.get(target)
+            if previous is None or version_group > int(previous.get('version_group_id') or 0):
+                evolution_rows[target] = row
+
+    def evolution_condition(rule):
+        trigger = int(rule.get('evolution_trigger_id') or 0)
+        level = rule.get('minimum_level')
+        gender = int(rule.get('gender_id') or 0)
+        item = int(rule.get('trigger_item_id') or 0)
+        held_item = int(rule.get('held_item_id') or 0)
+        happiness = rule.get('minimum_happiness')
+        beauty = rule.get('minimum_beauty')
+        relative_stats = rule.get('relative_physical_stats')
+        known_move = int(rule.get('known_move_id') or 0)
+        location_id = int(rule.get('location_id') or 0)
+        party_species = int(rule.get('party_species_id') or 0)
+        trade_species = int(rule.get('trade_species_id') or 0)
+        time = rule.get('time_of_day')
+
+        if trigger == 4:
+            return 'al evolucionar Nincada al Nv. 20 con un espacio libre en el equipo y una Poké Ball'
+        gender_text = ' si es hembra' if gender == 1 else ' si es macho' if gender == 2 else ''
+        if trigger == 3 and item:
+            return f'usando {item_names.get(item, "el objeto evolutivo correspondiente")}{gender_text}'
+        if trigger == 2:
+            if held_item:
+                return f'al intercambiarlo con {item_names.get(held_item, "el objeto requerido")}'
+            if trade_species:
+                return f'al intercambiarlo por {species_names.get(trade_species, "el Pokémon requerido")}'
+            return 'mediante intercambio'
+
+        conditions = []
+        if level:
+            conditions.append(f'al Nv. {level}')
+        elif happiness:
+            conditions.append('con amistad alta')
+        elif beauty:
+            conditions.append(f'con Belleza de al menos {beauty}')
+        else:
+            conditions.append('al subir de nivel')
+        if held_item:
+            conditions.append(f'llevando {item_names.get(held_item, "el objeto requerido")}')
+        if gender == 1:
+            conditions.append('si es hembra')
+        elif gender == 2:
+            conditions.append('si es macho')
+        if relative_stats == '1':
+            conditions.append('si Ataque > Defensa')
+        elif relative_stats == '-1':
+            conditions.append('si Ataque < Defensa')
+        elif relative_stats == '0':
+            conditions.append('si Ataque = Defensa')
+        if time == 'day':
+            conditions.append('de día')
+        elif time == 'night':
+            conditions.append('de noche')
+        if known_move:
+            conditions.append(f'conociendo {move_names.get(known_move, "el movimiento requerido")}')
+        if location_id:
+            place = EVOLUTION_LOCATION_NAMES_ES.get(location_id) or location_names.get(location_id)
+            if not place:
+                place = locations.get(location_id, 'el lugar especial correspondiente').replace('-', ' ').title()
+            conditions.append(f'en {place}')
+        if party_species:
+            conditions.append(f'con {species_names.get(party_species, "el Pokémon requerido")} en el equipo')
+        return ' '.join(conditions)
     for target, species_row in species_rows.items():
         parent = species_row['evolves_from_species_id']
         if not parent:
             continue
         rule = evolution_rows.get(target, {})
-        trigger = int(rule.get('evolution_trigger_id') or 0)
-        if rule.get('minimum_level'):
-            condition = f'al Nv. {rule["minimum_level"]}'
-        elif rule.get('minimum_happiness'):
-            condition = 'con amistad alta'
-        elif trigger == 2:
-            condition = 'mediante intercambio'
-        elif trigger == 3:
-            condition = 'usando el objeto evolutivo correspondiente'
-        else:
-            condition = 'cumpliendo su condición especial'
+        condition = evolution_condition(rule)
         evolutions.setdefault(int(parent), []).append(
             f'Evoluciona a {species_names.get(target, "Pokémon #" + str(target))} {condition}.'
         )

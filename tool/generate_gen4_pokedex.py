@@ -29,6 +29,27 @@ def esc(value):
     return value.replace('\\', '\\\\').replace("'", "\\'").replace('\n', ' ').strip()
 
 
+ITEM_NAMES_ES = {
+    'THUNDERSTONE': 'Piedra Trueno', 'WATER_STONE': 'Piedra Agua',
+    'LEAF_STONE': 'Piedra Hoja', 'FIRE_STONE': 'Piedra Fuego',
+    'MOON_STONE': 'Piedra Lunar', 'SUN_STONE': 'Piedra Solar',
+    'SHINY_STONE': 'Piedra Día', 'DUSK_STONE': 'Piedra Noche',
+    'DAWN_STONE': 'Piedra Alba', 'OVAL_STONE': 'Piedra Oval',
+    'KINGS_ROCK': 'Roca del Rey', 'METAL_COAT': 'Revestimiento Metálico',
+    'DRAGON_SCALE': 'Escama Dragón', 'UPGRADE': 'Mejora',
+    'PROTECTOR': 'Protector', 'ELECTIRIZER': 'Electrizador',
+    'MAGMARIZER': 'Magmatizador', 'DUBIOUS_DISC': 'Disco Extraño',
+    'REAPER_CLOTH': 'Tela Terrible', 'DEEPSEATOOTH': 'Diente Marino',
+    'DEEPSEASCALE': 'Escama Marina',
+    'RAZOR_CLAW': 'Garra Afilada', 'RAZOR_FANG': 'Colmillo Agudo',
+}
+
+
+def item_name(raw):
+    identifier = str(raw).removeprefix('ITEM_')
+    return ITEM_NAMES_ES.get(identifier, identifier.replace('_', ' ').title())
+
+
 def location(raw):
     value = raw.removeprefix('encounters_').replace('_', ' ').title()
     replacements = {
@@ -108,22 +129,32 @@ def main():
                 'EVO_LEVEL': f'al Nv. {parameter}', 'EVO_TRADE': 'mediante intercambio',
                 'EVO_FRIENDSHIP': 'con amistad alta', 'EVO_FRIENDSHIP_DAY': 'con amistad alta de día',
                 'EVO_FRIENDSHIP_NIGHT': 'con amistad alta de noche',
-                'EVO_TRADE_WITH_HELD_ITEM': f'al intercambiarlo con {str(parameter).removeprefix("ITEM_").replace("_", " ").title()}',
-                'EVO_USE_ITEM': f'usando {str(parameter).removeprefix("ITEM_").replace("_", " ").title()}',
+                'EVO_TRADE_WITH_HELD_ITEM': f'al intercambiarlo con {item_name(parameter)}',
+                'EVO_USE_ITEM': f'usando {item_name(parameter)}',
                 'EVO_LEVEL_ATK_GT_DEF': f'al Nv. {parameter} si Ataque > Defensa',
                 'EVO_LEVEL_ATK_EQ_DEF': f'al Nv. {parameter} si Ataque = Defensa',
                 'EVO_LEVEL_ATK_LT_DEF': f'al Nv. {parameter} si Ataque < Defensa',
                 'EVO_LEVEL_MALE': f'al Nv. {parameter} si es macho',
                 'EVO_LEVEL_FEMALE': f'al Nv. {parameter} si es hembra',
                 'EVO_LEVEL_DAY': f'al Nv. {parameter} de día', 'EVO_LEVEL_NIGHT': f'al Nv. {parameter} de noche',
-                'EVO_LEVEL_KNOW_MOVE': f'al subir de nivel con el movimiento requerido',
-                'EVO_LEVEL_WITH_MON_IN_PARTY': 'al subir de nivel con el Pokémon requerido en el equipo',
+                'EVO_LEVEL_BEAUTY': f'al subir de nivel con Belleza de al menos {parameter}',
+                'EVO_LEVEL_PID_HIGH': f'al Nv. {parameter} (según su valor de personalidad)',
+                'EVO_LEVEL_PID_LOW': f'al Nv. {parameter} (según su valor de personalidad)',
+                'EVO_LEVEL_NINJASK': f'al Nv. {parameter}',
+                'EVO_LEVEL_SHEDINJA': f'al evolucionar Nincada al Nv. {parameter} con un espacio libre en el equipo y una Poké Ball',
+                'EVO_LEVEL_KNOW_MOVE': f'al subir de nivel conociendo {move_names.get(move_ids.get(str(parameter).removeprefix("MOVE_"), 0), str(parameter).removeprefix("MOVE_").replace("_", " ").title())}',
+                'EVO_LEVEL_WITH_MON_IN_PARTY': f'al subir de nivel con {species_names.get(species_ids.get(str(parameter).removeprefix("SPECIES_"), 0), "el Pokémon requerido")} en el equipo',
+                'EVO_LEVEL_SPECIES_IN_PARTY': f'al subir de nivel con {species_names.get(species_ids.get(str(parameter).removeprefix("SPECIES_"), 0), "el Pokémon requerido")} en el equipo',
+                'EVO_LEVEL_WITH_HELD_ITEM_DAY': f'al subir de nivel de día llevando {item_name(parameter)}',
+                'EVO_LEVEL_WITH_HELD_ITEM_NIGHT': f'al subir de nivel de noche llevando {item_name(parameter)}',
                 'EVO_LEVEL_MAGNETIC_FIELD': 'al subir de nivel en Monte Corona',
                 'EVO_LEVEL_MOSS_ROCK': 'al subir de nivel cerca de la Roca Musgo',
                 'EVO_LEVEL_ICE_ROCK': 'al subir de nivel cerca de la Roca Hielo',
                 'EVO_LEVEL_HAPPINESS': 'con amistad alta',
                 'EVO_LEVEL_HAPPINESS_DAY': 'con amistad alta de día',
                 'EVO_LEVEL_HAPPINESS_NIGHT': 'con amistad alta de noche',
+                'EVO_USE_ITEM_FEMALE': f'usando {item_name(parameter)} si es hembra',
+                'EVO_USE_ITEM_MALE': f'usando {item_name(parameter)} si es macho',
             }
             rules.append(f'Evoluciona a {target_name} {labels.get(method, "cumpliendo su condición especial")}.')
         evolutions[species_id] = rules
