@@ -20,6 +20,8 @@ import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
 import '../frames/frame_catalog.dart';
 import '../frames/frame_preferences.dart';
+import '../profile/auth/auth_provider.dart';
+import '../profile/cloud/cloud_save_coordinator.dart';
 import '../journal/journal_page.dart';
 import '../journal/services/journal_event_service.dart';
 import '../pokemon/services/pokemon_journal_tracker.dart';
@@ -471,12 +473,38 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       );
     }
     await _gameController.saveSram();
+    String? cloudError;
+    final user = ref.read(authUserProvider).value;
+    if (user != null) {
+      try {
+        await CloudSaveCoordinator(
+          authService: ref.read(googleAuthServiceProvider),
+        ).uploadGame(
+          gameId: game.id,
+          gameTitle: game.title,
+          romPath: game.romPath,
+          requestAuthorizationIfNeeded: false,
+        );
+      } catch (error) {
+        cloudError = error.toString();
+      }
+    }
     final tracker = _pokemonJournalTracker;
     if (tracker != null) await tracker.stop();
     await _logSessionClosed();
 
     if (context.mounted) {
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
+      if (cloudError != null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'La partida quedó guardada localmente, pero no se pudo subir a la nube: $cloudError',
+            ),
+          ),
+        );
+      }
     }
   }
 

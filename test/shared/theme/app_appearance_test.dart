@@ -1,7 +1,14 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retrohub/shared/theme/app_appearance.dart';
 
 void main() {
+  test('las paletas de las portadas conservan sus acentos legendarios', () {
+    expect(AppAppearance.crystal.secondary, const Color(0xFF9D75EA));
+    expect(AppAppearance.ruby.secondary, const Color(0xFF3C8DFF));
+    expect(AppAppearance.sapphire.secondary, const Color(0xFFFF5A5F));
+  });
+
   group('AppAppearance.forGameTitle', () {
     test('distingue los remakes de Oro y Plata originales', () {
       expect(AppAppearance.forGameTitle('Pokémon HeartGold'), AppAppearance.heartGold);

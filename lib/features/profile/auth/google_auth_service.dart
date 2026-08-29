@@ -94,6 +94,16 @@ class GoogleAuthService {
     if (Platform.isAndroid) {
       await _mobileInitialization;
       final account = await _mobileGoogleSignIn.authenticate();
+      // El consentimiento ocurre junto al inicio de sesión explícito. Así,
+      // “Guardar y salir” nunca necesita abrir una ventana de Google.
+      try {
+        await account.authorizationClient.authorizeScopes(const [
+          _driveAppDataScope,
+        ]);
+      } catch (_) {
+        // La cuenta sigue siendo válida aunque el usuario posponga Drive. El
+        // botón manual de RetroHub Cloud podrá solicitarlo más adelante.
+      }
       return _userFromMobileAccount(account);
     }
 
@@ -322,4 +332,3 @@ class _BearerHttpClient extends http.BaseClient {
     super.close();
   }
 }
-
