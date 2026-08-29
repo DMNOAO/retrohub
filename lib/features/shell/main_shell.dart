@@ -62,7 +62,7 @@ class _MainShellState extends State<MainShell> {
           children: [
             Icon(
               titleIcons[_selectedIndex],
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.outline,
               size: 24,
             ),
             const SizedBox(width: 10),
@@ -81,7 +81,7 @@ class _MainShellState extends State<MainShell> {
             height: 3,
             margin: const EdgeInsets.symmetric(horizontal: 24),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.outline,
               borderRadius: BorderRadius.circular(99),
             ),
           ),

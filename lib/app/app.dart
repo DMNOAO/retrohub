@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/profile/auth/auth_provider.dart';
+import '../features/widgets/retrohub_identity_banner.dart';
 import '../shared/theme/app_appearance.dart';
 import '../shared/theme/appearance_provider.dart';
 import 'router.dart';
@@ -41,37 +42,71 @@ class _StartupScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 112,
-                  height: 112,
+                  width: 270,
+                  height: 142,
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
                   decoration: BoxDecoration(
-                    color: colors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.primary, width: 2),
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        colors.surface,
+                        Color.lerp(colors.surface, colors.primary, .34)!,
+                        Color.lerp(colors.surface, colors.secondary, .24)!,
+                      ],
+                    ),
+                    border: Border.all(color: colors.outline, width: 2),
                     boxShadow: [
                       BoxShadow(
                         color: colors.secondary.withValues(alpha: 0.35),
-                        blurRadius: 28,
+                        blurRadius: 30,
                       ),
                     ],
                   ),
-                  child: Icon(
-                    Icons.sports_esports,
-                    size: 58,
-                    color: colors.primary,
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: List<Color>.generate(
+                        18,
+                        (index) => index.isEven
+                            ? Colors.transparent
+                            : Colors.black.withValues(alpha: .035),
+                      ),
+                    ),
+                  ),
+                  child: const Center(
+                    child: RetroHubAnimatedConsoleLogo(
+                      interval: Duration(milliseconds: 420),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'RetroHub',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+                const SizedBox(height: 26),
+                Text(
+                  'INICIANDO SISTEMA',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: colors.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 4,
+                    shadows: [
+                      Shadow(color: colors.primary, blurRadius: 10),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Preparando tu biblioteca y tu cuenta…',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: colors.onSurfaceVariant),
+                  'Biblioteca  •  Cuenta  •  Partidas',
+                  style: TextStyle(
+                    color: colors.onSurfaceVariant,
+                    fontSize: 12,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 26),
                 const SizedBox(
                   width: 34,
                   height: 34,

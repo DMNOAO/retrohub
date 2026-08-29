@@ -7,6 +7,12 @@ void main() {
     expect(AppAppearance.crystal.secondary, const Color(0xFF9D75EA));
     expect(AppAppearance.ruby.secondary, const Color(0xFF3C8DFF));
     expect(AppAppearance.sapphire.secondary, const Color(0xFFFF5A5F));
+    expect(AppAppearance.ruby.borderAccent, AppAppearance.ruby.secondary);
+    expect(
+      AppAppearance.sapphire.borderAccent,
+      AppAppearance.sapphire.secondary,
+    );
+    expect(AppAppearance.crystal.borderAccent, AppAppearance.crystal.primary);
   });
 
   group('AppAppearance.forGameTitle', () {

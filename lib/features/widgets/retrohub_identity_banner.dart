@@ -12,32 +12,6 @@ class RetroHubIdentityBanner extends StatefulWidget {
 }
 
 class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
-  static const _logos = <RetroHubConsoleType>[
-    RetroHubConsoleType.gameBoy,
-    RetroHubConsoleType.gameBoyColor,
-    RetroHubConsoleType.gameBoyAdvance,
-    RetroHubConsoleType.superNintendo,
-    RetroHubConsoleType.nintendoDs,
-  ];
-
-  int _index = 0;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted) return;
-      setState(() => _index = (_index + 1) % _logos.length);
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -60,23 +34,7 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 650),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: .96, end: 1).animate(animation),
-                child: child,
-              ),
-            ),
-            child: FittedBox(
-              key: ValueKey(_logos[_index]),
-              fit: BoxFit.scaleDown,
-              child: RetroHubConsoleLogo(console: _logos[_index]),
-            ),
-          ),
+          const RetroHubAnimatedConsoleLogo(),
           const SizedBox(height: 12),
           Text(
             'Preserva la historia de cada partida',
@@ -87,6 +45,69 @@ class _RetroHubIdentityBannerState extends State<RetroHubIdentityBanner> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class RetroHubAnimatedConsoleLogo extends StatefulWidget {
+  final Duration interval;
+
+  const RetroHubAnimatedConsoleLogo({
+    super.key,
+    this.interval = const Duration(seconds: 5),
+  });
+
+  @override
+  State<RetroHubAnimatedConsoleLogo> createState() =>
+      _RetroHubAnimatedConsoleLogoState();
+}
+
+class _RetroHubAnimatedConsoleLogoState
+    extends State<RetroHubAnimatedConsoleLogo> {
+  static const _logos = <RetroHubConsoleType>[
+    RetroHubConsoleType.gameBoy,
+    RetroHubConsoleType.gameBoyColor,
+    RetroHubConsoleType.gameBoyAdvance,
+    RetroHubConsoleType.superNintendo,
+    RetroHubConsoleType.nintendoDs,
+  ];
+
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(widget.interval, (_) {
+      if (!mounted) return;
+      setState(() => _index = (_index + 1) % _logos.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 380),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: .94, end: 1).animate(animation),
+          child: child,
+        ),
+      ),
+      child: FittedBox(
+        key: ValueKey(_logos[_index]),
+        fit: BoxFit.scaleDown,
+        child: RetroHubConsoleLogo(console: _logos[_index]),
       ),
     );
   }

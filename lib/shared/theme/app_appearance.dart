@@ -163,6 +163,10 @@ enum AppAppearance {
   Color get surface => Color(_surfaceValue);
   Color get primary => Color(_primaryValue);
   Color get secondary => Color(_secondaryValue);
+  Color get borderAccent => switch (this) {
+        AppAppearance.ruby || AppAppearance.sapphire => secondary,
+        _ => primary,
+      };
 
   int get catalogOrder => switch (this) {
         AppAppearance.red => 100,
@@ -201,6 +205,7 @@ enum AppAppearance {
         surface: surface,
         primary: primary,
         secondary: secondary,
+        outlineAccent: borderAccent,
       );
 
   static AppAppearance fromName(String? value) => AppAppearance.values.firstWhere(

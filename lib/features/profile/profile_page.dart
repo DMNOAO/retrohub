@@ -261,14 +261,14 @@ class _AppearanceOption extends StatelessWidget {
             color: appearance.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: appearance.primary.withValues(
+              color: appearance.borderAccent.withValues(
                 alpha: selected ? 1 : 0.72,
               ),
               width: selected ? 2.5 : 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: appearance.primary.withValues(
+                color: appearance.borderAccent.withValues(
                   alpha: selected ? 0.34 : 0.12,
                 ),
                 blurRadius: selected ? 12 : 6,

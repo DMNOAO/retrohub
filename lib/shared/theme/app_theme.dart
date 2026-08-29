@@ -13,6 +13,7 @@ class AppTheme {
     required Color surface,
     required Color primary,
     required Color secondary,
+    Color? outlineAccent,
   }) {
     final brightness = ThemeData.estimateBrightnessForColor(surface);
     final onSurface = _foregroundFor(surface);
@@ -25,7 +26,7 @@ class AppTheme {
       onSecondary: _foregroundFor(secondary),
       surface: surface,
       onSurface: onSurface,
-      outline: primary,
+      outline: outlineAccent ?? primary,
       outlineVariant: secondary.withValues(alpha: 0.62),
       error: const Color(0xFFFF6B7A),
       onError: Colors.white,
@@ -70,7 +71,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
           side: BorderSide(
-            color: primary.withValues(alpha: 0.78),
+            color: scheme.outline.withValues(alpha: 0.86),
             width: 1.2,
           ),
         ),
