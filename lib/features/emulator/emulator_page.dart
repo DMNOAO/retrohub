@@ -458,14 +458,14 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     _exitDialogOpen = false;
 
     if (shouldExit != true || !context.mounted) return;
-    await _closeAndPop(context);
+    await _closeAndPop();
   }
 
-  Future<void> _closeAndPop(BuildContext context) async {
+  Future<void> _closeAndPop() async {
     if (_isClosing) return;
-    final navigator = Navigator.of(context);
-    final emulatorRoute = ModalRoute.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(this.context);
+    final emulatorRoute = ModalRoute.of(this.context);
+    final messenger = ScaffoldMessenger.of(this.context);
     setState(() => _isClosing = true);
 
     if (!CoreLoader.isSnesRom(game.romPath) &&
@@ -498,6 +498,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
 
     if (!mounted) return;
 
+    await _waitForAppToResume();
+    if (!mounted) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
     if (emulatorRoute != null && emulatorRoute.isActive) {
       navigator.popUntil((route) => route == emulatorRoute);
       final didPop = await navigator.maybePop();
@@ -515,6 +521,25 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         ),
       );
     }
+  }
+
+  Future<void> _waitForAppToResume() async {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      return;
+    }
+
+    final completer = Completer<void>();
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        if (!completer.isCompleted) completer.complete();
+        listener.dispose();
+      },
+    );
+    await completer.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => listener.dispose(),
+    );
   }
 
   Future<void> _openSaveStates(
