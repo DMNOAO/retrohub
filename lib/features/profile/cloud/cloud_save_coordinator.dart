@@ -19,11 +19,9 @@ class CloudSaveCoordinator {
     CloudSaveLocalService? localService,
   }) : localService = localService ?? CloudSaveLocalService();
 
-  Future<LocalCloudSaveBackup> uploadGame({
-    required String gameId,
+  Future<String> cloudGameId({
     required String gameTitle,
     required String romPath,
-    bool requestAuthorizationIfNeeded = true,
   }) async {
     final romFile = File(romPath);
     if (!await romFile.exists()) {
@@ -31,7 +29,19 @@ class CloudSaveCoordinator {
     }
 
     final digest = await crypto.sha1.bind(romFile.openRead()).first;
-    final cloudGameId = digest.toString();
+    return digest.toString();
+  }
+
+  Future<LocalCloudSaveBackup> uploadGame({
+    required String gameId,
+    required String gameTitle,
+    required String romPath,
+    bool requestAuthorizationIfNeeded = true,
+  }) async {
+    final cloudGameId = await this.cloudGameId(
+      gameTitle: gameTitle,
+      romPath: romPath,
+    );
     final backup = await localService.createBackup(
       gameId: gameId,
       romPath: romPath,

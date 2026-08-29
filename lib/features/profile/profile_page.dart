@@ -560,7 +560,13 @@ class _CloudCardState extends ConsumerState<_CloudCard> {
 
     setState(() => _busy = true);
     try {
-      final cloudGameId = await _cloudGameId(game);
+      final cloudGameId = await CloudSaveCoordinator(
+        authService: ref.read(googleAuthServiceProvider),
+        localService: _cloudSaveService,
+      ).cloudGameId(
+        gameTitle: game.title,
+        romPath: game.romPath,
+      );
       final drive = GoogleDriveSaveService(
         authService: ref.read(googleAuthServiceProvider),
       );
