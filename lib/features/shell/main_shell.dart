@@ -16,6 +16,7 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   int _refreshToken = 0;
   String? _libraryConsoleFilter;
+  final List<int> _navigationHistory = <int>[];
 
   static const titles = ['Inicio', 'Biblioteca', 'Bitácora', 'Perfil'];
   static const titleIcons = [
@@ -27,9 +28,35 @@ class _MainShellState extends State<MainShell> {
 
   void _openConsole(String console) {
     setState(() {
+      if (_selectedIndex != 1) _navigationHistory.add(_selectedIndex);
       _libraryConsoleFilter = console;
       _selectedIndex = 1;
       _refreshToken++;
+    });
+  }
+
+  void _selectSection(int index) {
+    if (index == _selectedIndex) return;
+    setState(() {
+      if (index == 0) {
+        _navigationHistory.clear();
+      } else {
+        _navigationHistory.add(_selectedIndex);
+      }
+      _selectedIndex = index;
+      _refreshToken++;
+      if (index != 1) _libraryConsoleFilter = null;
+    });
+  }
+
+  void _goBackInShell() {
+    if (_selectedIndex == 0) return;
+    setState(() {
+      _selectedIndex = _navigationHistory.isNotEmpty
+          ? _navigationHistory.removeLast()
+          : 0;
+      _refreshToken++;
+      if (_selectedIndex != 1) _libraryConsoleFilter = null;
     });
   }
 
@@ -54,7 +81,12 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: _selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _goBackInShell();
+      },
+      child: Scaffold(
       appBar: AppBar(
         centerTitle: true,
         title: Row(
@@ -90,13 +122,7 @@ class _MainShellState extends State<MainShell> {
       body: _currentPage(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-            _refreshToken++;
-            if (index != 1) _libraryConsoleFilter = null;
-          });
-        },
+        onDestinationSelected: _selectSection,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Inicio'),
           NavigationDestination(icon: Icon(Icons.videogame_asset_outlined), selectedIcon: Icon(Icons.videogame_asset), label: 'Biblioteca'),
@@ -104,6 +130,7 @@ class _MainShellState extends State<MainShell> {
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Perfil'),
         ],
       ),
+    ),
     );
   }
 }

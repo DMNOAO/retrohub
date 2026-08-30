@@ -23,6 +23,8 @@ class PokedexGrid extends StatefulWidget {
 
 class _PokedexGridState extends State<PokedexGrid> {
   late PokedexOrder _order;
+  String _searchText = '';
+  final TextEditingController _searchController = TextEditingController();
   bool get _isGen2 => widget.profile.region == PokemonAssetRegion.johto;
   bool get _isHgss =>
       widget.profile.game == PokemonAssetGame.heartGoldSoulSilver;
@@ -49,6 +51,12 @@ class _PokedexGridState extends State<PokedexGrid> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final national = List<int>.generate(
       _isUnova ? 649 : (_isSinnoh || _isHgss) ? 493 : (_isGen3 ? 386 : (_isGen2 ? 251 : 151)),
@@ -72,6 +80,13 @@ class _PokedexGridState extends State<PokedexGrid> {
         : national;
     final visibleSeen = pokedexIdsInOrder(widget.seenIds, ids);
     final visibleCaught = pokedexIdsInOrder(widget.caughtIds, ids);
+    final normalizedQuery = _normalizeSearch(_searchText);
+    final filteredIds = normalizedQuery.isEmpty
+        ? ids
+        : ids.where((id) {
+            final name = PokemonDecoder.pokemonName(id);
+            return _normalizeSearch(name).contains(normalizedQuery);
+          }).toList(growable: false);
     final scheme = Theme.of(context).colorScheme;
 
     return Column(children: [
@@ -86,19 +101,51 @@ class _PokedexGridState extends State<PokedexGrid> {
           if (_isUnova) SegmentedButton<PokedexOrder>(segments: [const ButtonSegment(value: PokedexOrder.unova, label: Text('Teselia')), ButtonSegment(value: PokedexOrder.national, enabled: widget.nationalDexUnlocked, label: const Text('Nacional'), icon: widget.nationalDexUnlocked ? null : const Icon(Icons.lock_outline))], selected: {_order}, onSelectionChanged: (value) => setState(() => _order = value.first)),
         ]),
       ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+        child: TextField(
+          controller: _searchController,
+          onChanged: (value) => setState(() => _searchText = value),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Buscar Pokémon por nombre...',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchText.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Limpiar búsqueda',
+                    onPressed: () {
+                      _searchController.clear();
+                      FocusScope.of(context).unfocus();
+                      setState(() => _searchText = '');
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+            filled: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
       Expanded(child: LayoutBuilder(builder: (context, constraints) {
         final columns = constraints.maxWidth >= 1100 ? 10 : constraints.maxWidth >= 800 ? 8 : constraints.maxWidth >= 560 ? 6 : 3;
+        if (filteredIds.isEmpty) {
+          return const Center(child: Text('No se encontraron Pokémon'));
+        }
         return GridView.builder(
           padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-          itemCount: ids.length,
+          itemCount: filteredIds.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: .82),
           itemBuilder: (context, index) {
-            final dexId = ids[index];
+            final dexId = filteredIds[index];
+            final regionalIndex = ids.indexOf(dexId);
             final seen = widget.seenIds.contains(dexId);
             final caught = widget.caughtIds.contains(dexId);
             final displayNumber = _isUnova && _order == PokedexOrder.unova
-                ? (index == 0 ? 0 : index)
-                : (_isGen2 && _order == PokedexOrder.johto) || (_isHoenn && _order == PokedexOrder.hoenn) || (_isSinnoh && _order == PokedexOrder.sinnoh) ? index + 1 : dexId;
+                ? (regionalIndex == 0 ? 0 : regionalIndex)
+                : (_isGen2 && _order == PokedexOrder.johto) || (_isHoenn && _order == PokedexOrder.hoenn) || (_isSinnoh && _order == PokedexOrder.sinnoh) ? regionalIndex + 1 : dexId;
             return InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: seen ? () {
@@ -177,6 +224,16 @@ class _PokedexGridState extends State<PokedexGrid> {
         );
       })),
     ]);
+  }
+
+  String _normalizeSearch(String value) {
+    const accents = 'áéíóúüñÁÉÍÓÚÜÑ';
+    const plain = 'aeiouunAEIOUUN';
+    var normalized = value.trim().toLowerCase();
+    for (var index = 0; index < accents.length; index++) {
+      normalized = normalized.replaceAll(accents[index], plain[index]);
+    }
+    return normalized;
   }
 }
 

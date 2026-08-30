@@ -55,6 +55,7 @@ class EmulatorPreferences {
   static const _ndsScreensScaleKey = 'emulator_nds_screens_scale';
   static const _ndsScreenEmphasisKey = 'emulator_nds_screen_emphasis';
   static const _ndsSwapScreensKey = 'emulator_nds_swap_screens';
+  static const _ndsFullscreenKey = 'emulator_nds_fullscreen';
 
   final GameBoyControlLayout layout;
   final GameBoyControlSize controlSize;
@@ -94,6 +95,7 @@ class EmulatorPreferences {
   final double ndsScreensScale;
   final NdsScreenEmphasis ndsScreenEmphasis;
   final bool ndsSwapScreens;
+  final bool ndsFullscreen;
 
   const EmulatorPreferences({
     this.layout = GameBoyControlLayout.classic,
@@ -134,6 +136,7 @@ class EmulatorPreferences {
     this.ndsScreensScale = 1,
     this.ndsScreenEmphasis = NdsScreenEmphasis.equal,
     this.ndsSwapScreens = false,
+    this.ndsFullscreen = false,
   });
 
   double get sizeScale => switch (controlSize) {
@@ -181,6 +184,7 @@ class EmulatorPreferences {
     double? ndsScreensScale,
     NdsScreenEmphasis? ndsScreenEmphasis,
     bool? ndsSwapScreens,
+    bool? ndsFullscreen,
   }) {
     return EmulatorPreferences(
       layout: layout ?? this.layout,
@@ -223,6 +227,7 @@ class EmulatorPreferences {
       ndsScreensScale: ndsScreensScale ?? this.ndsScreensScale,
       ndsScreenEmphasis: ndsScreenEmphasis ?? this.ndsScreenEmphasis,
       ndsSwapScreens: ndsSwapScreens ?? this.ndsSwapScreens,
+      ndsFullscreen: ndsFullscreen ?? this.ndsFullscreen,
     );
   }
 
@@ -299,6 +304,7 @@ class EmulatorPreferences {
         orElse: () => NdsScreenEmphasis.equal,
       ),
       ndsSwapScreens: storage.getBool(_ndsSwapScreensKey) ?? false,
+      ndsFullscreen: storage.getBool(_ndsFullscreenKey) ?? false,
     );
   }
 
@@ -346,6 +352,7 @@ class EmulatorPreferences {
       storage.setDouble(_ndsScreensScaleKey, ndsScreensScale),
       storage.setString(_ndsScreenEmphasisKey, ndsScreenEmphasis.name),
       storage.setBool(_ndsSwapScreensKey, ndsSwapScreens),
+      storage.setBool(_ndsFullscreenKey, ndsFullscreen),
     ]);
   }
 
