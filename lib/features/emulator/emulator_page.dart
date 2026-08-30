@@ -726,6 +726,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
     final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
     final controlsY = height * (isTrainer ? .55 : .57);
+    final coverPath = CoverHelper.getCover(game.title, game.console);
     final consoleLogo = isGba
         ? RetroHubConsoleType.gameBoyAdvance
         : isGbc
@@ -760,25 +761,31 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            left: width * .055,
-            top: height * .025,
-            width: width * .16,
-            height: height * .09,
-            child: ClipOval(
-              child: _GameArtwork(
-                coverPath: CoverHelper.getCover(game.title, game.console),
-                accent: visualTheme.accent,
-                width: width * .16,
-                height: height * .09,
-                iconSize: 18,
-              ),
-            ),
+            left: width * (isExp ? .075 : .065),
+            top: height * (isExp ? .033 : .03),
+            width: width * (isExp ? .14 : .15),
+            height: height * (isExp ? .105 : .10),
+            child: coverPath == null
+                ? Icon(
+                    Icons.sports_esports_rounded,
+                    color: visualTheme.accent,
+                    size: 24,
+                  )
+                : Image.asset(
+                    coverPath,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.sports_esports_rounded,
+                      color: visualTheme.accent,
+                      size: 24,
+                    ),
+                  ),
           ),
           Positioned(
-            left: width * .21,
-            width: width * .60,
-            top: height * .035,
-            height: height * .07,
+            left: width * (isExp ? .22 : .21),
+            width: width * (isExp ? .60 : .61),
+            top: height * (isExp ? .05 : .045),
+            height: height * .065,
             child: FittedBox(
               alignment: Alignment.centerLeft,
               fit: BoxFit.scaleDown,
@@ -790,8 +797,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            right: width * .035,
-            top: height * .025,
+            right: width * .03,
+            top: height * (isExp ? .06 : .05),
             child: Transform.scale(
               scale: .82,
               child: RetroHubQuickMenu(
@@ -1017,12 +1024,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 initialPlayTimeMinutes:
                                     game.playTimeSeconds ~/ 60,
                                 controller: _gameController,
-                                screenFit: switch (_preferences.screenScale) {
-                                  EmulatorScreenScale.aspectRatio =>
-                                    BoxFit.contain,
-                                  EmulatorScreenScale.fitWidth => BoxFit.fitWidth,
-                                  EmulatorScreenScale.stretch => BoxFit.fill,
-                                },
+                                screenFit: portraitCardActive
+                                    ? BoxFit.fill
+                                    : switch (_preferences.screenScale) {
+                                        EmulatorScreenScale.aspectRatio =>
+                                          BoxFit.contain,
+                                        EmulatorScreenScale.fitWidth =>
+                                          BoxFit.fitWidth,
+                                        EmulatorScreenScale.stretch =>
+                                          BoxFit.fill,
+                                      },
                                 filterQuality: _preferences.screenFilter ==
                                         EmulatorScreenFilter.pixel
                                     ? FilterQuality.none
