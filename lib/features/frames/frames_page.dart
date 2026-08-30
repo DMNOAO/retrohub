@@ -331,7 +331,7 @@ class _PortraitFramePreview extends StatelessWidget {
       'metal' => const [Color(0xFFE9EEF0), Color(0xFF64737D)],
       'oscuridad' => const [Color(0xFF7B8190), Color(0xFF17191F)],
       'psi' => const [Color(0xFFF1C2EC), Color(0xFF633D86)],
-      'dragon' => const [Color(0xFF9DDAE8), Color(0xFFE1B52F)],
+      'dragon' => const [Color(0xFFC7CAC2), Color(0xFF4B4930)],
       'hada' => const [Color(0xFFFFD8EC), Color(0xFFB85B94)],
       _ => const [Color(0xFFF5E8C9), Color(0xFF9D8764)],
     };

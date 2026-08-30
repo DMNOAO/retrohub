@@ -807,18 +807,6 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            left: width * .075,
-            top: height * .012,
-            child: Text(
-              isExp ? 'STAGE 2' : 'STAGE 1',
-              style: TextStyle(
-                color: palette.ink,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          Positioned(
             left: width * .04,
             top: height * .025,
             width: width * .19,
@@ -832,23 +820,25 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                   BoxShadow(color: Colors.black38, blurRadius: 6),
                 ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: coverPath == null
-                    ? Icon(
-                        Icons.sports_esports_rounded,
-                        color: visualTheme.accent,
-                        size: 24,
-                      )
-                    : Image.asset(
-                        coverPath,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Icon(
+              child: ClipOval(
+                child: Padding(
+                  padding: const EdgeInsets.all(7),
+                  child: coverPath == null
+                      ? Icon(
                           Icons.sports_esports_rounded,
                           color: visualTheme.accent,
                           size: 24,
+                        )
+                      : Image.asset(
+                          coverPath,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.sports_esports_rounded,
+                            color: visualTheme.accent,
+                            size: 24,
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
           ),
@@ -2670,7 +2660,11 @@ class _PortraitCardPalette {
       'metal' => const [Color(0xFFE9EEF0), Color(0xFFAAB6BE), Color(0xFF64737D)],
       'oscuridad' => const [Color(0xFF7B8190), Color(0xFF3A3E49), Color(0xFF17191F)],
       'psi' => const [Color(0xFFF1C2EC), Color(0xFFB56AB8), Color(0xFF633D86)],
-      'dragon' => const [Color(0xFF9DDAE8), Color(0xFF5D83C7), Color(0xFFE1B52F)],
+      'dragon' => const [
+          Color(0xFFC7CAC2),
+          Color(0xFF858358),
+          Color(0xFF4B4930),
+        ],
       'hada' => const [Color(0xFFFFD8EC), Color(0xFFE89AC4), Color(0xFFB85B94)],
       _ => const [Color(0xFFF5E8C9), Color(0xFFD7C49E), Color(0xFF9D8764)],
     };
@@ -2692,9 +2686,13 @@ class _PortraitCardPalette {
       top: colors[0],
       middle: colors[1],
       bottom: colors[2],
-      header: colors[0],
-      stage: colors[1],
-      line: dark ? const Color(0xFFC8B85B) : const Color(0xFFB88A18),
+      header: type == 'dragon' ? const Color(0xFFD5D7D2) : colors[0],
+      stage: type == 'dragon' ? const Color(0xFFADB2AC) : colors[1],
+      line: type == 'dragon'
+          ? const Color(0xFF77786A)
+          : dark
+              ? const Color(0xFFC8B85B)
+              : const Color(0xFFB88A18),
       border: const Color(0xFFFFD21C),
       ink: dark ? Colors.white : const Color(0xFF241D13),
       energyAsset: 'assets/frames/portrait/energy/$icon.png',
