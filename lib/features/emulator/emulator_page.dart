@@ -20,6 +20,7 @@ import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
 import '../frames/frame_catalog.dart';
 import '../frames/frame_preferences.dart';
+import '../frames/portrait_frame_catalog.dart';
 import '../profile/auth/auth_provider.dart';
 import '../profile/cloud/cloud_save_coordinator.dart';
 import '../journal/journal_page.dart';
@@ -79,6 +80,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   List<int> _partySpeciesIds = const <int>[];
   EmulatorPreferences _preferences = const EmulatorPreferences();
   GameFrame? _selectedFrame;
+  PortraitGameFrame? _selectedPortraitFrame;
 
   Game get game => widget.game;
 
@@ -162,18 +164,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   Future<void> _loadEmulatorPreferences() async {
     final preferences = await EmulatorPreferences.load();
     final frameId = await FramePreferences.load(game.id);
+    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
     if (!mounted) return;
     setState(() {
       _preferences = preferences;
       _selectedFrame = FrameCatalog.byId(game, frameId);
+      _selectedPortraitFrame = portraitFrameId == 'none'
+          ? null
+          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
+              PortraitFrameCatalog.recommendedFor(game);
     });
     await _applyDisplayPreferences(preferences);
   }
 
   Future<void> _reloadSelectedFrame() async {
     final frameId = await FramePreferences.load(game.id);
+    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
     if (!mounted) return;
-    setState(() => _selectedFrame = FrameCatalog.byId(game, frameId));
+    setState(() {
+      _selectedFrame = FrameCatalog.byId(game, frameId);
+      _selectedPortraitFrame = portraitFrameId == 'none'
+          ? null
+          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
+              PortraitFrameCatalog.recommendedFor(game);
+    });
   }
 
   Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
@@ -691,6 +705,332 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     );
   }
 
+  Widget _buildPortraitCardLayout({
+    required BoxConstraints constraints,
+    required Widget gameView,
+    required PortraitGameFrame frame,
+    required bool isGba,
+    required bool isGbc,
+    required _EmulatorVisualTheme visualTheme,
+  }) {
+    final isExp = frame.family == PortraitCardFamily.exp;
+    final palette = _PortraitCardPalette.forFrame(frame.id);
+    final width = constraints.maxWidth;
+    final height = constraints.maxHeight;
+    final screenWidth = width * .92;
+    final screenHeight = screenWidth / (isGba ? 3 / 2 : 10 / 9);
+    final screenRect = Rect.fromLTWH(
+      (width - screenWidth) / 2,
+      height * .18,
+      screenWidth,
+      screenHeight,
+    );
+    final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
+    final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
+    final coverDiameter = math.min(width * .19, height * .095);
+    final controlsY = height * (isGba ? .59 : .70);
+    final coverPath = CoverHelper.getCover(game.title, game.console);
+    final consoleLogo = isGba
+        ? RetroHubConsoleType.gameBoyAdvance
+        : isGbc
+            ? RetroHubConsoleType.gameBoyColor
+            : RetroHubConsoleType.gameBoy;
+
+    return ColoredBox(
+      color: visualTheme.background,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [palette.top, palette.middle, palette.bottom],
+                  stops: const [0, .48, 1],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: palette.border, width: 8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 12,
+                    offset: Offset(0, 5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .035,
+            right: width * .035,
+            top: height * .025,
+            height: height * .105,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.header.withValues(alpha: .58),
+                borderRadius: BorderRadius.circular(isExp ? 24 : 9),
+                border: Border.all(
+                  color: palette.line.withValues(alpha: .85),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+          // La pantalla mantiene el mismo ancho útil del modo vertical normal.
+          Positioned(
+            left: screenRect.left,
+            top: screenRect.top,
+            width: screenRect.width,
+            height: screenRect.height,
+            child: ColoredBox(color: Colors.black, child: gameView),
+          ),
+          Positioned(
+            left: screenRect.left - 3,
+            top: screenRect.top - 3,
+            width: screenRect.width + 6,
+            height: screenRect.height + 6,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(isExp ? 24 : 8),
+                  border: Border.all(color: palette.line, width: 3),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .04,
+            top: height * .025,
+            width: coverDiameter,
+            height: coverDiameter,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipOval(
+                  child: ColoredBox(
+                    color: palette.stage,
+                    child: coverPath == null
+                        ? Icon(
+                            Icons.sports_esports_rounded,
+                            color: visualTheme.accent,
+                            size: 24,
+                          )
+                        : Image.asset(
+                            coverPath,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.sports_esports_rounded,
+                              color: visualTheme.accent,
+                              size: 24,
+                            ),
+                          ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: palette.line, width: 3),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 6),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: width * .23,
+            width: width * .59,
+            top: height * (isExp ? .05 : .045),
+            height: height * .065,
+            child: FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: _PartySprites(
+                game: game,
+                speciesIds: _partySpeciesIds,
+                accent: isGba ? palette.partyAccent : visualTheme.accent,
+              ),
+            ),
+          ),
+          Positioned(
+            right: width * .03,
+            top: height * (isExp ? .06 : .05),
+            child: Transform.scale(
+              scale: .82,
+              child: RetroHubQuickMenu(
+                onAction: (value) => _handleMenuAction(context, value),
+                anchorChild: Image.asset(
+                  palette.energyAsset,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .055,
+            top: controlsY,
+            child: Opacity(
+              opacity: _preferences.controlOpacity,
+              child: _DirectionalControl(
+                type: _preferences.directionalControl,
+                keySize: dpadSize,
+                controller: _gameController,
+                buttonUp: _buttonUp,
+                buttonDown: _buttonDown,
+                buttonLeft: _buttonLeft,
+                buttonRight: _buttonRight,
+              ),
+            ),
+          ),
+          Positioned(
+            right: width * .055,
+            top: controlsY + dpadSize * .45,
+            child: Opacity(
+              opacity: _preferences.controlOpacity,
+              child: Row(
+                children: [
+                  _GameBoyActionButton(
+                    size: actionSize,
+                    label: _preferences.swapAB ? 'A' : 'B',
+                    buttonId: _preferences.swapAB ? _buttonA : _buttonB,
+                    controller: _gameController,
+                  ),
+                  SizedBox(width: width * .025),
+                  _GameBoyActionButton(
+                    size: actionSize,
+                    label: _preferences.swapAB ? 'B' : 'A',
+                    buttonId: _preferences.swapAB ? _buttonB : _buttonA,
+                    controller: _gameController,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (isGba) ...[
+            Positioned(
+              left: width * .08,
+              top: height * .50,
+              child: _GameBoyShoulderButton(
+                label: 'L',
+                buttonId: _buttonL,
+                controller: _gameController,
+              ),
+            ),
+            Positioned(
+              right: width * .08,
+              top: height * .50,
+              child: _GameBoyShoulderButton(
+                label: 'R',
+                buttonId: _buttonR,
+                controller: _gameController,
+              ),
+            ),
+          ],
+          Positioned(
+            left: width * .20,
+            right: width * .20,
+            top: height * (isGba ? .80 : .875),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _GameBoySystemButton(
+                  width: 68,
+                  height: 27,
+                  label: 'SELECT',
+                  buttonId: _buttonSelect,
+                  controller: _gameController,
+                ),
+                _GameBoySystemButton(
+                  width: 68,
+                  height: 27,
+                  label: 'START',
+                  buttonId: _buttonStart,
+                  controller: _gameController,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: width * .055,
+            right: width * .055,
+            top: height * .12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (CoreLoader.isGameBoyRom(game.romPath))
+                  _LinkStatusChip(linkManager: _gameController.linkManager)
+                else
+                  const SizedBox(width: 92),
+                SizedBox(
+                  width: 92,
+                  height: 32,
+                  child: SpeedButton(
+                    speedMultiplier: _gameController.speedMultiplier,
+                    onTap: _gameController.cycleSpeed,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: width * .25,
+            right: width * .25,
+            top: screenRect.bottom + height * .012,
+            height: height * .075,
+            child: IgnorePointer(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: RetroHubConsoleLogo(console: consoleLogo),
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .07,
+            right: width * .07,
+            bottom: height * .018,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(height: 2, color: palette.line),
+                const SizedBox(height: 5),
+                DefaultTextStyle(
+                  style: TextStyle(
+                    color: palette.ink,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('debilidad'),
+                      Text('resistencia'),
+                      Text('retirada'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final EmulationCore core = CoreLoader.coreForRom(game.romPath);
@@ -703,6 +1043,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         game.console.toLowerCase().contains('game boy color');
     final bool pageLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
+    final bool portraitCardActive =
+        !pageLandscape && _selectedPortraitFrame != null;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
     final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
     final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
@@ -712,6 +1054,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final bool ndsFullscreen = isNds && _preferences.ndsFullscreen;
     final bool consoleFullscreen =
         snesFullscreen || gbaFullscreen || gameBoyFullscreen || ndsFullscreen;
+    final bool borderlessGameSurface =
+        consoleFullscreen || portraitCardActive;
     _gameController.hapticsEnabled = !isSnes &&
         (isNds
             ? _preferences.ndsVibrationEnabled
@@ -724,7 +1068,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       },
       child: Scaffold(
         backgroundColor: visualTheme.background,
-        appBar: consoleFullscreen ? null : AppBar(
+        appBar: consoleFullscreen || portraitCardActive ? null : AppBar(
           toolbarHeight: 58,
           backgroundColor: visualTheme.appBar,
           foregroundColor: Colors.white,
@@ -740,7 +1084,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             DecoratedBox(
               decoration: BoxDecoration(gradient: visualTheme.gradient),
               child: SafeArea(
-                top: false,
+                top: portraitCardActive,
                 left: !consoleFullscreen,
                 right: !consoleFullscreen,
                 bottom: !consoleFullscreen,
@@ -759,9 +1103,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(
-                          consoleFullscreen ? 0 : 18,
+                          borderlessGameSurface ? 0 : 18,
                         ),
-                        border: consoleFullscreen ? null : Border.all(
+                        border: borderlessGameSurface ? null : Border.all(
                           color: corePath != null
                               ? visualTheme.accent
                               : Theme.of(context).colorScheme.error,
@@ -770,7 +1114,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(
-                          consoleFullscreen ? 0 : 15,
+                          borderlessGameSurface ? 0 : 15,
                         ),
                         child: corePath != null
                             ? LibretroGameView(
@@ -782,12 +1126,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 initialPlayTimeMinutes:
                                     game.playTimeSeconds ~/ 60,
                                 controller: _gameController,
-                                screenFit: switch (_preferences.screenScale) {
-                                  EmulatorScreenScale.aspectRatio =>
-                                    BoxFit.contain,
-                                  EmulatorScreenScale.fitWidth => BoxFit.fitWidth,
-                                  EmulatorScreenScale.stretch => BoxFit.fill,
-                                },
+                                screenFit: portraitCardActive
+                                    ? BoxFit.fill
+                                    : switch (_preferences.screenScale) {
+                                        EmulatorScreenScale.aspectRatio =>
+                                          BoxFit.contain,
+                                        EmulatorScreenScale.fitWidth =>
+                                          BoxFit.fitWidth,
+                                        EmulatorScreenScale.stretch =>
+                                          BoxFit.fill,
+                                      },
                                 filterQuality: _preferences.screenFilter ==
                                         EmulatorScreenFilter.pixel
                                     ? FilterQuality.none
@@ -1642,6 +1990,18 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       );
                     }
 
+                    final portraitFrame = _selectedPortraitFrame;
+                    if (portraitFrame != null && !isSnes) {
+                      return _buildPortraitCardLayout(
+                        constraints: constraints,
+                        gameView: gameView,
+                        frame: portraitFrame,
+                        isGba: isGba,
+                        isGbc: isGbc,
+                        visualTheme: visualTheme,
+                      );
+                    }
+
                     return Padding(
                       padding: EdgeInsets.all(padding),
                       child: Column(
@@ -2268,6 +2628,99 @@ String _pokemonSpritePath(Game game, int speciesId) {
   }
 
   return SpriteResolver.pokemonForGame(profile: profile, pokemonId: speciesId);
+}
+
+class _PortraitCardPalette {
+  final Color top;
+  final Color middle;
+  final Color bottom;
+  final Color header;
+  final Color stage;
+  final Color line;
+  final Color border;
+  final Color ink;
+  final Color partyAccent;
+  final String energyAsset;
+
+  const _PortraitCardPalette({
+    required this.top,
+    required this.middle,
+    required this.bottom,
+    required this.header,
+    required this.stage,
+    required this.line,
+    required this.border,
+    required this.ink,
+    required this.partyAccent,
+    required this.energyAsset,
+  });
+
+  factory _PortraitCardPalette.forFrame(String frameId) {
+    final type = frameId
+        .replaceFirst('portrait_', '')
+        .replaceFirst('_exp', '')
+        .replaceFirst('trainer_rocket', 'oscuridad');
+    final colors = switch (type) {
+      'agua' => const [Color(0xFFBCEBFA), Color(0xFF68BDE7), Color(0xFF277EBA)],
+      'electrico' => const [Color(0xFFFFF3A0), Color(0xFFFFD838), Color(0xFFE8A817)],
+      'fuego' => const [Color(0xFFFFD09B), Color(0xFFF47742), Color(0xFFB72E2E)],
+      'hoja' => const [Color(0xFFCFF0A4), Color(0xFF70BC5A), Color(0xFF247548)],
+      'lucha' => const [Color(0xFFEAC58F), Color(0xFFC1844C), Color(0xFF754128)],
+      'metal' => const [Color(0xFFE9EEF0), Color(0xFFAAB6BE), Color(0xFF64737D)],
+      'oscuridad' => const [Color(0xFF7B8190), Color(0xFF3A3E49), Color(0xFF17191F)],
+      'psi' => const [Color(0xFFF1C2EC), Color(0xFFB56AB8), Color(0xFF633D86)],
+      'dragon' => const [
+          Color(0xFFC7CAC2),
+          Color(0xFF858358),
+          Color(0xFF4B4930),
+        ],
+      'hada' => const [Color(0xFFFFD8EC), Color(0xFFE89AC4), Color(0xFFB85B94)],
+      _ => const [Color(0xFFF5E8C9), Color(0xFFD7C49E), Color(0xFF9D8764)],
+    };
+    final icon = switch (type) {
+      'dragon' => 'dragon',
+      'hada' => 'hada',
+      String value when value == 'electrico' => 'electrico',
+      String value when value == 'hoja' => 'hoja',
+      String value when value == 'psi' => 'psi',
+      String value when value == 'oscuridad' => 'oscuridad',
+      String value when value == 'metal' => 'metal',
+      String value when value == 'lucha' => 'lucha',
+      String value when value == 'fuego' => 'fuego',
+      String value when value == 'agua' => 'agua',
+      _ => 'normal',
+    };
+    final dark = type == 'oscuridad';
+    final partyAccent = switch (type) {
+      'agua' => const Color(0xFF2D91C7),
+      'electrico' => const Color(0xFFE0A900),
+      'fuego' => const Color(0xFFC74432),
+      'hoja' => const Color(0xFF3E8B47),
+      'lucha' => const Color(0xFF9C6338),
+      'metal' => const Color(0xFF73838C),
+      'oscuridad' => const Color(0xFF535663),
+      'psi' => const Color(0xFF8A4FA0),
+      'dragon' => const Color(0xFF777253),
+      'hada' => const Color(0xFFD36C9E),
+      _ => const Color(0xFF9C8665),
+    };
+    return _PortraitCardPalette(
+      top: colors[0],
+      middle: colors[1],
+      bottom: colors[2],
+      header: type == 'dragon' ? const Color(0xFFD5D7D2) : colors[0],
+      stage: type == 'dragon' ? const Color(0xFFADB2AC) : colors[1],
+      line: type == 'dragon'
+          ? const Color(0xFF77786A)
+          : dark
+              ? const Color(0xFFC8B85B)
+              : const Color(0xFFB88A18),
+      border: const Color(0xFFFFD21C),
+      ink: dark ? Colors.white : const Color(0xFF241D13),
+      partyAccent: partyAccent,
+      energyAsset: 'assets/frames/portrait/energy/$icon.png',
+    );
+  }
 }
 
 class _EmulatorVisualTheme {

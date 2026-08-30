@@ -61,6 +61,8 @@ flutter:
     - assets/frames/gbc/games/
     - assets/frames/gbc/pokemon/
     - assets/frames/snes/generic/
+    - assets/frames/portrait/cards/
+    - assets/frames/portrait/energy/
 
     - assets/sprites/pokemon/gb/red_blue/
     - assets/sprites/pokemon/gb/yellow/
