@@ -784,6 +784,27 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             top: screenRect.top,
             width: screenRect.width,
             height: screenRect.height,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(isExp ? 24 : 8),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: screenRect.left,
+            top: screenRect.top,
+            width: screenRect.width,
+            height: screenRect.height,
             child: ColoredBox(color: Colors.black, child: gameView),
           ),
           Positioned(
@@ -796,13 +817,6 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(isExp ? 24 : 8),
                   border: Border.all(color: palette.line, width: 3),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
                 ),
               ),
             ),
