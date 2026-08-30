@@ -20,6 +20,7 @@ import '../../data/database/database_provider.dart';
 import '../frames/frames_page.dart';
 import '../frames/frame_catalog.dart';
 import '../frames/frame_preferences.dart';
+import '../frames/portrait_frame_catalog.dart';
 import '../profile/auth/auth_provider.dart';
 import '../profile/cloud/cloud_save_coordinator.dart';
 import '../journal/journal_page.dart';
@@ -79,6 +80,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   List<int> _partySpeciesIds = const <int>[];
   EmulatorPreferences _preferences = const EmulatorPreferences();
   GameFrame? _selectedFrame;
+  PortraitGameFrame? _selectedPortraitFrame;
 
   Game get game => widget.game;
 
@@ -162,18 +164,30 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   Future<void> _loadEmulatorPreferences() async {
     final preferences = await EmulatorPreferences.load();
     final frameId = await FramePreferences.load(game.id);
+    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
     if (!mounted) return;
     setState(() {
       _preferences = preferences;
       _selectedFrame = FrameCatalog.byId(game, frameId);
+      _selectedPortraitFrame = portraitFrameId == 'none'
+          ? null
+          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
+              PortraitFrameCatalog.recommendedFor(game);
     });
     await _applyDisplayPreferences(preferences);
   }
 
   Future<void> _reloadSelectedFrame() async {
     final frameId = await FramePreferences.load(game.id);
+    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
     if (!mounted) return;
-    setState(() => _selectedFrame = FrameCatalog.byId(game, frameId));
+    setState(() {
+      _selectedFrame = FrameCatalog.byId(game, frameId);
+      _selectedPortraitFrame = portraitFrameId == 'none'
+          ? null
+          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
+              PortraitFrameCatalog.recommendedFor(game);
+    });
   }
 
   Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
@@ -688,6 +702,224 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         _gameController.releaseTouch();
         _ndsTouchPointer = null;
       },
+    );
+  }
+
+  Widget _buildPortraitCardLayout({
+    required BoxConstraints constraints,
+    required Widget gameView,
+    required PortraitGameFrame frame,
+    required bool isGba,
+    required bool isGbc,
+    required _EmulatorVisualTheme visualTheme,
+  }) {
+    final isExp = frame.family == PortraitCardFamily.exp;
+    final isTrainer = frame.family == PortraitCardFamily.trainer;
+    final cardRatio =
+        isTrainer ? 471 / 659 : (isExp ? 400 / 564 : 360 / 506);
+    final cardWidth = math.min(
+      constraints.maxWidth,
+      constraints.maxHeight * cardRatio,
+    );
+    final cardHeight = cardWidth / cardRatio;
+    final cardLeft = (constraints.maxWidth - cardWidth) / 2;
+    final cardTop = (constraints.maxHeight - cardHeight) / 2;
+    final screenWidth =
+        cardWidth * (isTrainer ? .79 : (isExp ? .70 : .61));
+    final screenHeight = screenWidth / (isGba ? 3 / 2 : 10 / 9);
+    final screenLeft = cardLeft + (cardWidth - screenWidth) / 2;
+    final screenTop = cardTop +
+        cardHeight * (isTrainer ? .155 : (isExp ? .155 : .17));
+    final controlsTop = cardTop + cardHeight * (isTrainer ? .48 : .56);
+    final controlsHeight = cardHeight * (isTrainer ? .39 : .34);
+    final consoleLogo = isGba
+        ? RetroHubConsoleType.gameBoyAdvance
+        : isGbc
+            ? RetroHubConsoleType.gameBoyColor
+            : RetroHubConsoleType.gameBoy;
+
+    return ColoredBox(
+      color: Colors.black,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned(
+            left: cardLeft,
+            top: cardTop,
+            width: cardWidth,
+            height: cardHeight,
+            child: Image.asset(frame.assetPath, fit: BoxFit.fill),
+          ),
+          Positioned(
+            left: screenLeft,
+            top: screenTop,
+            width: screenWidth,
+            height: screenHeight,
+            child: gameView,
+          ),
+          Positioned(
+            left: cardLeft + cardWidth * .07,
+            top: cardTop + cardHeight * .052,
+            width: cardWidth * .14,
+            height: cardHeight * .09,
+            child: ClipOval(
+              child: _GameArtwork(
+                coverPath: CoverHelper.getCover(game.title, game.console),
+                accent: visualTheme.accent,
+                width: cardWidth * .14,
+                height: cardHeight * .09,
+                iconSize: 18,
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft + cardWidth * .23,
+            width: cardWidth * .58,
+            top: cardTop + cardHeight * .052,
+            height: cardHeight * .09,
+            child: FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: _PartySprites(
+                game: game,
+                speciesIds: _partySpeciesIds,
+                accent: visualTheme.accent,
+              ),
+            ),
+          ),
+          Positioned(
+            right: constraints.maxWidth - cardLeft - cardWidth * .96,
+            top: cardTop + cardHeight * .04,
+            child: Transform.scale(
+              scale: .78,
+              child: RetroHubQuickMenu(
+                onAction: (value) => _handleMenuAction(context, value),
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft + cardWidth * .07,
+            right: constraints.maxWidth - cardLeft - cardWidth * .07,
+            top: controlsTop,
+            height: controlsHeight * .57,
+            child: Opacity(
+              opacity: _preferences.controlOpacity,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _DirectionalControl(
+                    type: _preferences.directionalControl,
+                    keySize: 33 * _preferences.sizeScale,
+                    controller: _gameController,
+                    buttonUp: _buttonUp,
+                    buttonDown: _buttonDown,
+                    buttonLeft: _buttonLeft,
+                    buttonRight: _buttonRight,
+                  ),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      if (isGba)
+                        Row(
+                          children: [
+                            _GameBoyShoulderButton(
+                              label: 'L',
+                              buttonId: _buttonL,
+                              controller: _gameController,
+                            ),
+                            const SizedBox(width: 6),
+                            _GameBoyShoulderButton(
+                              label: 'R',
+                              buttonId: _buttonR,
+                              controller: _gameController,
+                            ),
+                          ],
+                        ),
+                      Row(
+                        children: [
+                          _GameBoyActionButton(
+                            size: 49 * _preferences.sizeScale,
+                            label: _preferences.swapAB ? 'A' : 'B',
+                            buttonId:
+                                _preferences.swapAB ? _buttonA : _buttonB,
+                            controller: _gameController,
+                          ),
+                          const SizedBox(width: 8),
+                          _GameBoyActionButton(
+                            size: 49 * _preferences.sizeScale,
+                            label: _preferences.swapAB ? 'B' : 'A',
+                            buttonId:
+                                _preferences.swapAB ? _buttonB : _buttonA,
+                            controller: _gameController,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft + cardWidth * .18,
+            right: constraints.maxWidth - cardLeft - cardWidth * .18,
+            top: controlsTop + controlsHeight * .58,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _GameBoySystemButton(
+                  width: 68,
+                  height: 27,
+                  label: 'SELECT',
+                  buttonId: _buttonSelect,
+                  controller: _gameController,
+                ),
+                _GameBoySystemButton(
+                  width: 68,
+                  height: 27,
+                  label: 'START',
+                  buttonId: _buttonStart,
+                  controller: _gameController,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: cardLeft + cardWidth * .06,
+            right: constraints.maxWidth - cardLeft - cardWidth * .06,
+            top: controlsTop + controlsHeight * .79,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (CoreLoader.isGameBoyRom(game.romPath))
+                  _LinkStatusChip(linkManager: _gameController.linkManager)
+                else
+                  const SizedBox(width: 92),
+                SizedBox(
+                  width: 92,
+                  height: 32,
+                  child: SpeedButton(
+                    speedMultiplier: _gameController.speedMultiplier,
+                    onTap: _gameController.cycleSpeed,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: cardLeft,
+            right: constraints.maxWidth - cardLeft - cardWidth,
+            top: cardTop + cardHeight * .91,
+            height: cardHeight * .07,
+            child: IgnorePointer(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: RetroHubConsoleLogo(console: consoleLogo),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1639,6 +1871,18 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                             ),
                           ),
                         ],
+                      );
+                    }
+
+                    final portraitFrame = _selectedPortraitFrame;
+                    if (portraitFrame != null && !isSnes) {
+                      return _buildPortraitCardLayout(
+                        constraints: constraints,
+                        gameView: gameView,
+                        frame: portraitFrame,
+                        isGba: isGba,
+                        isGbc: isGbc,
+                        visualTheme: visualTheme,
                       );
                     }
 

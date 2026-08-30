@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/database/app_database.dart';
 import 'frame_catalog.dart';
 import 'frame_preferences.dart';
+import 'portrait_frame_catalog.dart';
 
 class FramesPage extends StatefulWidget {
   final Game game;
@@ -15,6 +16,7 @@ class FramesPage extends StatefulWidget {
 
 class _FramesPageState extends State<FramesPage> {
   String? _selectedId;
+  String? _selectedPortraitId;
   bool _loading = true;
 
   @override
@@ -25,11 +27,31 @@ class _FramesPageState extends State<FramesPage> {
 
   Future<void> _loadSelection() async {
     final selected = await FramePreferences.load(widget.game.id);
+    final selectedPortrait =
+        await FramePreferences.loadPortrait(widget.game.id);
     if (!mounted) return;
     setState(() {
       _selectedId = selected;
+      _selectedPortraitId = selectedPortrait == 'none'
+          ? null
+          : selectedPortrait ??
+              PortraitFrameCatalog.recommendedFor(widget.game)?.id;
       _loading = false;
     });
+  }
+
+  Future<void> _selectPortrait(String? id) async {
+    await FramePreferences.savePortrait(widget.game.id, id ?? 'none');
+    if (!mounted) return;
+    setState(() => _selectedPortraitId = id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(id == null
+            ? 'Marco vertical desactivado'
+            : 'Marco vertical guardado para ${widget.game.title}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _select(String? id) async {
@@ -48,6 +70,9 @@ class _FramesPageState extends State<FramesPage> {
   Widget build(BuildContext context) {
     final frames = FrameCatalog.forGame(widget.game);
     final recommended = FrameCatalog.recommendedFor(widget.game);
+    final portraitFrames = PortraitFrameCatalog.forGame(widget.game);
+    final portraitRecommended =
+        PortraitFrameCatalog.recommendedFor(widget.game);
 
     return Scaffold(
       appBar: AppBar(
@@ -97,10 +122,63 @@ class _FramesPageState extends State<FramesPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'El marco se mostrará en modo horizontal y pantalla completa.',
+                  'Puedes elegir marcos independientes para vertical y horizontal.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
+                if (portraitFrames.isNotEmpty) ...[
+                  Text(
+                    'Marco vertical',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Carta clásica en GB/GBC y carta EXP en GBA.',
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 260,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: portraitFrames.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return SizedBox(
+                            width: 175,
+                            child: _FrameTile(
+                              name: 'Sin marco vertical',
+                              selected: _selectedPortraitId == null,
+                              onTap: () => _selectPortrait(null),
+                            ),
+                          );
+                        }
+                        final frame = portraitFrames[index - 1];
+                        return SizedBox(
+                          width: 175,
+                          child: _FrameTile(
+                            name: frame.name,
+                            assetPath: frame.assetPath,
+                            imageFit: BoxFit.contain,
+                            selected: _selectedPortraitId == frame.id,
+                            recommended: frame.id == portraitRecommended?.id,
+                            onTap: () => _selectPortrait(frame.id),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Marco horizontal',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 SizedBox(
                   height: 132,
                   child: _FrameTile(
@@ -154,6 +232,7 @@ class _FrameTile extends StatelessWidget {
   final String? assetPath;
   final bool selected;
   final bool recommended;
+  final BoxFit imageFit;
   final VoidCallback onTap;
 
   const _FrameTile({
@@ -161,6 +240,7 @@ class _FrameTile extends StatelessWidget {
     this.assetPath,
     required this.selected,
     this.recommended = false,
+    this.imageFit = BoxFit.cover,
     required this.onTap,
   });
 
@@ -189,7 +269,7 @@ class _FrameTile extends StatelessWidget {
             else
               Image.asset(
                 assetPath!,
-                fit: BoxFit.cover,
+                fit: imageFit,
                 filterQuality: FilterQuality.none,
               ),
             Align(
