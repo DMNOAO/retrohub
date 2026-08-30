@@ -753,8 +753,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       30 * _preferences.ndsShoulderScale,
                       25 * _preferences.ndsSystemScale,
                     );
-                    final double ndsPortraitScreenGap =
-                        ndsMiddleControlsHeight + 12;
+                    const double ndsPortraitScreenGap = 4;
 
                     final Widget gameView = Container(
                       decoration: BoxDecoration(
@@ -805,7 +804,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     : 1,
                                 ndsSwapScreens: isNds && _preferences.ndsSwapScreens,
                                 ndsScreensScale: isNds && landscape
-                                    ? _preferences.ndsScreensScale
+                                    ? (ndsFullscreen
+                                        ? 1
+                                        : _preferences.ndsScreensScale)
                                     : 1,
                                 ndsHorizontalLayout: isNds && landscape,
                                 ndsScreenGap: isNds && !landscape
@@ -884,6 +885,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                   fit: BoxFit.fill,
                                   filterQuality: FilterQuality.none,
                                 ),
+                              ),
+                            ),
+                            Positioned(
+                              left: viewportLeft,
+                              top: viewportTop,
+                              width: viewportWidth,
+                              height: viewportHeight,
+                              child: _FullscreenPartyOverlay(
+                                game: game,
+                                speciesIds: _partySpeciesIds,
+                                accent: visualTheme.accent,
                               ),
                             ),
                             Positioned(
@@ -983,7 +995,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 ),
                               ),
                             ),
-                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: gameWidth,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(child: gameView),
+                                  Positioned.fill(
+                                    child: _FullscreenPartyOverlay(
+                                      game: game,
+                                      speciesIds: _partySpeciesIds,
+                                      accent: visualTheme.accent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             SizedBox(
                               width: sideWidth,
                               child: _SnesSidePanel(
@@ -1053,7 +1079,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 ),
                               ),
                             ),
-                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: gameWidth,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(child: gameView),
+                                  Positioned.fill(
+                                    child: _FullscreenPartyOverlay(
+                                      game: game,
+                                      speciesIds: _partySpeciesIds,
+                                      accent: visualTheme.accent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             SizedBox(
                               width: sideWidth,
                               child: _SnesSidePanel(
@@ -1127,7 +1167,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 ),
                               ),
                             ),
-                            SizedBox(width: gameWidth, child: gameView),
+                            SizedBox(
+                              width: gameWidth,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(child: gameView),
+                                  Positioned.fill(
+                                    child: _FullscreenPartyOverlay(
+                                      game: game,
+                                      speciesIds: _partySpeciesIds,
+                                      accent: visualTheme.accent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             SizedBox(
                               width: sideWidth,
                               child: _SnesSidePanel(
@@ -1178,9 +1232,56 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 horizontal: padding,
                                 vertical: 4,
                               ),
-                        child: Row(
+                        child: Stack(
                           children: [
-                            SizedBox(
+                            Positioned.fill(
+                              child: LayoutBuilder(
+                                builder: (context, stageConstraints) {
+                                  final destinations =
+                                      _ndsHorizontalDestinations(
+                                    Size(
+                                      stageConstraints.maxWidth,
+                                      stageConstraints.maxHeight,
+                                    ),
+                                    topScreenScale: topFactor,
+                                    bottomScreenScale: bottomFactor,
+                                    screensScale: ndsFullscreen
+                                        ? 1
+                                        : _preferences.ndsScreensScale,
+                                  );
+                                  final touchRect =
+                                      _preferences.ndsSwapScreens
+                                          ? destinations.$1
+                                          : destinations.$2;
+                                  final overlayRect = destinations.$2;
+                                  return Stack(
+                                    children: [
+                                      Positioned.fill(child: gameView),
+                                      Positioned.fromRect(
+                                        rect: touchRect,
+                                        child: _ndsTouchSurface(
+                                          width: touchRect.width,
+                                          height: touchRect.height,
+                                        ),
+                                      ),
+                                      if (ndsFullscreen)
+                                        Positioned.fromRect(
+                                          rect: overlayRect,
+                                          child: _FullscreenPartyOverlay(
+                                            game: game,
+                                            speciesIds: _partySpeciesIds,
+                                            accent: visualTheme.accent,
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
                               width: leftControlsWidth,
                               child: Opacity(
                                 opacity: controlOpacity,
@@ -1200,79 +1301,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                 ),
                               ),
                             ),
-                            Expanded(
-                              child: LayoutBuilder(
-                                builder: (context, stageConstraints) {
-                                  final destinations =
-                                      _ndsHorizontalDestinations(
-                                    Size(
-                                      stageConstraints.maxWidth,
-                                      stageConstraints.maxHeight,
-                                    ),
-                                    topScreenScale: topFactor,
-                                    bottomScreenScale: bottomFactor,
-                                    screensScale:
-                                        _preferences.ndsScreensScale,
-                                  );
-                                  final touchRect =
-                                      _preferences.ndsSwapScreens
-                                          ? destinations.$1
-                                          : destinations.$2;
-                                  final overlayRect = destinations.$2;
-                                  return Stack(
-                                    children: [
-                                      Positioned.fill(child: gameView),
-                                      Positioned.fromRect(
-                                        rect: touchRect,
-                                        child: _ndsTouchSurface(
-                                          width: touchRect.width,
-                                          height: touchRect.height,
-                                        ),
-                                      ),
-                                      if (ndsFullscreen &&
-                                          _partySpeciesIds.isNotEmpty)
-                                        Positioned.fromRect(
-                                          rect: overlayRect,
-                                          child: IgnorePointer(
-                                            child: Align(
-                                              alignment: Alignment.topRight,
-                                              child: Padding(
-                                                padding:
-                                                    const EdgeInsets.all(8),
-                                                child: DecoratedBox(
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black
-                                                        .withValues(alpha: .42),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      18,
-                                                    ),
-                                                  ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 5,
-                                                      vertical: 3,
-                                                    ),
-                                                    child: _PartySprites(
-                                                      game: game,
-                                                      speciesIds:
-                                                          _partySpeciesIds,
-                                                      accent:
-                                                          visualTheme.accent,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                            SizedBox(
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
                               width: rightControlsWidth,
                               child: Opacity(
                                 opacity: controlOpacity,
@@ -1892,6 +1924,45 @@ class _EmulatorHeader extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _FullscreenPartyOverlay extends StatelessWidget {
+  final Game game;
+  final List<int> speciesIds;
+  final Color accent;
+
+  const _FullscreenPartyOverlay({
+    required this.game,
+    required this.speciesIds,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (speciesIds.isEmpty) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: .42),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              child: _PartySprites(
+                game: game,
+                speciesIds: speciesIds,
+                accent: accent,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
