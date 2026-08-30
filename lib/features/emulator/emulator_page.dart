@@ -449,21 +449,29 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     _exitDialogOpen = true;
 
     final visualTheme = _EmulatorVisualTheme.forGame(game);
-    final shouldExit = await showDialog<bool>(
+    final cloudAvailable = ref.read(authUserProvider).value != null;
+    final exitAction = await showDialog<_ExitGameAction>(
       context: context,
       builder: (dialogContext) => _ExitGameDialog(
         game: game,
         accent: visualTheme.accent,
         partySpeciesIds: _partySpeciesIds,
+        cloudAvailable: cloudAvailable,
       ),
     );
     _exitDialogOpen = false;
 
-    if (shouldExit != true || !context.mounted) return;
-    await _closeAndPop();
+    if (exitAction == null ||
+        exitAction == _ExitGameAction.keepPlaying ||
+        !context.mounted) {
+      return;
+    }
+    await _closeAndPop(
+      uploadCloud: exitAction == _ExitGameAction.cloudBackup,
+    );
   }
 
-  Future<void> _closeAndPop() async {
+  Future<void> _closeAndPop({required bool uploadCloud}) async {
     if (_isClosing) return;
     final navigator = Navigator.of(this.context);
     final emulatorRoute = ModalRoute.of(this.context);
@@ -484,7 +492,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     await _gameController.saveSram();
     String? cloudError;
     final user = ref.read(authUserProvider).value;
-    if (user != null) {
+    if (uploadCloud && user != null) {
       if (mounted) {
         setState(() => _closingStatus = 'Subiendo a RetroHub Cloud…');
       }
@@ -1761,15 +1769,19 @@ class _PokemonAvatar extends StatelessWidget {
   }
 }
 
+enum _ExitGameAction { keepPlaying, localOnly, cloudBackup }
+
 class _ExitGameDialog extends StatelessWidget {
   final Game game;
   final Color accent;
   final List<int> partySpeciesIds;
+  final bool cloudAvailable;
 
   const _ExitGameDialog({
     required this.game,
     required this.accent,
     required this.partySpeciesIds,
+    required this.cloudAvailable,
   });
 
   @override
@@ -1814,23 +1826,37 @@ class _ExitGameDialog extends StatelessWidget {
         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
       ),
       content: Text(
-        'Se guardará el progreso de ${_cleanGameTitle(game.title)} antes de salir.',
+        cloudAvailable
+            ? 'El progreso de ${_cleanGameTitle(game.title)} siempre se guardará localmente. Elige si también quieres reemplazar su respaldo en la nube.'
+            : 'El progreso de ${_cleanGameTitle(game.title)} se guardará localmente antes de salir. Inicia sesión con Google para respaldarlo en la nube.',
         textAlign: TextAlign.center,
         style: const TextStyle(color: Colors.white70),
       ),
       actionsAlignment: MainAxisAlignment.spaceEvenly,
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () =>
+              Navigator.of(context).pop(_ExitGameAction.keepPlaying),
           child: const Text('Seguir jugando'),
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.black,
+        if (cloudAvailable)
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () =>
+                Navigator.of(context).pop(_ExitGameAction.cloudBackup),
+            child: const Text('Respaldar y salir'),
           ),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Guardar y salir'),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Colors.white54),
+          ),
+          onPressed: () =>
+              Navigator.of(context).pop(_ExitGameAction.localOnly),
+          child: const Text('Salir sin respaldar'),
         ),
       ],
     );
