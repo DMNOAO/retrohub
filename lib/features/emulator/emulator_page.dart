@@ -715,23 +715,17 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   }) {
     final isExp = frame.family == PortraitCardFamily.exp;
     final isTrainer = frame.family == PortraitCardFamily.trainer;
-    final cardRatio =
-        isTrainer ? 471 / 659 : (isExp ? 400 / 564 : 360 / 506);
-    final cardWidth = math.min(
-      constraints.maxWidth,
-      constraints.maxHeight * cardRatio,
+    final width = constraints.maxWidth;
+    final height = constraints.maxHeight;
+    final screenRect = Rect.fromLTWH(
+      width * (isTrainer ? .075 : (isExp ? .055 : .09)),
+      height * (isTrainer ? .135 : (isExp ? .13 : .145)),
+      width * (isTrainer ? .85 : (isExp ? .91 : .82)),
+      height * (isTrainer ? .315 : (isExp ? .35 : .31)),
     );
-    final cardHeight = cardWidth / cardRatio;
-    final cardLeft = (constraints.maxWidth - cardWidth) / 2;
-    final cardTop = (constraints.maxHeight - cardHeight) / 2;
-    final screenWidth =
-        cardWidth * (isTrainer ? .79 : (isExp ? .70 : .61));
-    final screenHeight = screenWidth / (isGba ? 3 / 2 : 10 / 9);
-    final screenLeft = cardLeft + (cardWidth - screenWidth) / 2;
-    final screenTop = cardTop +
-        cardHeight * (isTrainer ? .155 : (isExp ? .155 : .17));
-    final controlsTop = cardTop + cardHeight * (isTrainer ? .48 : .56);
-    final controlsHeight = cardHeight * (isTrainer ? .39 : .34);
+    final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
+    final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
+    final controlsY = height * (isTrainer ? .55 : .57);
     final consoleLogo = isGba
         ? RetroHubConsoleType.gameBoyAdvance
         : isGbc
@@ -739,44 +733,52 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             : RetroHubConsoleType.gameBoy;
 
     return ColoredBox(
-      color: Colors.black,
+      color: visualTheme.background,
       child: Stack(
-        clipBehavior: Clip.hardEdge,
+        clipBehavior: Clip.none,
         children: [
+          // La imagen del juego va debajo del PNG. El área transparente de la
+          // carta actúa como ventana y el borde siempre queda por encima.
           Positioned(
-            left: cardLeft,
-            top: cardTop,
-            width: cardWidth,
-            height: cardHeight,
-            child: Image.asset(frame.assetPath, fit: BoxFit.fill),
+            left: screenRect.left,
+            top: screenRect.top,
+            width: screenRect.width,
+            height: screenRect.height,
+            child: ColoredBox(color: Colors.black, child: gameView),
           ),
           Positioned(
-            left: screenLeft,
-            top: screenTop,
-            width: screenWidth,
-            height: screenHeight,
-            child: gameView,
+            left: 0,
+            top: 0,
+            width: width,
+            height: height,
+            child: IgnorePointer(
+              child: Image.asset(
+                frame.assetPath,
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
           ),
           Positioned(
-            left: cardLeft + cardWidth * .07,
-            top: cardTop + cardHeight * .052,
-            width: cardWidth * .14,
-            height: cardHeight * .09,
+            left: width * .055,
+            top: height * .025,
+            width: width * .16,
+            height: height * .09,
             child: ClipOval(
               child: _GameArtwork(
                 coverPath: CoverHelper.getCover(game.title, game.console),
                 accent: visualTheme.accent,
-                width: cardWidth * .14,
-                height: cardHeight * .09,
+                width: width * .16,
+                height: height * .09,
                 iconSize: 18,
               ),
             ),
           ),
           Positioned(
-            left: cardLeft + cardWidth * .23,
-            width: cardWidth * .58,
-            top: cardTop + cardHeight * .052,
-            height: cardHeight * .09,
+            left: width * .21,
+            width: width * .60,
+            top: height * .035,
+            height: height * .07,
             child: FittedBox(
               alignment: Alignment.centerLeft,
               fit: BoxFit.scaleDown,
@@ -788,82 +790,79 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            right: constraints.maxWidth - cardLeft - cardWidth * .96,
-            top: cardTop + cardHeight * .04,
+            right: width * .035,
+            top: height * .025,
             child: Transform.scale(
-              scale: .78,
+              scale: .82,
               child: RetroHubQuickMenu(
                 onAction: (value) => _handleMenuAction(context, value),
               ),
             ),
           ),
           Positioned(
-            left: cardLeft + cardWidth * .07,
-            right: constraints.maxWidth - cardLeft - cardWidth * .07,
-            top: controlsTop,
-            height: controlsHeight * .57,
+            left: width * .055,
+            top: controlsY,
+            child: Opacity(
+              opacity: _preferences.controlOpacity,
+              child: _DirectionalControl(
+                type: _preferences.directionalControl,
+                keySize: dpadSize,
+                controller: _gameController,
+                buttonUp: _buttonUp,
+                buttonDown: _buttonDown,
+                buttonLeft: _buttonLeft,
+                buttonRight: _buttonRight,
+              ),
+            ),
+          ),
+          Positioned(
+            right: width * .055,
+            top: controlsY + dpadSize * .45,
             child: Opacity(
               opacity: _preferences.controlOpacity,
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _DirectionalControl(
-                    type: _preferences.directionalControl,
-                    keySize: 33 * _preferences.sizeScale,
+                  _GameBoyActionButton(
+                    size: actionSize,
+                    label: _preferences.swapAB ? 'A' : 'B',
+                    buttonId: _preferences.swapAB ? _buttonA : _buttonB,
                     controller: _gameController,
-                    buttonUp: _buttonUp,
-                    buttonDown: _buttonDown,
-                    buttonLeft: _buttonLeft,
-                    buttonRight: _buttonRight,
                   ),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      if (isGba)
-                        Row(
-                          children: [
-                            _GameBoyShoulderButton(
-                              label: 'L',
-                              buttonId: _buttonL,
-                              controller: _gameController,
-                            ),
-                            const SizedBox(width: 6),
-                            _GameBoyShoulderButton(
-                              label: 'R',
-                              buttonId: _buttonR,
-                              controller: _gameController,
-                            ),
-                          ],
-                        ),
-                      Row(
-                        children: [
-                          _GameBoyActionButton(
-                            size: 49 * _preferences.sizeScale,
-                            label: _preferences.swapAB ? 'A' : 'B',
-                            buttonId:
-                                _preferences.swapAB ? _buttonA : _buttonB,
-                            controller: _gameController,
-                          ),
-                          const SizedBox(width: 8),
-                          _GameBoyActionButton(
-                            size: 49 * _preferences.sizeScale,
-                            label: _preferences.swapAB ? 'B' : 'A',
-                            buttonId:
-                                _preferences.swapAB ? _buttonB : _buttonA,
-                            controller: _gameController,
-                          ),
-                        ],
-                      ),
-                    ],
+                  SizedBox(width: width * .025),
+                  _GameBoyActionButton(
+                    size: actionSize,
+                    label: _preferences.swapAB ? 'B' : 'A',
+                    buttonId: _preferences.swapAB ? _buttonB : _buttonA,
+                    controller: _gameController,
                   ),
                 ],
               ),
             ),
           ),
+          if (isGba) ...[
+            Positioned(
+              left: width * .08,
+              top: height * .50,
+              child: _GameBoyShoulderButton(
+                label: 'L',
+                buttonId: _buttonL,
+                controller: _gameController,
+              ),
+            ),
+            Positioned(
+              right: width * .08,
+              top: height * .50,
+              child: _GameBoyShoulderButton(
+                label: 'R',
+                buttonId: _buttonR,
+                controller: _gameController,
+              ),
+            ),
+          ],
           Positioned(
-            left: cardLeft + cardWidth * .18,
-            right: constraints.maxWidth - cardLeft - cardWidth * .18,
-            top: controlsTop + controlsHeight * .58,
+            left: width * .20,
+            right: width * .20,
+            top: height * .755,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -885,9 +884,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            left: cardLeft + cardWidth * .06,
-            right: constraints.maxWidth - cardLeft - cardWidth * .06,
-            top: controlsTop + controlsHeight * .79,
+            left: width * .055,
+            right: width * .055,
+            top: height * .835,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -907,10 +906,10 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           Positioned(
-            left: cardLeft,
-            right: constraints.maxWidth - cardLeft - cardWidth,
-            top: cardTop + cardHeight * .91,
-            height: cardHeight * .07,
+            left: width * .25,
+            right: width * .25,
+            top: height * .47,
+            height: height * .075,
             child: IgnorePointer(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
@@ -935,6 +934,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         game.console.toLowerCase().contains('game boy color');
     final bool pageLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
+    final bool portraitCardActive =
+        !pageLandscape && _selectedPortraitFrame != null;
     final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
     final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
     final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
@@ -944,6 +945,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final bool ndsFullscreen = isNds && _preferences.ndsFullscreen;
     final bool consoleFullscreen =
         snesFullscreen || gbaFullscreen || gameBoyFullscreen || ndsFullscreen;
+    final bool borderlessGameSurface =
+        consoleFullscreen || portraitCardActive;
     _gameController.hapticsEnabled = !isSnes &&
         (isNds
             ? _preferences.ndsVibrationEnabled
@@ -956,7 +959,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       },
       child: Scaffold(
         backgroundColor: visualTheme.background,
-        appBar: consoleFullscreen ? null : AppBar(
+        appBar: consoleFullscreen || portraitCardActive ? null : AppBar(
           toolbarHeight: 58,
           backgroundColor: visualTheme.appBar,
           foregroundColor: Colors.white,
@@ -972,7 +975,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             DecoratedBox(
               decoration: BoxDecoration(gradient: visualTheme.gradient),
               child: SafeArea(
-                top: false,
+                top: portraitCardActive,
                 left: !consoleFullscreen,
                 right: !consoleFullscreen,
                 bottom: !consoleFullscreen,
@@ -991,9 +994,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(
-                          consoleFullscreen ? 0 : 18,
+                          borderlessGameSurface ? 0 : 18,
                         ),
-                        border: consoleFullscreen ? null : Border.all(
+                        border: borderlessGameSurface ? null : Border.all(
                           color: corePath != null
                               ? visualTheme.accent
                               : Theme.of(context).colorScheme.error,
@@ -1002,7 +1005,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(
-                          consoleFullscreen ? 0 : 15,
+                          borderlessGameSurface ? 0 : 15,
                         ),
                         child: corePath != null
                             ? LibretroGameView(
