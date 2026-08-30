@@ -18,6 +18,7 @@ final gamesProvider = FutureProvider((ref) {
 });
 
 enum LibrarySortOption {
+  recent,
   nameAsc,
   nameDesc,
   console,
@@ -42,7 +43,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     super.initState();
     _consoleFilter = widget.initialConsoleFilter;
   }
-  LibrarySortOption _sortOption = LibrarySortOption.nameAsc;
+  LibrarySortOption _sortOption = LibrarySortOption.recent;
   bool _refreshingLibrary = false;
   final ScrollController _gridScrollController = ScrollController();
 
@@ -230,7 +231,15 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   );
                 }
 
+                final playedGames = games.where((game) => game.lastPlayedAt != null).toList();
+                playedGames.sort((a, b) =>
+                    (b.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+                      a.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                    ));
+                final recentGame = playedGames.isEmpty ? null : playedGames.first;
+
                 final filteredGames = games.where((game) {
+                  if (game.id == recentGame?.id) return false;
                   final query = _searchText.toLowerCase();
                   final matchesText = game.title.toLowerCase().contains(query) ||
                       game.console.toLowerCase().contains(query);
@@ -240,6 +249,18 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 }).toList();
 
                 switch (_sortOption) {
+                  case LibrarySortOption.recent:
+                    filteredGames.sort((a, b) {
+                      final aDate = a.lastPlayedAt ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
+                      final bDate = b.lastPlayedAt ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
+                      final byRecent = bDate.compareTo(aDate);
+                      return byRecent != 0
+                          ? byRecent
+                          : a.title.compareTo(b.title);
+                    });
+                    break;
                   case LibrarySortOption.nameAsc:
                     filteredGames.sort((a, b) => a.title.compareTo(b.title));
                     break;
@@ -257,13 +278,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     );
                     break;
                 }
-
-                final playedGames = games.where((game) => game.lastPlayedAt != null).toList();
-                playedGames.sort((a, b) =>
-                    (b.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
-                      a.lastPlayedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
-                    ));
-                final recentGame = playedGames.isEmpty ? null : playedGames.first;
 
                 return Scrollbar(
                   controller: _gridScrollController,
@@ -345,6 +359,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                             icon: const Icon(Icons.filter_list),
                             itemBuilder: (context) => const [
                               PopupMenuItem(
+                                value: LibrarySortOption.recent,
+                                child: Text('Jugados recientemente'),
+                              ),
+                              PopupMenuItem(
                                 value: LibrarySortOption.nameAsc,
                                 child: Text('Nombre A-Z'),
                               ),
@@ -423,6 +441,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                             });
                           },
                           items: const [
+                            DropdownMenuItem(
+                              value: LibrarySortOption.recent,
+                              child: Text('Jugados recientemente'),
+                            ),
                             DropdownMenuItem(
                               value: LibrarySortOption.nameAsc,
                               child: Text('Nombre A-Z'),
