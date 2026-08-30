@@ -860,7 +860,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
               child: _PartySprites(
                 game: game,
                 speciesIds: _partySpeciesIds,
-                accent: visualTheme.accent,
+                accent: isGba ? palette.partyAccent : visualTheme.accent,
               ),
             ),
           ),
@@ -2639,6 +2639,7 @@ class _PortraitCardPalette {
   final Color line;
   final Color border;
   final Color ink;
+  final Color partyAccent;
   final String energyAsset;
 
   const _PortraitCardPalette({
@@ -2650,6 +2651,7 @@ class _PortraitCardPalette {
     required this.line,
     required this.border,
     required this.ink,
+    required this.partyAccent,
     required this.energyAsset,
   });
 
@@ -2689,6 +2691,19 @@ class _PortraitCardPalette {
       _ => 'normal',
     };
     final dark = type == 'oscuridad';
+    final partyAccent = switch (type) {
+      'agua' => const Color(0xFF2D91C7),
+      'electrico' => const Color(0xFFE0A900),
+      'fuego' => const Color(0xFFC74432),
+      'hoja' => const Color(0xFF3E8B47),
+      'lucha' => const Color(0xFF9C6338),
+      'metal' => const Color(0xFF73838C),
+      'oscuridad' => const Color(0xFF535663),
+      'psi' => const Color(0xFF8A4FA0),
+      'dragon' => const Color(0xFF777253),
+      'hada' => const Color(0xFFD36C9E),
+      _ => const Color(0xFF9C8665),
+    };
     return _PortraitCardPalette(
       top: colors[0],
       middle: colors[1],
@@ -2702,6 +2717,7 @@ class _PortraitCardPalette {
               : const Color(0xFFB88A18),
       border: const Color(0xFFFFD21C),
       ink: dark ? Colors.white : const Color(0xFF241D13),
+      partyAccent: partyAccent,
       energyAsset: 'assets/frames/portrait/energy/$icon.png',
     );
   }
