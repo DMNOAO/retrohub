@@ -714,18 +714,20 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     required _EmulatorVisualTheme visualTheme,
   }) {
     final isExp = frame.family == PortraitCardFamily.exp;
-    final isTrainer = frame.family == PortraitCardFamily.trainer;
+    final palette = _PortraitCardPalette.forFrame(frame.id);
     final width = constraints.maxWidth;
     final height = constraints.maxHeight;
+    final screenWidth = width * .92;
+    final screenHeight = screenWidth / (isGba ? 3 / 2 : 10 / 9);
     final screenRect = Rect.fromLTWH(
-      width * (isTrainer ? .075 : (isExp ? .055 : .09)),
-      height * (isTrainer ? .135 : (isExp ? .13 : .145)),
-      width * (isTrainer ? .85 : (isExp ? .91 : .82)),
-      height * (isTrainer ? .315 : (isExp ? .35 : .31)),
+      (width - screenWidth) / 2,
+      height * .18,
+      screenWidth,
+      screenHeight,
     );
     final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
     final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
-    final controlsY = height * (isTrainer ? .55 : .57);
+    final controlsY = height * (isGba ? .59 : .70);
     final coverPath = CoverHelper.getCover(game.title, game.console);
     final consoleLogo = isGba
         ? RetroHubConsoleType.gameBoyAdvance
@@ -738,8 +740,44 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // La imagen del juego va debajo del PNG. El área transparente de la
-          // carta actúa como ventana y el borde siempre queda por encima.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [palette.top, palette.middle, palette.bottom],
+                  stops: const [0, .48, 1],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: palette.border, width: 8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 12,
+                    offset: Offset(0, 5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .035,
+            right: width * .035,
+            top: height * .025,
+            height: height * .105,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.header.withValues(alpha: .58),
+                borderRadius: BorderRadius.circular(isExp ? 24 : 9),
+                border: Border.all(
+                  color: palette.line.withValues(alpha: .85),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+          // La pantalla mantiene el mismo ancho útil del modo vertical normal.
           Positioned(
             left: screenRect.left,
             top: screenRect.top,
@@ -748,42 +786,75 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             child: ColoredBox(color: Colors.black, child: gameView),
           ),
           Positioned(
-            left: 0,
-            top: 0,
-            width: width,
-            height: height,
+            left: screenRect.left - 3,
+            top: screenRect.top - 3,
+            width: screenRect.width + 6,
+            height: screenRect.height + 6,
             child: IgnorePointer(
-              child: Image.asset(
-                frame.assetPath,
-                fit: BoxFit.fill,
-                filterQuality: FilterQuality.medium,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(isExp ? 24 : 8),
+                  border: Border.all(color: palette.line, width: 3),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
           Positioned(
-            left: width * (isExp ? .075 : .065),
-            top: height * (isExp ? .033 : .03),
-            width: width * (isExp ? .14 : .15),
-            height: height * (isExp ? .105 : .10),
-            child: coverPath == null
-                ? Icon(
-                    Icons.sports_esports_rounded,
-                    color: visualTheme.accent,
-                    size: 24,
-                  )
-                : Image.asset(
-                    coverPath,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Icon(
-                      Icons.sports_esports_rounded,
-                      color: visualTheme.accent,
-                      size: 24,
-                    ),
-                  ),
+            left: width * .075,
+            top: height * .012,
+            child: Text(
+              isExp ? 'STAGE 2' : 'STAGE 1',
+              style: TextStyle(
+                color: palette.ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
           Positioned(
-            left: width * (isExp ? .22 : .21),
-            width: width * (isExp ? .60 : .61),
+            left: width * .04,
+            top: height * .025,
+            width: width * .19,
+            height: height * (isExp ? .105 : .10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: palette.stage,
+                border: Border.all(color: palette.line, width: 3),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black38, blurRadius: 6),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: coverPath == null
+                    ? Icon(
+                        Icons.sports_esports_rounded,
+                        color: visualTheme.accent,
+                        size: 24,
+                      )
+                    : Image.asset(
+                        coverPath,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.sports_esports_rounded,
+                          color: visualTheme.accent,
+                          size: 24,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: width * .23,
+            width: width * .59,
             top: height * (isExp ? .05 : .045),
             height: height * .065,
             child: FittedBox(
@@ -803,6 +874,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
               scale: .82,
               child: RetroHubQuickMenu(
                 onAction: (value) => _handleMenuAction(context, value),
+                anchorChild: Image.asset(
+                  palette.energyAsset,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                ),
               ),
             ),
           ),
@@ -869,7 +947,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           Positioned(
             left: width * .20,
             right: width * .20,
-            top: height * .755,
+            top: height * (isGba ? .80 : .875),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -893,7 +971,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           Positioned(
             left: width * .055,
             right: width * .055,
-            top: height * .835,
+            top: height * .12,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -915,13 +993,40 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           Positioned(
             left: width * .25,
             right: width * .25,
-            top: height * .47,
+            top: screenRect.bottom + height * .012,
             height: height * .075,
             child: IgnorePointer(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: RetroHubConsoleLogo(console: consoleLogo),
               ),
+            ),
+          ),
+          Positioned(
+            left: width * .07,
+            right: width * .07,
+            bottom: height * .018,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(height: 2, color: palette.line),
+                const SizedBox(height: 5),
+                DefaultTextStyle(
+                  style: TextStyle(
+                    color: palette.ink,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('debilidad'),
+                      Text('resistencia'),
+                      Text('retirada'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -2526,6 +2631,75 @@ String _pokemonSpritePath(Game game, int speciesId) {
   }
 
   return SpriteResolver.pokemonForGame(profile: profile, pokemonId: speciesId);
+}
+
+class _PortraitCardPalette {
+  final Color top;
+  final Color middle;
+  final Color bottom;
+  final Color header;
+  final Color stage;
+  final Color line;
+  final Color border;
+  final Color ink;
+  final String energyAsset;
+
+  const _PortraitCardPalette({
+    required this.top,
+    required this.middle,
+    required this.bottom,
+    required this.header,
+    required this.stage,
+    required this.line,
+    required this.border,
+    required this.ink,
+    required this.energyAsset,
+  });
+
+  factory _PortraitCardPalette.forFrame(String frameId) {
+    final type = frameId
+        .replaceFirst('portrait_', '')
+        .replaceFirst('_exp', '')
+        .replaceFirst('trainer_rocket', 'oscuridad');
+    final colors = switch (type) {
+      'agua' => const [Color(0xFFBCEBFA), Color(0xFF68BDE7), Color(0xFF277EBA)],
+      'electrico' => const [Color(0xFFFFF3A0), Color(0xFFFFD838), Color(0xFFE8A817)],
+      'fuego' => const [Color(0xFFFFD09B), Color(0xFFF47742), Color(0xFFB72E2E)],
+      'hoja' => const [Color(0xFFCFF0A4), Color(0xFF70BC5A), Color(0xFF247548)],
+      'lucha' => const [Color(0xFFEAC58F), Color(0xFFC1844C), Color(0xFF754128)],
+      'metal' => const [Color(0xFFE9EEF0), Color(0xFFAAB6BE), Color(0xFF64737D)],
+      'oscuridad' => const [Color(0xFF7B8190), Color(0xFF3A3E49), Color(0xFF17191F)],
+      'psi' => const [Color(0xFFF1C2EC), Color(0xFFB56AB8), Color(0xFF633D86)],
+      'dragon' => const [Color(0xFF9DDAE8), Color(0xFF5D83C7), Color(0xFFE1B52F)],
+      'hada' => const [Color(0xFFFFD8EC), Color(0xFFE89AC4), Color(0xFFB85B94)],
+      _ => const [Color(0xFFF5E8C9), Color(0xFFD7C49E), Color(0xFF9D8764)],
+    };
+    final icon = switch (type) {
+      'dragon' => 'dragon',
+      'hada' => 'hada',
+      String value when value == 'electrico' => 'electrico',
+      String value when value == 'hoja' => 'hoja',
+      String value when value == 'psi' => 'psi',
+      String value when value == 'oscuridad' => 'oscuridad',
+      String value when value == 'metal' => 'metal',
+      String value when value == 'lucha' => 'lucha',
+      String value when value == 'fuego' => 'fuego',
+      String value when value == 'agua' => 'agua',
+      _ => 'normal',
+    };
+    final dark = type == 'oscuridad';
+    return _PortraitCardPalette(
+      top: colors[0],
+      middle: colors[1],
+      bottom: colors[2],
+      header: colors[0],
+      stage: colors[1],
+      line: dark ? const Color(0xFFC8B85B) : const Color(0xFFB88A18),
+      border: const Color(0xFFFFD21C),
+      ink: dark ? Colors.white : const Color(0xFF241D13),
+      energyAsset: 'assets/frames/portrait/energy/$icon.png',
+    );
+  }
 }
 
 class _EmulatorVisualTheme {

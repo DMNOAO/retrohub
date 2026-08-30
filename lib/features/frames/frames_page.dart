@@ -160,8 +160,7 @@ class _FramesPageState extends State<FramesPage> {
                           width: 175,
                           child: _FrameTile(
                             name: frame.name,
-                            assetPath: frame.assetPath,
-                            imageFit: BoxFit.contain,
+                            preview: _PortraitFramePreview(frame: frame),
                             selected: _selectedPortraitId == frame.id,
                             recommended: frame.id == portraitRecommended?.id,
                             onTap: () => _selectPortrait(frame.id),
@@ -233,6 +232,7 @@ class _FrameTile extends StatelessWidget {
   final bool selected;
   final bool recommended;
   final BoxFit imageFit;
+  final Widget? preview;
   final VoidCallback onTap;
 
   const _FrameTile({
@@ -241,6 +241,7 @@ class _FrameTile extends StatelessWidget {
     required this.selected,
     this.recommended = false,
     this.imageFit = BoxFit.cover,
+    this.preview,
     required this.onTap,
   });
 
@@ -261,7 +262,9 @@ class _FrameTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (assetPath == null)
+            if (preview != null)
+              preview!
+            else if (assetPath == null)
               ColoredBox(
                 color: colors.surfaceContainerHighest,
                 child: const Icon(Icons.hide_image_outlined, size: 42),
@@ -306,6 +309,48 @@ class _FrameTile extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PortraitFramePreview extends StatelessWidget {
+  final PortraitGameFrame frame;
+
+  const _PortraitFramePreview({required this.frame});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = switch (frame.typeKey) {
+      'agua' => const [Color(0xFFBCEBFA), Color(0xFF277EBA)],
+      'electrico' => const [Color(0xFFFFF3A0), Color(0xFFE8A817)],
+      'fuego' => const [Color(0xFFFFD09B), Color(0xFFB72E2E)],
+      'hoja' => const [Color(0xFFCFF0A4), Color(0xFF247548)],
+      'lucha' => const [Color(0xFFEAC58F), Color(0xFF754128)],
+      'metal' => const [Color(0xFFE9EEF0), Color(0xFF64737D)],
+      'oscuridad' => const [Color(0xFF7B8190), Color(0xFF17191F)],
+      'psi' => const [Color(0xFFF1C2EC), Color(0xFF633D86)],
+      'dragon' => const [Color(0xFF9DDAE8), Color(0xFFE1B52F)],
+      'hada' => const [Color(0xFFFFD8EC), Color(0xFFB85B94)],
+      _ => const [Color(0xFFF5E8C9), Color(0xFF9D8764)],
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ),
+        border: Border.all(color: const Color(0xFFFFD21C), width: 7),
+      ),
+      child: Center(
+        child: Image.asset(
+          frame.energyAssetPath,
+          width: 64,
+          height: 64,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.none,
         ),
       ),
     );

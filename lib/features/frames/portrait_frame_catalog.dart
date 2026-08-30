@@ -15,13 +15,23 @@ class PortraitGameFrame {
     required this.assetPath,
     required this.family,
   });
+
+  String get typeKey => id
+      .replaceFirst('portrait_', '')
+      .replaceFirst('_exp', '')
+      .replaceFirst('trainer_rocket', 'oscuridad');
+
+  String get energyAssetPath =>
+      'assets/frames/portrait/energy/$typeKey.png';
 }
 
 class PortraitFrameCatalog {
   static const Map<String, String> _typeNames = <String, String>{
     'agua': 'Agua',
     'electrico': 'Eléctrico',
+    'dragon': 'Dragón',
     'fuego': 'Fuego',
+    'hada': 'Hada',
     'hoja': 'Hoja',
     'lucha': 'Lucha',
     'metal': 'Metal',
@@ -49,7 +59,9 @@ class PortraitFrameCatalog {
         PortraitGameFrame(
           id: 'portrait_${entry.key}$suffix',
           name: 'Carta ${entry.value}',
-          assetPath: 'assets/frames/portrait/cards/${entry.key}$suffix.png',
+          assetPath: entry.key == 'dragon' || entry.key == 'hada'
+              ? 'assets/frames/portrait/cards/normal$suffix.png'
+              : 'assets/frames/portrait/cards/${entry.key}$suffix.png',
           family: family,
         ),
       const PortraitGameFrame(

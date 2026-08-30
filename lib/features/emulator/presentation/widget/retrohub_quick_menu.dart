@@ -13,9 +13,11 @@ class RetroHubQuickMenu extends StatefulWidget {
   const RetroHubQuickMenu({
     super.key,
     required this.onAction,
+    this.anchorChild,
   });
 
   final ValueChanged<String> onAction;
+  final Widget? anchorChild;
 
   @override
   State<RetroHubQuickMenu> createState() => _RetroHubQuickMenuState();
@@ -123,6 +125,7 @@ class _RetroHubQuickMenuState extends State<RetroHubQuickMenu>
       key: _anchorKey,
       isOpen: _isOpen,
       onPressed: _toggle,
+      closedChild: widget.anchorChild,
     );
   }
 }
@@ -136,10 +139,12 @@ class _RetroHubQuickMenuAnchorButton extends StatelessWidget {
     super.key,
     required this.isOpen,
     required this.onPressed,
+    this.closedChild,
   });
 
   final bool isOpen;
   final VoidCallback onPressed;
+  final Widget? closedChild;
 
   static const double _size = 46;
 
@@ -186,7 +191,10 @@ class _RetroHubQuickMenuAnchorButton extends StatelessWidget {
                     color: Colors.white,
                     size: 22,
                   )
-                : const SizedBox.shrink(key: ValueKey('quick_menu_closed')),
+                : KeyedSubtree(
+                    key: const ValueKey('quick_menu_closed'),
+                    child: closedChild ?? const SizedBox.shrink(),
+                  ),
           ),
         ),
       ),
