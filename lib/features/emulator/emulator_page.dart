@@ -727,6 +727,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     );
     final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
     final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
+    final coverDiameter = math.min(width * .19, height * .095);
     final controlsY = height * (isGba ? .59 : .70);
     final coverPath = CoverHelper.getCover(game.title, game.console);
     final consoleLogo = isGba
@@ -809,37 +810,43 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           Positioned(
             left: width * .04,
             top: height * .025,
-            width: width * .19,
-            height: height * (isExp ? .105 : .10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: palette.stage,
-                border: Border.all(color: palette.line, width: 3),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black38, blurRadius: 6),
-                ],
-              ),
-              child: ClipOval(
-                child: Padding(
-                  padding: const EdgeInsets.all(7),
-                  child: coverPath == null
-                      ? Icon(
-                          Icons.sports_esports_rounded,
-                          color: visualTheme.accent,
-                          size: 24,
-                        )
-                      : Image.asset(
-                          coverPath,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Icon(
+            width: coverDiameter,
+            height: coverDiameter,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipOval(
+                  child: ColoredBox(
+                    color: palette.stage,
+                    child: coverPath == null
+                        ? Icon(
                             Icons.sports_esports_rounded,
                             color: visualTheme.accent,
                             size: 24,
+                          )
+                        : Image.asset(
+                            coverPath,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.sports_esports_rounded,
+                              color: visualTheme.accent,
+                              size: 24,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
-              ),
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: palette.line, width: 3),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 6),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           Positioned(
