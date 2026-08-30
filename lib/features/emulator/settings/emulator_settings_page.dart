@@ -678,6 +678,16 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                       const Text('Pantallas', style: TextStyle(fontWeight: FontWeight.bold)),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
+                        secondary: const Icon(Icons.fullscreen_rounded),
+                        title: const Text('Modo pantalla completa horizontal'),
+                        subtitle: const Text('Oculta la barra y coloca ambas pantallas lado a lado'),
+                        value: _preferences.ndsFullscreen,
+                        onChanged: (value) => _update(
+                          _preferences.copyWith(ndsFullscreen: value),
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
                         title: const Text('Intercambiar pantallas'),
                         subtitle: const Text('Cambia la posición de la pantalla principal y la táctil'),
                         value: _preferences.ndsSwapScreens,
@@ -754,6 +764,7 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
                             ndsScreensScale: defaults.ndsScreensScale,
                             ndsScreenEmphasis: defaults.ndsScreenEmphasis,
                             ndsSwapScreens: defaults.ndsSwapScreens,
+                            ndsFullscreen: defaults.ndsFullscreen,
                           );
                           await _update(updated);
                         },

@@ -190,6 +190,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
       );
       return;
     }
+    if (CoreLoader.isNdsRom(game.romPath) && preferences.ndsFullscreen) {
+      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
+      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      return;
+    }
     if ((CoreLoader.isGbaRom(game.romPath) && preferences.gbaFullscreen) ||
         (CoreLoader.isGameBoyRom(game.romPath) &&
             preferences.gameBoyFullscreen)) {
@@ -640,6 +649,48 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     super.dispose();
   }
 
+  Widget _ndsTouchSurface({
+    required double width,
+    required double height,
+  }) {
+    void updateTouch(PointerEvent event) {
+      _gameController.setTouchState(
+        x: ((event.localPosition.dx / width) * 255)
+            .round()
+            .clamp(0, 255)
+            .toInt(),
+        y: ((event.localPosition.dy / height) * 191)
+            .round()
+            .clamp(0, 191)
+            .toInt(),
+        pressed: true,
+      );
+    }
+
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (event) {
+        if (_ndsTouchPointer != null) return;
+        _ndsTouchPointer = event.pointer;
+        updateTouch(event);
+      },
+      onPointerMove: (event) {
+        if (_ndsTouchPointer != event.pointer) return;
+        updateTouch(event);
+      },
+      onPointerUp: (event) {
+        if (_ndsTouchPointer != event.pointer) return;
+        _gameController.releaseTouch();
+        _ndsTouchPointer = null;
+      },
+      onPointerCancel: (event) {
+        if (_ndsTouchPointer != event.pointer) return;
+        _gameController.releaseTouch();
+        _ndsTouchPointer = null;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final EmulationCore core = CoreLoader.coreForRom(game.romPath);
@@ -658,8 +709,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     final bool gameBoyFullscreen =
         CoreLoader.isGameBoyRom(game.romPath) &&
         _preferences.gameBoyFullscreen;
+    final bool ndsFullscreen = isNds && _preferences.ndsFullscreen;
     final bool consoleFullscreen =
-        snesFullscreen || gbaFullscreen || gameBoyFullscreen;
+        snesFullscreen || gbaFullscreen || gameBoyFullscreen || ndsFullscreen;
     _gameController.hapticsEnabled = !isSnes &&
         (isNds
             ? _preferences.ndsVibrationEnabled
@@ -697,6 +749,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     final bool landscape =
                         constraints.maxWidth > constraints.maxHeight;
                     final double padding = landscape ? 8 : 14;
+                    final double ndsMiddleControlsHeight = math.max(
+                      30 * _preferences.ndsShoulderScale,
+                      25 * _preferences.ndsSystemScale,
+                    );
+                    final double ndsPortraitScreenGap =
+                        ndsMiddleControlsHeight + 12;
 
                     final Widget gameView = Container(
                       decoration: BoxDecoration(
@@ -746,7 +804,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                                     ? _ndsBottomScreenScale(_preferences)
                                     : 1,
                                 ndsSwapScreens: isNds && _preferences.ndsSwapScreens,
-                                ndsScreensScale: 1,
+                                ndsScreensScale: isNds && landscape
+                                    ? _preferences.ndsScreensScale
+                                    : 1,
+                                ndsHorizontalLayout: isNds && landscape,
+                                ndsScreenGap: isNds && !landscape
+                                    ? ndsPortraitScreenGap
+                                    : 4,
                               )
                             : _CoreNotFoundView(
                                 romPath: game.romPath,
@@ -1097,6 +1161,159 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       );
                     }
 
+                    if (landscape && isNds) {
+                      const double leftControlsWidth = 154;
+                      const double rightControlsWidth = 174;
+                      final double topFactor =
+                          _ndsTopScreenScale(_preferences);
+                      final double bottomFactor =
+                          _ndsBottomScreenScale(_preferences);
+                      final double controlOpacity =
+                          _preferences.ndsControlOpacity;
+
+                      return Padding(
+                        padding: ndsFullscreen
+                            ? EdgeInsets.zero
+                            : EdgeInsets.symmetric(
+                                horizontal: padding,
+                                vertical: 4,
+                              ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: leftControlsWidth,
+                              child: Opacity(
+                                opacity: controlOpacity,
+                                child: _LandscapeLeftControls(
+                                  controller: _gameController,
+                                  directionalControl:
+                                      _preferences.ndsDirectionalControl,
+                                  buttonUp: _buttonUp,
+                                  buttonDown: _buttonDown,
+                                  buttonLeft: _buttonLeft,
+                                  buttonRight: _buttonRight,
+                                  buttonSelect: _buttonSelect,
+                                  buttonL: _buttonL,
+                                  showShoulder: true,
+                                  consoleLogo:
+                                      RetroHubConsoleType.nintendoDs,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, stageConstraints) {
+                                  final destinations =
+                                      _ndsHorizontalDestinations(
+                                    Size(
+                                      stageConstraints.maxWidth,
+                                      stageConstraints.maxHeight,
+                                    ),
+                                    topScreenScale: topFactor,
+                                    bottomScreenScale: bottomFactor,
+                                    screensScale:
+                                        _preferences.ndsScreensScale,
+                                  );
+                                  final touchRect =
+                                      _preferences.ndsSwapScreens
+                                          ? destinations.$1
+                                          : destinations.$2;
+                                  final overlayRect = destinations.$2;
+                                  return Stack(
+                                    children: [
+                                      Positioned.fill(child: gameView),
+                                      Positioned.fromRect(
+                                        rect: touchRect,
+                                        child: _ndsTouchSurface(
+                                          width: touchRect.width,
+                                          height: touchRect.height,
+                                        ),
+                                      ),
+                                      if (ndsFullscreen &&
+                                          _partySpeciesIds.isNotEmpty)
+                                        Positioned.fromRect(
+                                          rect: overlayRect,
+                                          child: IgnorePointer(
+                                            child: Align(
+                                              alignment: Alignment.topRight,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.all(8),
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black
+                                                        .withValues(alpha: .42),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      18,
+                                                    ),
+                                                  ),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 3,
+                                                    ),
+                                                    child: _PartySprites(
+                                                      game: game,
+                                                      speciesIds:
+                                                          _partySpeciesIds,
+                                                      accent:
+                                                          visualTheme.accent,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                            SizedBox(
+                              width: rightControlsWidth,
+                              child: Opacity(
+                                opacity: controlOpacity,
+                                child: _LandscapeRightControls(
+                                  controller: _gameController,
+                                  buttonA: _preferences.ndsSwapAB
+                                      ? _buttonB
+                                      : _buttonA,
+                                  buttonB: _preferences.ndsSwapAB
+                                      ? _buttonA
+                                      : _buttonB,
+                                  buttonX: _buttonX,
+                                  buttonY: _buttonY,
+                                  buttonStart: _buttonStart,
+                                  buttonR: _buttonR,
+                                  showShoulder: true,
+                                  isSnes: true,
+                                  buttonAColor: visualTheme.accent,
+                                  buttonBColor: Color.lerp(
+                                    visualTheme.accent,
+                                    visualTheme.background,
+                                    .28,
+                                  )!,
+                                  buttonXColor: Color.lerp(
+                                    visualTheme.accent,
+                                    Colors.white,
+                                    .22,
+                                  )!,
+                                  buttonYColor: Color.lerp(
+                                    visualTheme.accent,
+                                    visualTheme.gradient.colors[2],
+                                    .48,
+                                  )!,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
                     if (landscape) {
                       return Padding(
                         padding: EdgeInsets.symmetric(
@@ -1184,20 +1401,23 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                       final double bottomWidth = layoutWidth * bottomFactor;
                       final double topHeight = topWidth / (4 / 3);
                       final double bottomHeight = bottomWidth / (4 / 3);
-                      final double screenHeight = topHeight + bottomHeight + 4;
+                      final double screenGap = ndsPortraitScreenGap;
+                      final double screenHeight =
+                          topHeight + bottomHeight + screenGap;
                       final double screenLeft =
                           (constraints.maxWidth - layoutWidth) / 2;
                       final bool touchIsTop = _preferences.ndsSwapScreens;
                       final double touchScreenTop = touchIsTop
                           ? 0
-                          : topHeight + 4;
+                          : topHeight + screenGap;
                       final double touchScreenWidth =
                           touchIsTop ? topWidth : bottomWidth;
                       final double touchScreenHeight =
                           touchIsTop ? topHeight : bottomHeight;
                       final double touchScreenLeft =
                           (constraints.maxWidth - touchScreenWidth) / 2;
-                      final double shoulderRowTop = topHeight + 14;
+                      final double shoulderRowTop = topHeight +
+                          (screenGap - ndsMiddleControlsHeight) / 2;
                       final double logoTop = screenHeight + 6;
                       final double mainControlsTop = logoTop;
                       final double controlOpacity = _preferences.ndsControlOpacity;
@@ -1932,6 +2152,41 @@ double _ndsBottomScreenScale(EmulatorPreferences preferences) {
   final emphasis = preferences.ndsScreenEmphasis;
   final relative = emphasis == NdsScreenEmphasis.top ? .82 : 1.0;
   return relative;
+}
+
+(Rect, Rect) _ndsHorizontalDestinations(
+  Size size, {
+  required double topScreenScale,
+  required double bottomScreenScale,
+  required double screensScale,
+}) {
+  const gap = 4.0;
+  const aspectRatio = 4 / 3;
+  final widthBase =
+      (size.width - gap) / (topScreenScale + bottomScreenScale);
+  final heightBase = size.height * aspectRatio /
+      math.max(topScreenScale, bottomScreenScale);
+  final layoutWidth = math.min(widthBase, heightBase) * screensScale;
+  final topWidth = layoutWidth * topScreenScale;
+  final bottomWidth = layoutWidth * bottomScreenScale;
+  final topHeight = topWidth / aspectRatio;
+  final bottomHeight = bottomWidth / aspectRatio;
+  final contentWidth = topWidth + gap + bottomWidth;
+  final left = (size.width - contentWidth) / 2;
+  return (
+    Rect.fromLTWH(
+      left,
+      (size.height - topHeight) / 2,
+      topWidth,
+      topHeight,
+    ),
+    Rect.fromLTWH(
+      left + topWidth + gap,
+      (size.height - bottomHeight) / 2,
+      bottomWidth,
+      bottomHeight,
+    ),
+  );
 }
 
 String _pokemonSpritePath(Game game, int speciesId) {

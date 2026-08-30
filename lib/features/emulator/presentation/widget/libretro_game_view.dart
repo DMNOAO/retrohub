@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 
@@ -257,6 +258,8 @@ class LibretroGameView extends StatefulWidget {
   final double ndsBottomScreenScale;
   final bool ndsSwapScreens;
   final double ndsScreensScale;
+  final bool ndsHorizontalLayout;
+  final double ndsScreenGap;
 
   const LibretroGameView({
     super.key,
@@ -275,6 +278,8 @@ class LibretroGameView extends StatefulWidget {
     this.ndsBottomScreenScale = 1,
     this.ndsSwapScreens = false,
     this.ndsScreensScale = 1,
+    this.ndsHorizontalLayout = false,
+    this.ndsScreenGap = 4,
   });
 
   @override
@@ -1263,6 +1268,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
                       bottomScreenScale: widget.ndsBottomScreenScale,
                       swapScreens: widget.ndsSwapScreens,
                       screensScale: widget.ndsScreensScale,
+                      horizontalLayout: widget.ndsHorizontalLayout,
+                      screenGap: widget.ndsScreenGap,
                     ),
                     child: const SizedBox.expand(),
                   )
@@ -1480,7 +1487,6 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
 class _NdsDualScreenPainter extends CustomPainter {
   static const double _screenAspectRatio = 4 / 3;
-  static const double _gap = 4;
 
   final ui.Image image;
   final FilterQuality filterQuality;
@@ -1488,6 +1494,8 @@ class _NdsDualScreenPainter extends CustomPainter {
   final double bottomScreenScale;
   final bool swapScreens;
   final double screensScale;
+  final bool horizontalLayout;
+  final double screenGap;
 
   const _NdsDualScreenPainter({
     required this.image,
@@ -1496,38 +1504,17 @@ class _NdsDualScreenPainter extends CustomPainter {
     required this.bottomScreenScale,
     required this.swapScreens,
     required this.screensScale,
+    required this.horizontalLayout,
+    required this.screenGap,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (image.width <= 0 || image.height < 2) return;
 
-    final double availableHeight = size.height - _gap;
-    final double widthFromHeight = availableHeight /
-        ((topScreenScale / _screenAspectRatio) +
-            (bottomScreenScale / _screenAspectRatio));
-    final double layoutWidth =
-        widthFromHeight.clamp(0, size.width).toDouble() * screensScale;
-
-    final double topWidth = layoutWidth * topScreenScale;
-    final double bottomWidth = layoutWidth * bottomScreenScale;
-    final double topHeight = topWidth / _screenAspectRatio;
-    final double bottomHeight = bottomWidth / _screenAspectRatio;
-    final double contentHeight = topHeight + _gap + bottomHeight;
-    final double top = (size.height - contentHeight) / 2;
-
-    final Rect topDestination = Rect.fromLTWH(
-      (size.width - topWidth) / 2,
-      top,
-      topWidth,
-      topHeight,
-    );
-    final Rect bottomDestination = Rect.fromLTWH(
-      (size.width - bottomWidth) / 2,
-      top + topHeight + _gap,
-      bottomWidth,
-      bottomHeight,
-    );
+    final (topDestination, bottomDestination) = horizontalLayout
+        ? _horizontalDestinations(size)
+        : _verticalDestinations(size);
 
     final double sourceHeight = image.height / 2;
     final Paint paint = Paint()
@@ -1561,6 +1548,60 @@ class _NdsDualScreenPainter extends CustomPainter {
         oldDelegate.topScreenScale != topScreenScale ||
         oldDelegate.bottomScreenScale != bottomScreenScale ||
         oldDelegate.swapScreens != swapScreens ||
-        oldDelegate.screensScale != screensScale;
+        oldDelegate.screensScale != screensScale ||
+        oldDelegate.horizontalLayout != horizontalLayout ||
+        oldDelegate.screenGap != screenGap;
+  }
+
+  (Rect, Rect) _horizontalDestinations(Size size) {
+    final double widthBase = (size.width - screenGap) /
+        (topScreenScale + bottomScreenScale);
+    final double heightBase = size.height * _screenAspectRatio /
+        math.max(topScreenScale, bottomScreenScale);
+    final double layoutWidth = math.min(widthBase, heightBase) * screensScale;
+    final double topWidth = layoutWidth * topScreenScale;
+    final double bottomWidth = layoutWidth * bottomScreenScale;
+    final double topHeight = topWidth / _screenAspectRatio;
+    final double bottomHeight = bottomWidth / _screenAspectRatio;
+    final double contentWidth = topWidth + screenGap + bottomWidth;
+    final double left = (size.width - contentWidth) / 2;
+    return (
+      Rect.fromLTWH(
+        left,
+        (size.height - topHeight) / 2,
+        topWidth,
+        topHeight,
+      ),
+      Rect.fromLTWH(
+        left + topWidth + screenGap,
+        (size.height - bottomHeight) / 2,
+        bottomWidth,
+        bottomHeight,
+      ),
+    );
+  }
+
+  (Rect, Rect) _verticalDestinations(Size size) {
+    final double availableHeight = size.height - screenGap;
+    final double widthFromHeight = availableHeight /
+        ((topScreenScale / _screenAspectRatio) +
+            (bottomScreenScale / _screenAspectRatio));
+    final double layoutWidth =
+        widthFromHeight.clamp(0, size.width).toDouble() * screensScale;
+    final double topWidth = layoutWidth * topScreenScale;
+    final double bottomWidth = layoutWidth * bottomScreenScale;
+    final double topHeight = topWidth / _screenAspectRatio;
+    final double bottomHeight = bottomWidth / _screenAspectRatio;
+    final double contentHeight = topHeight + screenGap + bottomHeight;
+    final double top = (size.height - contentHeight) / 2;
+    return (
+      Rect.fromLTWH((size.width - topWidth) / 2, top, topWidth, topHeight),
+      Rect.fromLTWH(
+        (size.width - bottomWidth) / 2,
+        top + topHeight + screenGap,
+        bottomWidth,
+        bottomHeight,
+      ),
+    );
   }
 }
