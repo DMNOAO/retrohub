@@ -49,6 +49,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/events/gen4/
     - assets/covers/gb/
     - assets/covers/gbc/
     - assets/covers/gba/

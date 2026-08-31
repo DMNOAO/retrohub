@@ -7,6 +7,7 @@ import 'gen1_mew_event_service.dart';
 import 'gen2_red_reward.dart';
 import 'gen2_red_reward_service.dart';
 import 'gen3_special_event_service.dart';
+import 'gen4_mystery_gift_service.dart';
 
 class SpecialEventsPage extends StatefulWidget {
   final PokemonGameVersion version;
@@ -27,6 +28,10 @@ class SpecialEventsPage extends StatefulWidget {
   final bool gen1MewClaimed;
   final Future<Gen1MewEventStatus> Function() inspectGen1MewEvent;
   final Future<Gen1MewEventResult> Function() claimGen1MewEvent;
+  final Future<Gen4MysteryGiftStatus> Function(Gen4MysteryGift)
+      inspectGen4Gift;
+  final Future<Gen4MysteryGiftResult> Function(Gen4MysteryGift)
+      activateGen4Gift;
 
   const SpecialEventsPage({
     super.key,
@@ -43,6 +48,8 @@ class SpecialEventsPage extends StatefulWidget {
     this.gen1MewClaimed = false,
     required this.inspectGen1MewEvent,
     required this.claimGen1MewEvent,
+    required this.inspectGen4Gift,
+    required this.activateGen4Gift,
   });
 
   @override
@@ -62,6 +69,8 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   Gen1MewEventStatus? _gen1MewStatus;
   late bool _gen1MewClaimed = widget.gen1MewClaimed;
   bool _workingMew = false;
+  final Map<Gen4MysteryGift, Gen4MysteryGiftStatus> _gen4Statuses = {};
+  Gen4MysteryGift? _workingGen4;
 
   @override
   void initState() {
@@ -90,6 +99,14 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       });
       return;
     }
+    if (_isGen4) {
+      final statuses = <Gen4MysteryGift, Gen4MysteryGiftStatus>{};
+      for (final gift in Gen4MysteryGift.values) {
+        statuses[gift] = await widget.inspectGen4Gift(gift);
+      }
+      if (mounted) setState(() => _gen4Statuses.addAll(statuses));
+      return;
+    }
     final events = _gen3Service.eventsFor(widget.version);
     final statuses = <Gen3SpecialEvent, Gen3SpecialEventStatus>{};
     for (final event in events) {
@@ -104,6 +121,10 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
   bool get _isGen1 => widget.version == PokemonGameVersion.redBlue ||
       widget.version == PokemonGameVersion.yellow;
+
+  bool get _isGen4 => widget.version == PokemonGameVersion.diamond ||
+      widget.version == PokemonGameVersion.pearl ||
+      widget.version == PokemonGameVersion.platinum;
 
   Future<void> _claimReward(Gen2RedReward reward) async {
     if (!await _confirm('premio ${reward.name} variocolor') || !mounted) return;
@@ -208,6 +229,21 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     }
   }
 
+  Future<void> _activateGen4(Gen4MysteryGift gift, String title) async {
+    if (!await _confirm(title) || !mounted) return;
+    setState(() => _workingGen4 = gift);
+    try {
+      final result = await widget.activateGen4Gift(gift);
+      if (!mounted) return;
+      setState(() => _gen4Statuses[gift] = result.status);
+      _showResult(result.succeeded, _gen4Message(result.status));
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingGen4 = null);
+    }
+  }
+
   void _showResult(bool succeeded, String fallback) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -239,6 +275,8 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
                 ? _buildRedRewardsCard()
                 : _buildLockedRedChallengeCard(),
           ]
+        : _isGen4
+        ? Gen4MysteryGift.values.map(_buildGen4Card).toList()
         : _presentations(widget.version)
               .map((presentation) => _buildGen3Card(presentation))
               .toList();
@@ -400,6 +438,49 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     );
   }
 
+  Widget _buildGen4Card(Gen4MysteryGift gift) {
+    final status = _gen4Statuses[gift];
+    final platinum = widget.version == PokemonGameVersion.platinum;
+    final title = switch (gift) {
+      Gen4MysteryGift.manaphyEgg => 'Huevo de Manaphy · Pokémon Ranger',
+      Gen4MysteryGift.darkrai => platinum
+          ? 'Tarjeta Socio · Darkrai'
+          : 'Darkrai de película',
+      Gen4MysteryGift.shaymin => platinum
+          ? 'Carta de Oak · Shaymin'
+          : 'Shaymin de película',
+      Gen4MysteryGift.arceus => 'Arceus de película',
+    };
+    final direct = !platinum && gift != Gen4MysteryGift.manaphyEgg ||
+        gift == Gen4MysteryGift.arceus;
+    final instructions = <String>[
+      'Reinicia el juego y entra en cualquier Tienda Pokémon.',
+      'Habla con el repartidor vestido de verde junto al mostrador.',
+      if (gift == Gen4MysteryGift.manaphyEgg)
+        'Deja un espacio libre en el equipo y recibe el Huevo de Manaphy.'
+      else if (direct)
+        'Deja un espacio libre en el equipo y recibe el Pokémon del evento.'
+      else if (gift == Gen4MysteryGift.darkrai)
+        'Recibe la Tarjeta Socio y visita la posada cerrada de Ciudad Canal.'
+      else
+        'Recibe la Carta de Oak, ve a la Ruta 224 y habla con Oak para abrir la Vía Marina.',
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _EventCard(
+        title: title,
+        game: _gameName(widget.version),
+        statusLabel: _gen4StatusLabel(status),
+        statusMessage: status == null ? null : _gen4Message(status),
+        canActivate: status == Gen4MysteryGiftStatus.available,
+        working: _workingGen4 == gift,
+        onActivate: () => _activateGen4(gift, title),
+        instructions: instructions,
+        requirement: 'Haber guardado la partida dentro del juego.',
+      ),
+    );
+  }
+
   List<_EventPresentation> _presentations(PokemonGameVersion version) {
     final game = _gameName(version);
     final port = version == PokemonGameVersion.fireRed ||
@@ -466,6 +547,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         PokemonGameVersion.emerald => 'Pokémon Esmeralda',
         PokemonGameVersion.fireRed => 'Pokémon Rojo Fuego',
         PokemonGameVersion.leafGreen => 'Pokémon Verde Hoja',
+        PokemonGameVersion.diamond => 'Pokémon Diamante',
+        PokemonGameVersion.pearl => 'Pokémon Perla',
+        PokemonGameVersion.platinum => 'Pokémon Platino',
         _ => 'Pokémon',
       };
 
@@ -513,6 +597,25 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         Gen3SpecialEventStatus.activated => 'Activado',
         Gen3SpecialEventStatus.unsupported => 'No disponible',
       };
+
+  String _gen4Message(Gen4MysteryGiftStatus status) => switch (status) {
+        Gen4MysteryGiftStatus.noSave => 'Guarda dentro del juego antes de continuar.',
+        Gen4MysteryGiftStatus.incompatibleSave => 'El guardado de Nintendo DS no es compatible.',
+        Gen4MysteryGiftStatus.unsupported => 'Este regalo no está disponible en esta edición.',
+        Gen4MysteryGiftStatus.slotsFull => 'No quedan espacios libres para tarjetas misteriosas.',
+        Gen4MysteryGiftStatus.available => 'Regalo misterioso disponible.',
+        Gen4MysteryGiftStatus.activated => 'Este regalo ya fue activado.',
+      };
+
+  String _gen4StatusLabel(Gen4MysteryGiftStatus? status) => switch (status) {
+        null => 'Comprobando',
+        Gen4MysteryGiftStatus.noSave => 'Sin guardado',
+        Gen4MysteryGiftStatus.incompatibleSave => 'No compatible',
+        Gen4MysteryGiftStatus.unsupported => 'No disponible',
+        Gen4MysteryGiftStatus.slotsFull => 'Tarjetas llenas',
+        Gen4MysteryGiftStatus.available => 'Disponible',
+        Gen4MysteryGiftStatus.activated => 'Activado',
+      };
 }
 
 class _EventPresentation {
@@ -538,6 +641,7 @@ class _EventCard extends StatelessWidget {
   final bool working;
   final VoidCallback onActivate;
   final List<String> instructions;
+  final String requirement;
 
   const _EventCard({
     required this.title,
@@ -548,6 +652,7 @@ class _EventCard extends StatelessWidget {
     required this.working,
     required this.onActivate,
     required this.instructions,
+    this.requirement = 'Haber vencido a la Liga Pokémon.',
   });
 
   @override
@@ -582,7 +687,7 @@ class _EventCard extends StatelessWidget {
             const SizedBox(height: 18),
             const Text('Requisito', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            const Text('Haber vencido a la Liga Pokémon.'),
+            Text(requirement),
             const SizedBox(height: 18),
             const Text(
               'Después de activar el evento',
