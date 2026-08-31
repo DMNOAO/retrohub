@@ -19,6 +19,7 @@ import '../pokemon/decoder/pokemon_nature_resolver.dart';
 import 'journal_history_page.dart';
 import 'widgets/move_type_tile.dart';
 import 'widgets/journal_chrome.dart';
+import '../emulator/special_events/gen2_red_reward.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
   final Game game;
@@ -35,6 +36,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Game? _game;
   bool _isLoading = true;
   bool _showKantoReveal = false;
+  int _redVictories = 0;
+  Set<String> _claimedRedRewards = const {};
 
   @override
   void initState() {
@@ -55,11 +58,28 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           event.eventType == 'kanto_unlocked' &&
           now.difference(event.createdAt).abs() <= const Duration(minutes: 20),
     );
+    var redVictories = 0;
+    final claimedRedRewards = <String>{};
+    for (final event in events) {
+      try {
+        final metadata = jsonDecode(event.metadataJson ?? '');
+        if (metadata is! Map) continue;
+        if (event.eventType == 'trainer_defeated' &&
+            metadata['trainerClassId']?.toString() == '63') {
+          redVictories++;
+        } else if (event.eventType == 'red_reward_received') {
+          final key = metadata['rewardKey']?.toString();
+          if (key != null) claimedRedRewards.add(key);
+        }
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       _game = currentGame;
       _snapshot = snapshot;
       _showKantoReveal = hasRecentKantoUnlock;
+      _redVictories = redVictories;
+      _claimedRedRewards = claimedRedRewards;
       _isLoading = false;
     });
   }
@@ -119,6 +139,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               snapshot: _snapshot!,
               decodeList: _decodeList,
               showKantoReveal: _showKantoReveal,
+              redVictories: _redVictories,
+              claimedRedRewards: _claimedRedRewards,
             ),
     );
     if (journalAppearance == null) return journal;
@@ -161,12 +183,16 @@ class _ProgressJournal extends StatelessWidget {
   final GameProgressSnapshot snapshot;
   final List<Map<String, dynamic>> Function(String?) decodeList;
   final bool showKantoReveal;
+  final int redVictories;
+  final Set<String> claimedRedRewards;
 
   const _ProgressJournal({
     required this.game,
     required this.snapshot,
     required this.decodeList,
     required this.showKantoReveal,
+    required this.redVictories,
+    required this.claimedRedRewards,
   });
 
   int? _intValue(dynamic value) {
@@ -333,6 +359,12 @@ class _ProgressJournal extends StatelessWidget {
               badgeIndices: _kantoGen2BadgeIndices,
               kantoCount: kantoCount,
               celebrate: showKantoReveal,
+            ),
+          if (kantoCount == 8)
+            _RedChallengeSection(
+              profile: profile,
+              victories: redVictories,
+              claimedRewards: claimedRedRewards,
             ),
         ] else ...[
           _SectionTitle(title: 'Medallas ${snapshot.badgesCount}/8'),
@@ -508,6 +540,74 @@ class _ProgressJournal extends StatelessWidget {
         ),
       ),
     ),
+    );
+  }
+}
+
+class _RedChallengeSection extends StatelessWidget {
+  final GameAssetProfile profile;
+  final int victories;
+  final Set<String> claimedRewards;
+
+  const _RedChallengeSection({
+    required this.profile,
+    required this.victories,
+    required this.claimedRewards,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = victories.clamp(0, Gen2RedReward.values.length);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const _SectionTitle(title: 'Enfrentamientos contra Rojo'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$victories victorias · $completed/10 premios desbloqueados'),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: completed / 10),
+                const SizedBox(height: 12),
+                ...Gen2RedReward.values.map((reward) {
+                  final unlocked = victories >= reward.requiredVictories;
+                  final claimed = claimedRewards.contains(reward.eventKey);
+                  final sprite = SpriteResolver.pokemonForGame(
+                    profile: profile,
+                    pokemonId: reward.speciesId,
+                    isShiny: true,
+                  );
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Opacity(
+                      opacity: unlocked ? 1 : .35,
+                      child: SpriteImage(path: sprite, size: 48),
+                    ),
+                    title: Text('${reward.requiredVictories} victoria${reward.requiredVictories == 1 ? '' : 's'} · ${reward.name} variocolor'),
+                    subtitle: Text(claimed
+                        ? 'Premio recibido'
+                        : unlocked
+                        ? 'Disponible en Eventos especiales'
+                        : 'Bloqueado'),
+                    trailing: Icon(
+                      claimed
+                          ? Icons.check_circle
+                          : unlocked
+                          ? Icons.card_giftcard
+                          : Icons.lock_outline,
+                      color: claimed ? Colors.green : null,
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

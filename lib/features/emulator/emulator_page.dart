@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'presentation/widget/retrohub_console_logo.dart';
@@ -33,6 +34,9 @@ import 'memory_inspector/memory_inspector_page.dart';
 import 'settings/emulator_preferences.dart';
 import 'settings/emulator_settings_page.dart';
 import 'special_events/special_events_page.dart';
+import 'special_events/gen2_red_reward.dart';
+import 'special_events/gen2_red_reward_service.dart';
+import 'special_events/gen1_mew_event_service.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
 import 'link/link_manager.dart';
@@ -399,7 +403,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             romPath: game.romPath,
           ),
           specialEventsSubtitle: switch (pokemonProfile.version) {
-            PokemonGameVersion.crystal => 'GS Ball · Celebi',
+            PokemonGameVersion.gold || PokemonGameVersion.silver =>
+              'Desafío de Rojo · 10 Pokémon variocolor',
+            PokemonGameVersion.redBlue || PokemonGameVersion.yellow =>
+              'Mew de evento',
+            PokemonGameVersion.crystal =>
+              'Desafío de Rojo · GS Ball · Celebi',
             PokemonGameVersion.ruby || PokemonGameVersion.sapphire =>
               'Ticket Eón · Latias/Latios',
             PokemonGameVersion.emerald =>
@@ -411,6 +420,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           onOpenSpecialEvents:
               _supportsSpecialEvents(pokemonProfile.version)
               ? () async {
+                  final redState = await _loadRedRewardState();
+                  final gen1MewClaimed = await _isGen1MewClaimed();
+                  if (!context.mounted) return;
                   await Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => SpecialEventsPage(
@@ -419,6 +431,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         activateGsBall: _gameController.activateGsBall,
                         inspectGen3Event: _gameController.inspectGen3Event,
                         activateGen3Event: _gameController.activateGen3Event,
+                        redVictories: redState.$1,
+                        claimedRedRewards: redState.$2,
+                        redChallengeUnlocked: redState.$3,
+                        inspectGen2RedReward:
+                            _gameController.inspectGen2RedReward,
+                        claimGen2RedReward: _claimGen2RedReward,
+                        gen1MewClaimed: gen1MewClaimed,
+                        inspectGen1MewEvent:
+                            _gameController.inspectGen1MewEvent,
+                        claimGen1MewEvent: _claimGen1MewEvent,
                       ),
                     ),
                   );
@@ -459,12 +481,110 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   }
 
   bool _supportsSpecialEvents(PokemonGameVersion version) {
-    return version == PokemonGameVersion.crystal ||
+    return version == PokemonGameVersion.redBlue ||
+        version == PokemonGameVersion.yellow ||
+        version == PokemonGameVersion.gold ||
+        version == PokemonGameVersion.silver ||
+        version == PokemonGameVersion.crystal ||
         version == PokemonGameVersion.ruby ||
         version == PokemonGameVersion.sapphire ||
         version == PokemonGameVersion.emerald ||
         version == PokemonGameVersion.fireRed ||
         version == PokemonGameVersion.leafGreen;
+  }
+
+  Future<bool> _isGen1MewClaimed() async {
+    final events = await _database.getProgressEventsByGame(game.id);
+    return events.any((event) => event.eventType == 'gen1_mew_received');
+  }
+
+  Future<Gen1MewEventResult> _claimGen1MewEvent() async {
+    if (await _isGen1MewClaimed()) {
+      return const Gen1MewEventResult(status: Gen1MewEventStatus.unsupported);
+    }
+    final result = await _gameController.claimGen1MewEvent();
+    if (!result.succeeded) return result;
+    await _database.insertProgressEvent(
+      GameProgressEventsCompanion.insert(
+        gameId: game.id,
+        createdAt: DateTime.now(),
+        eventType: 'gen1_mew_received',
+        title: 'Recibió a Mew de evento',
+        description: const Value<String?>(
+          'Regalo especial para Pokémon Rojo, Azul y Amarillo.',
+        ),
+        metadataJson: Value(jsonEncode(<String, dynamic>{
+          'speciesId': 151,
+          'level': 5,
+          'playTimeMinutes': _currentPlayTimeMinutes,
+        })),
+      ),
+    );
+    return result;
+  }
+
+  Future<(int, Set<String>, bool)> _loadRedRewardState() async {
+    final events = await _database.getProgressEventsByGame(game.id);
+    final snapshot = await _database.getLatestProgressSnapshot(game.id);
+    var victories = 0;
+    final claimed = <String>{};
+    for (final event in events) {
+      try {
+        final metadata = jsonDecode(event.metadataJson ?? '');
+        if (metadata is! Map) continue;
+        if (event.eventType == 'trainer_defeated' &&
+            metadata['trainerClassId']?.toString() == '63') {
+          victories++;
+        }
+        if (event.eventType == 'red_reward_received') {
+          final key = metadata['rewardKey']?.toString();
+          if (key != null) claimed.add(key);
+        }
+      } catch (_) {}
+    }
+    var kantoBadges = 0;
+    try {
+      final badges = jsonDecode(snapshot?.badgesJson ?? '');
+      if (badges is List) {
+        const kantoIndices = <int>{8, 9, 10, 11, 12, 13, 14, 15};
+        kantoBadges = badges.where((badge) {
+          if (badge is! Map || badge['obtained'] != true) return false;
+          final index = int.tryParse(badge['index']?.toString() ?? '');
+          return index != null && kantoIndices.contains(index);
+        }).length;
+      }
+    } catch (_) {}
+    return (victories, claimed, kantoBadges == 8);
+  }
+
+  Future<Gen2RedRewardResult> _claimGen2RedReward(
+    Gen2RedReward reward,
+  ) async {
+    final state = await _loadRedRewardState();
+    if (state.$1 < reward.requiredVictories || state.$2.contains(reward.eventKey)) {
+      return const Gen2RedRewardResult(status: Gen2RedRewardStatus.unsupported);
+    }
+    final result = await _gameController.claimGen2RedReward(reward);
+    if (!result.succeeded) return result;
+    await _database.insertProgressEvent(
+      GameProgressEventsCompanion.insert(
+        gameId: game.id,
+        createdAt: DateTime.now(),
+        eventType: 'red_reward_received',
+        title: 'Recibió a ${reward.name} variocolor',
+        description: Value(
+          'Premio por ${reward.requiredVictories} victoria${reward.requiredVictories == 1 ? '' : 's'} contra Rojo.',
+        ),
+        metadataJson: Value(jsonEncode(<String, dynamic>{
+          'rewardKey': reward.eventKey,
+          'speciesId': reward.speciesId,
+          'isShiny': true,
+          'requiredVictories': reward.requiredVictories,
+          'playTimeMinutes': _currentPlayTimeMinutes,
+        })),
+      ),
+    );
+    return result;
   }
 
   Future<void> _requestExit(BuildContext context) async {

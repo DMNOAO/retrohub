@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/assets/sprite_image.dart';
 import '../../pokemon/models/pokemon_game_profile.dart';
 import 'crystal_gs_ball_service.dart';
+import 'gen1_mew_event_service.dart';
+import 'gen2_red_reward.dart';
+import 'gen2_red_reward_service.dart';
 import 'gen3_special_event_service.dart';
 
 class SpecialEventsPage extends StatefulWidget {
@@ -14,6 +18,15 @@ class SpecialEventsPage extends StatefulWidget {
     Gen3SpecialEvent event,
   )
   activateGen3Event;
+  final int redVictories;
+  final Set<String> claimedRedRewards;
+  final bool redChallengeUnlocked;
+  final Future<Gen2RedRewardStatus> Function() inspectGen2RedReward;
+  final Future<Gen2RedRewardResult> Function(Gen2RedReward reward)
+      claimGen2RedReward;
+  final bool gen1MewClaimed;
+  final Future<Gen1MewEventStatus> Function() inspectGen1MewEvent;
+  final Future<Gen1MewEventResult> Function() claimGen1MewEvent;
 
   const SpecialEventsPage({
     super.key,
@@ -22,6 +35,14 @@ class SpecialEventsPage extends StatefulWidget {
     required this.activateGsBall,
     required this.inspectGen3Event,
     required this.activateGen3Event,
+    this.redVictories = 0,
+    this.claimedRedRewards = const {},
+    this.redChallengeUnlocked = false,
+    required this.inspectGen2RedReward,
+    required this.claimGen2RedReward,
+    this.gen1MewClaimed = false,
+    required this.inspectGen1MewEvent,
+    required this.claimGen1MewEvent,
   });
 
   @override
@@ -35,6 +56,12 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   final Map<Gen3SpecialEvent, Gen3SpecialEventStatus> _gen3Statuses = {};
   Gen3SpecialEvent? _workingEvent;
   bool _workingGs = false;
+  Gen2RedRewardStatus? _gen2Status;
+  late final Set<String> _claimedRedRewards = {...widget.claimedRedRewards};
+  Gen2RedReward? _workingReward;
+  Gen1MewEventStatus? _gen1MewStatus;
+  late bool _gen1MewClaimed = widget.gen1MewClaimed;
+  bool _workingMew = false;
 
   @override
   void initState() {
@@ -43,9 +70,24 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   }
 
   Future<void> _refresh() async {
-    if (widget.version == PokemonGameVersion.crystal) {
-      final status = await widget.inspectGsBall();
-      if (mounted) setState(() => _gsStatus = status);
+    if (_isGen1) {
+      final status = await widget.inspectGen1MewEvent();
+      if (mounted) setState(() => _gen1MewStatus = status);
+      return;
+    }
+    if (_isGen2) {
+      if (!widget.redChallengeUnlocked &&
+          widget.version != PokemonGameVersion.crystal) {
+        return;
+      }
+      final rewardStatus = await widget.inspectGen2RedReward();
+      final gsStatus = widget.version == PokemonGameVersion.crystal
+          ? await widget.inspectGsBall()
+          : null;
+      if (mounted) setState(() {
+        _gen2Status = rewardStatus;
+        _gsStatus = gsStatus;
+      });
       return;
     }
     final events = _gen3Service.eventsFor(widget.version);
@@ -54,6 +96,63 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       statuses[event] = await widget.inspectGen3Event(event);
     }
     if (mounted) setState(() => _gen3Statuses.addAll(statuses));
+  }
+
+  bool get _isGen2 => widget.version == PokemonGameVersion.gold ||
+      widget.version == PokemonGameVersion.silver ||
+      widget.version == PokemonGameVersion.crystal;
+
+  bool get _isGen1 => widget.version == PokemonGameVersion.redBlue ||
+      widget.version == PokemonGameVersion.yellow;
+
+  Future<void> _claimReward(Gen2RedReward reward) async {
+    if (!await _confirm('premio ${reward.name} variocolor') || !mounted) return;
+    setState(() => _workingReward = reward);
+    try {
+      final result = await widget.claimGen2RedReward(reward);
+      if (!mounted) return;
+      if (result.succeeded) _claimedRedRewards.add(reward.eventKey);
+      final nextStatus = result.succeeded
+          ? await widget.inspectGen2RedReward()
+          : result.status;
+      if (!mounted) return;
+      setState(() => _gen2Status = nextStatus);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.succeeded
+              ? '${reward.name} variocolor fue añadido a tu equipo.'
+              : _gen2Message(result.status)),
+        ),
+      );
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingReward = null);
+    }
+  }
+
+  Future<void> _claimMew() async {
+    if (!await _confirm('Mew de evento') || !mounted) return;
+    setState(() => _workingMew = true);
+    try {
+      final result = await widget.claimGen1MewEvent();
+      if (!mounted) return;
+      if (result.succeeded) _gen1MewClaimed = true;
+      final status = result.succeeded
+          ? await widget.inspectGen1MewEvent()
+          : result.status;
+      if (!mounted) return;
+      setState(() => _gen1MewStatus = status);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.succeeded
+            ? 'Mew fue añadido a tu equipo.'
+            : _gen1MewMessage(result.status))),
+      );
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingMew = false);
+    }
   }
 
   Future<bool> _confirm(String title) async {
@@ -131,8 +230,15 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = widget.version == PokemonGameVersion.crystal
-        ? <Widget>[_buildGsCard()]
+    final cards = _isGen1
+        ? <Widget>[_buildGen1MewCard()]
+        : _isGen2
+        ? <Widget>[
+            if (widget.version == PokemonGameVersion.crystal) _buildGsCard(),
+            widget.redChallengeUnlocked
+                ? _buildRedRewardsCard()
+                : _buildLockedRedChallengeCard(),
+          ]
         : _presentations(widget.version)
               .map((presentation) => _buildGen3Card(presentation))
               .toList();
@@ -145,6 +251,118 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       ),
     );
   }
+
+  Widget _buildGen1MewCard() {
+    final canClaim = !_gen1MewClaimed &&
+        _gen1MewStatus == Gen1MewEventStatus.available;
+    return _EventCard(
+      title: 'Mew de evento',
+      game: widget.version == PokemonGameVersion.yellow
+          ? 'Pokémon Amarillo'
+          : 'Pokémon Rojo y Azul',
+      statusLabel: _gen1MewClaimed ? 'Entregado' : 'Regalo especial',
+      statusMessage: _gen1MewClaimed
+          ? 'Mew ya fue recibido en este guardado.'
+          : _gen1MewMessage(_gen1MewStatus),
+      canActivate: canClaim,
+      working: _workingMew,
+      onActivate: _claimMew,
+      instructions: [
+        'Deja un espacio libre en tu equipo y guarda dentro del juego.',
+        'Recibe a Mew de nivel 5 mediante RetroHub.',
+        'Se creará una copia de seguridad antes de modificar el guardado.',
+        'El regalo solo puede recibirse una vez.',
+      ],
+    );
+  }
+
+  String _gen1MewMessage(Gen1MewEventStatus? status) => switch (status) {
+        null => 'Comprobando guardado…',
+        Gen1MewEventStatus.noSave => 'Guarda dentro del juego antes de continuar.',
+        Gen1MewEventStatus.incompatibleSave => 'El guardado de Gen I no es compatible.',
+        Gen1MewEventStatus.unsupported => 'Este evento no está disponible en esta edición.',
+        Gen1MewEventStatus.partyFull => 'Deja un espacio libre en el equipo y guarda.',
+        Gen1MewEventStatus.available => 'Mew está disponible para recibir.',
+        Gen1MewEventStatus.delivered => 'Mew fue entregado.',
+      };
+
+  Widget _buildLockedRedChallengeCard() {
+    return const Card(
+      margin: EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Icon(Icons.lock_outline),
+        title: Text('Desafío contra Rojo'),
+        subtitle: Text('Bloqueado'),
+      ),
+    );
+  }
+
+  Widget _buildRedRewardsCard() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Desafío contra Rojo', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('${widget.redVictories} victorias registradas · premios PCNY variocolor'),
+            const SizedBox(height: 12),
+            ...Gen2RedReward.values.map((reward) {
+              final claimed = _claimedRedRewards.contains(reward.eventKey);
+              final unlocked = widget.redVictories >= reward.requiredVictories;
+              final canClaim = unlocked && !claimed &&
+                  _gen2Status == Gen2RedRewardStatus.available;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: SpriteImage(
+                  path: _rewardSprite(reward),
+                  size: 48,
+                  fallbackIcon: Icons.catching_pokemon,
+                ),
+                title: Text('${reward.name} variocolor · Nv. ${reward.level}'),
+                subtitle: Text(claimed
+                    ? 'Entregado'
+                    : unlocked
+                    ? _gen2Message(_gen2Status)
+                    : 'Se desbloquea con ${reward.requiredVictories} victorias'),
+                trailing: claimed
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : _workingReward == reward
+                    ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator())
+                    : FilledButton(
+                        onPressed: canClaim ? () => _claimReward(reward) : null,
+                        child: const Text('Recibir'),
+                      ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _rewardSprite(Gen2RedReward reward) {
+    final folder = switch (widget.version) {
+      PokemonGameVersion.gold => 'gold',
+      PokemonGameVersion.silver => 'silver',
+      _ => 'crystal',
+    };
+    final extension = folder == 'crystal' ? 'gif' : 'png';
+    return 'assets/sprites/pokemon/gbc/$folder/shiny/'
+        '${reward.speciesId.toString().padLeft(4, '0')}.$extension';
+  }
+
+  String _gen2Message(Gen2RedRewardStatus? status) => switch (status) {
+        null => 'Comprobando guardado…',
+        Gen2RedRewardStatus.noSave => 'Guarda dentro del juego antes de recibirlo.',
+        Gen2RedRewardStatus.incompatibleSave => 'El guardado de Gen II no es compatible.',
+        Gen2RedRewardStatus.unsupported => 'Esta edición no admite estos premios.',
+        Gen2RedRewardStatus.partyFull => 'Deja un espacio libre en el equipo y guarda.',
+        Gen2RedRewardStatus.available => 'Disponible para recibir.',
+        Gen2RedRewardStatus.delivered => 'Entregado correctamente.',
+      };
 
   Widget _buildGsCard() {
     return _EventCard(
