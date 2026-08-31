@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/assets/sprite_image.dart';
 import '../../pokemon/models/pokemon_game_profile.dart';
 import 'crystal_gs_ball_service.dart';
+import 'gen1_mew_event_service.dart';
 import 'gen2_red_reward.dart';
 import 'gen2_red_reward_service.dart';
 import 'gen3_special_event_service.dart';
@@ -19,9 +20,13 @@ class SpecialEventsPage extends StatefulWidget {
   activateGen3Event;
   final int redVictories;
   final Set<String> claimedRedRewards;
+  final bool redChallengeUnlocked;
   final Future<Gen2RedRewardStatus> Function() inspectGen2RedReward;
   final Future<Gen2RedRewardResult> Function(Gen2RedReward reward)
       claimGen2RedReward;
+  final bool gen1MewClaimed;
+  final Future<Gen1MewEventStatus> Function() inspectGen1MewEvent;
+  final Future<Gen1MewEventResult> Function() claimGen1MewEvent;
 
   const SpecialEventsPage({
     super.key,
@@ -32,8 +37,12 @@ class SpecialEventsPage extends StatefulWidget {
     required this.activateGen3Event,
     this.redVictories = 0,
     this.claimedRedRewards = const {},
+    this.redChallengeUnlocked = false,
     required this.inspectGen2RedReward,
     required this.claimGen2RedReward,
+    this.gen1MewClaimed = false,
+    required this.inspectGen1MewEvent,
+    required this.claimGen1MewEvent,
   });
 
   @override
@@ -50,6 +59,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   Gen2RedRewardStatus? _gen2Status;
   late final Set<String> _claimedRedRewards = {...widget.claimedRedRewards};
   Gen2RedReward? _workingReward;
+  Gen1MewEventStatus? _gen1MewStatus;
+  late bool _gen1MewClaimed = widget.gen1MewClaimed;
+  bool _workingMew = false;
 
   @override
   void initState() {
@@ -58,7 +70,16 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   }
 
   Future<void> _refresh() async {
+    if (_isGen1) {
+      final status = await widget.inspectGen1MewEvent();
+      if (mounted) setState(() => _gen1MewStatus = status);
+      return;
+    }
     if (_isGen2) {
+      if (!widget.redChallengeUnlocked &&
+          widget.version != PokemonGameVersion.crystal) {
+        return;
+      }
       final rewardStatus = await widget.inspectGen2RedReward();
       final gsStatus = widget.version == PokemonGameVersion.crystal
           ? await widget.inspectGsBall()
@@ -80,6 +101,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   bool get _isGen2 => widget.version == PokemonGameVersion.gold ||
       widget.version == PokemonGameVersion.silver ||
       widget.version == PokemonGameVersion.crystal;
+
+  bool get _isGen1 => widget.version == PokemonGameVersion.redBlue ||
+      widget.version == PokemonGameVersion.yellow;
 
   Future<void> _claimReward(Gen2RedReward reward) async {
     if (!await _confirm('premio ${reward.name} variocolor') || !mounted) return;
@@ -104,6 +128,30 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       _showError(error);
     } finally {
       if (mounted) setState(() => _workingReward = null);
+    }
+  }
+
+  Future<void> _claimMew() async {
+    if (!await _confirm('Mew de evento') || !mounted) return;
+    setState(() => _workingMew = true);
+    try {
+      final result = await widget.claimGen1MewEvent();
+      if (!mounted) return;
+      if (result.succeeded) _gen1MewClaimed = true;
+      final status = result.succeeded
+          ? await widget.inspectGen1MewEvent()
+          : result.status;
+      if (!mounted) return;
+      setState(() => _gen1MewStatus = status);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.succeeded
+            ? 'Mew fue añadido a tu equipo.'
+            : _gen1MewMessage(result.status))),
+      );
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingMew = false);
     }
   }
 
@@ -182,10 +230,14 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = _isGen2
+    final cards = _isGen1
+        ? <Widget>[_buildGen1MewCard()]
+        : _isGen2
         ? <Widget>[
-            _buildRedRewardsCard(),
             if (widget.version == PokemonGameVersion.crystal) _buildGsCard(),
+            widget.redChallengeUnlocked
+                ? _buildRedRewardsCard()
+                : _buildLockedRedChallengeCard(),
           ]
         : _presentations(widget.version)
               .map((presentation) => _buildGen3Card(presentation))
@@ -196,6 +248,51 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: cards,
+      ),
+    );
+  }
+
+  Widget _buildGen1MewCard() {
+    final canClaim = !_gen1MewClaimed &&
+        _gen1MewStatus == Gen1MewEventStatus.available;
+    return _EventCard(
+      title: 'Mew de evento',
+      game: widget.version == PokemonGameVersion.yellow
+          ? 'Pokémon Amarillo'
+          : 'Pokémon Rojo y Azul',
+      statusLabel: _gen1MewClaimed ? 'Entregado' : 'Regalo especial',
+      statusMessage: _gen1MewClaimed
+          ? 'Mew ya fue recibido en este guardado.'
+          : _gen1MewMessage(_gen1MewStatus),
+      canActivate: canClaim,
+      working: _workingMew,
+      onActivate: _claimMew,
+      instructions: [
+        'Deja un espacio libre en tu equipo y guarda dentro del juego.',
+        'Recibe a Mew de nivel 5 mediante RetroHub.',
+        'Se creará una copia de seguridad antes de modificar el guardado.',
+        'El regalo solo puede recibirse una vez.',
+      ],
+    );
+  }
+
+  String _gen1MewMessage(Gen1MewEventStatus? status) => switch (status) {
+        null => 'Comprobando guardado…',
+        Gen1MewEventStatus.noSave => 'Guarda dentro del juego antes de continuar.',
+        Gen1MewEventStatus.incompatibleSave => 'El guardado de Gen I no es compatible.',
+        Gen1MewEventStatus.unsupported => 'Este evento no está disponible en esta edición.',
+        Gen1MewEventStatus.partyFull => 'Deja un espacio libre en el equipo y guarda.',
+        Gen1MewEventStatus.available => 'Mew está disponible para recibir.',
+        Gen1MewEventStatus.delivered => 'Mew fue entregado.',
+      };
+
+  Widget _buildLockedRedChallengeCard() {
+    return const Card(
+      margin: EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Icon(Icons.lock_outline),
+        title: Text('Desafío contra Rojo'),
+        subtitle: Text('Bloqueado'),
       ),
     );
   }

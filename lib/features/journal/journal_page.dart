@@ -360,11 +360,12 @@ class _ProgressJournal extends StatelessWidget {
               kantoCount: kantoCount,
               celebrate: showKantoReveal,
             ),
-          _RedChallengeSection(
-            profile: profile,
-            victories: redVictories,
-            claimedRewards: claimedRedRewards,
-          ),
+          if (kantoCount == 8)
+            _RedChallengeSection(
+              profile: profile,
+              victories: redVictories,
+              claimedRewards: claimedRedRewards,
+            ),
         ] else ...[
           _SectionTitle(title: 'Medallas ${snapshot.badgesCount}/8'),
           _BadgeGrid(
