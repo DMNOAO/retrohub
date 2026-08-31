@@ -10,13 +10,13 @@ enum Gen2RedReward {
   mewtwo(9, 150, 'Mewtwo', 70),
   mew(10, 151, 'Mew', 5);
 
-  final int requiredVictories;
+  final int requiredLeagueWins;
   final int speciesId;
   final String name;
   final int level;
 
   const Gen2RedReward(
-    this.requiredVictories,
+    this.requiredLeagueWins,
     this.speciesId,
     this.name,
     this.level,
@@ -24,9 +24,9 @@ enum Gen2RedReward {
 
   String get eventKey => 'gen2_red_reward_${name.toLowerCase().replaceAll('-', '_')}';
 
-  static Gen2RedReward? forVictory(int victories) {
+  static Gen2RedReward? forLeagueWin(int leagueWins) {
     for (final reward in values) {
-      if (reward.requiredVictories == victories) return reward;
+      if (reward.requiredLeagueWins == leagueWins) return reward;
     }
     return null;
   }

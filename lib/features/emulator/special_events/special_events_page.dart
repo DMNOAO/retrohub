@@ -19,7 +19,7 @@ class SpecialEventsPage extends StatefulWidget {
     Gen3SpecialEvent event,
   )
   activateGen3Event;
-  final int redVictories;
+  final int leagueWinsAfterRed;
   final Set<String> claimedRedRewards;
   final bool redChallengeUnlocked;
   final Future<Gen2RedRewardStatus> Function() inspectGen2RedReward;
@@ -40,7 +40,7 @@ class SpecialEventsPage extends StatefulWidget {
     required this.activateGsBall,
     required this.inspectGen3Event,
     required this.activateGen3Event,
-    this.redVictories = 0,
+    this.leagueWinsAfterRed = 0,
     this.claimedRedRewards = const {},
     this.redChallengeUnlocked = false,
     required this.inspectGen2RedReward,
@@ -345,11 +345,11 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
           children: [
             Text('Desafío contra Rojo', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text('${widget.redVictories} victorias registradas · premios PCNY variocolor'),
+            Text('${widget.leagueWinsAfterRed} Ligas ganadas después de Rojo · premios PCNY variocolor'),
             const SizedBox(height: 12),
             ...Gen2RedReward.values.map((reward) {
               final claimed = _claimedRedRewards.contains(reward.eventKey);
-              final unlocked = widget.redVictories >= reward.requiredVictories;
+              final unlocked = widget.leagueWinsAfterRed >= reward.requiredLeagueWins;
               final canClaim = unlocked && !claimed &&
                   _gen2Status == Gen2RedRewardStatus.available;
               return ListTile(
@@ -364,7 +364,7 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
                     ? 'Entregado'
                     : unlocked
                     ? _gen2Message(_gen2Status)
-                    : 'Se desbloquea con ${reward.requiredVictories} victorias'),
+                    : 'Se desbloquea con ${reward.requiredLeagueWins} victoria${reward.requiredLeagueWins == 1 ? '' : 's'} en la Liga después de Rojo'),
                 trailing: claimed
                     ? const Icon(Icons.check_circle, color: Colors.green)
                     : _workingReward == reward

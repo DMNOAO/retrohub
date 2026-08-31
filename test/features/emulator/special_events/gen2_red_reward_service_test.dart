@@ -14,7 +14,7 @@ void main() {
     expect(Gen2RedReward.values.first, Gen2RedReward.articuno);
     expect(Gen2RedReward.values.last, Gen2RedReward.mew);
     expect(
-      Gen2RedReward.values.map((reward) => reward.requiredVictories),
+      Gen2RedReward.values.map((reward) => reward.requiredLeagueWins),
       orderedEquals(List<int>.generate(10, (index) => index + 1)),
     );
   });

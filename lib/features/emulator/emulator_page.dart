@@ -36,6 +36,7 @@ import 'settings/emulator_settings_page.dart';
 import 'special_events/special_events_page.dart';
 import 'special_events/gen2_red_reward.dart';
 import 'special_events/gen2_red_reward_service.dart';
+import 'special_events/gen2_red_challenge_progress.dart';
 import 'special_events/gen1_mew_event_service.dart';
 import 'save_states/save_states_page.dart';
 import 'link/link_state.dart';
@@ -437,9 +438,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         activateGen3Event: _gameController.activateGen3Event,
                         inspectGen4Gift: _gameController.inspectGen4Gift,
                         activateGen4Gift: _gameController.activateGen4Gift,
-                        redVictories: redState.$1,
+                        leagueWinsAfterRed: redState.$1,
                         claimedRedRewards: redState.$2,
-                        redChallengeUnlocked: redState.$3,
+                        redChallengeUnlocked: redState.$3 && redState.$4,
                         inspectGen2RedReward:
                             _gameController.inspectGen2RedReward,
                         claimGen2RedReward: _claimGen2RedReward,
@@ -532,25 +533,16 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     return result;
   }
 
-  Future<(int, Set<String>, bool)> _loadRedRewardState() async {
+  Future<(int, Set<String>, bool, bool)> _loadRedRewardState() async {
     final events = await _database.getProgressEventsByGame(game.id);
     final snapshot = await _database.getLatestProgressSnapshot(game.id);
-    var victories = 0;
-    final claimed = <String>{};
-    for (final event in events) {
-      try {
-        final metadata = jsonDecode(event.metadataJson ?? '');
-        if (metadata is! Map) continue;
-        if (event.eventType == 'trainer_defeated' &&
-            metadata['trainerClassId']?.toString() == '63') {
-          victories++;
-        }
-        if (event.eventType == 'red_reward_received') {
-          final key = metadata['rewardKey']?.toString();
-          if (key != null) claimed.add(key);
-        }
-      } catch (_) {}
-    }
+    final progress = Gen2RedChallengeProgress.fromEvents(events.map(
+      (event) => Gen2RedChallengeEvent(
+        type: event.eventType,
+        createdAt: event.createdAt,
+        metadataJson: event.metadataJson,
+      ),
+    ));
     var kantoBadges = 0;
     try {
       final badges = jsonDecode(snapshot?.badgesJson ?? '');
@@ -563,14 +555,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         }).length;
       }
     } catch (_) {}
-    return (victories, claimed, kantoBadges == 8);
+    return (
+      progress.leagueWinsAfterRed,
+      progress.claimedRewards,
+      kantoBadges == 8,
+      progress.redDefeated,
+    );
   }
 
   Future<Gen2RedRewardResult> _claimGen2RedReward(
     Gen2RedReward reward,
   ) async {
     final state = await _loadRedRewardState();
-    if (state.$1 < reward.requiredVictories || state.$2.contains(reward.eventKey)) {
+    if (!state.$4 ||
+        state.$1 < reward.requiredLeagueWins ||
+        state.$2.contains(reward.eventKey)) {
       return const Gen2RedRewardResult(status: Gen2RedRewardStatus.unsupported);
     }
     final result = await _gameController.claimGen2RedReward(reward);
@@ -582,13 +581,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         eventType: 'red_reward_received',
         title: 'Recibió a ${reward.name} variocolor',
         description: Value(
-          'Premio por ${reward.requiredVictories} victoria${reward.requiredVictories == 1 ? '' : 's'} contra Rojo.',
+          'Premio por ${reward.requiredLeagueWins} victoria${reward.requiredLeagueWins == 1 ? '' : 's'} en la Liga después de derrotar a Rojo.',
         ),
         metadataJson: Value(jsonEncode(<String, dynamic>{
           'rewardKey': reward.eventKey,
           'speciesId': reward.speciesId,
           'isShiny': true,
-          'requiredVictories': reward.requiredVictories,
+          'requiredLeagueWins': reward.requiredLeagueWins,
           'playTimeMinutes': _currentPlayTimeMinutes,
         })),
       ),
