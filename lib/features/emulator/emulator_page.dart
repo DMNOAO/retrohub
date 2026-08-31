@@ -713,7 +713,6 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
     required bool isGbc,
     required _EmulatorVisualTheme visualTheme,
   }) {
-    final isExp = frame.family == PortraitCardFamily.exp;
     final palette = _PortraitCardPalette.forFrame(frame.id);
     final width = constraints.maxWidth;
     final height = constraints.maxHeight;
@@ -770,7 +769,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: palette.header.withValues(alpha: .58),
-                borderRadius: BorderRadius.circular(isExp ? 24 : 9),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: palette.line.withValues(alpha: .85),
                   width: 2,
@@ -779,6 +778,27 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             ),
           ),
           // La pantalla mantiene el mismo ancho útil del modo vertical normal.
+          Positioned(
+            left: screenRect.left,
+            top: screenRect.top,
+            width: screenRect.width,
+            height: screenRect.height,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Positioned(
             left: screenRect.left,
             top: screenRect.top,
@@ -794,15 +814,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(isExp ? 24 : 8),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: palette.line, width: 3),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
                 ),
               ),
             ),
@@ -815,6 +828,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             child: Stack(
               fit: StackFit.expand,
               children: [
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black38, blurRadius: 6),
+                    ],
+                  ),
+                ),
                 ClipOval(
                   child: ColoredBox(
                     color: palette.stage,
@@ -840,9 +862,6 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(color: palette.line, width: 3),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black38, blurRadius: 6),
-                      ],
                     ),
                   ),
                 ),
@@ -852,7 +871,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           Positioned(
             left: width * .23,
             width: width * .59,
-            top: height * (isExp ? .05 : .045),
+            top: height * .047,
             height: height * .065,
             child: FittedBox(
               alignment: Alignment.centerLeft,
@@ -866,7 +885,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           ),
           Positioned(
             right: width * .03,
-            top: height * (isExp ? .06 : .05),
+            top: height * .055,
             child: Transform.scale(
               scale: .82,
               child: RetroHubQuickMenu(
@@ -2656,10 +2675,7 @@ class _PortraitCardPalette {
   });
 
   factory _PortraitCardPalette.forFrame(String frameId) {
-    final type = frameId
-        .replaceFirst('portrait_', '')
-        .replaceFirst('_exp', '')
-        .replaceFirst('trainer_rocket', 'oscuridad');
+    final type = frameId.replaceFirst('portrait_', '');
     final colors = switch (type) {
       'agua' => const [Color(0xFFBCEBFA), Color(0xFF68BDE7), Color(0xFF277EBA)],
       'electrico' => const [Color(0xFFFFF3A0), Color(0xFFFFD838), Color(0xFFE8A817)],
