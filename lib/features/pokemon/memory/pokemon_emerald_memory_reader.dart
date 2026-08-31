@@ -134,6 +134,7 @@ final class PokemonEmeraldMemoryReader {
       memoryShift: 0,
       playerName: playerName,
       trainerId: trainerId,
+      isFemale: _u8(saveBlock2 + 0x08) == 1,
       currentMapId: currentMapId,
       playerX: x,
       playerY: y,
