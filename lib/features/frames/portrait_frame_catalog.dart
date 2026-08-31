@@ -1,28 +1,21 @@
 import '../../core/emulation/core_loader.dart';
 import '../../data/database/app_database.dart';
 
-enum PortraitCardFamily { classic, exp, trainer }
-
 class PortraitGameFrame {
   final String id;
   final String name;
-  final String assetPath;
-  final PortraitCardFamily family;
 
   const PortraitGameFrame({
     required this.id,
     required this.name,
-    required this.assetPath,
-    required this.family,
   });
 
-  String get typeKey => id
-      .replaceFirst('portrait_', '')
-      .replaceFirst('_exp', '')
-      .replaceFirst('trainer_rocket', 'oscuridad');
+  String get typeKey => id.replaceFirst('portrait_', '');
 
-  String get energyAssetPath =>
-      'assets/frames/portrait/energy/$typeKey.png';
+  String get energyAssetPath => 'assets/frames/portrait/energy/$typeKey.png';
+
+  String get referenceCardAssetPath =>
+      'assets/frames/portrait/energy_cards/$typeKey.png';
 }
 
 class PortraitFrameCatalog {
@@ -50,33 +43,20 @@ class PortraitFrameCatalog {
 
   static List<PortraitGameFrame> forGame(Game game) {
     if (!supports(game)) return const <PortraitGameFrame>[];
-    final family = CoreLoader.isGbaRom(game.romPath)
-        ? PortraitCardFamily.exp
-        : PortraitCardFamily.classic;
-    final suffix = family == PortraitCardFamily.exp ? '_exp' : '';
     return <PortraitGameFrame>[
       for (final entry in _typeNames.entries)
         PortraitGameFrame(
-          id: 'portrait_${entry.key}$suffix',
+          id: 'portrait_${entry.key}',
           name: 'Carta ${entry.value}',
-          assetPath: entry.key == 'dragon' || entry.key == 'hada'
-              ? 'assets/frames/portrait/cards/normal$suffix.png'
-              : 'assets/frames/portrait/cards/${entry.key}$suffix.png',
-          family: family,
         ),
-      const PortraitGameFrame(
-        id: 'portrait_trainer_rocket',
-        name: 'Entrenador Rocket',
-        assetPath: 'assets/frames/portrait/cards/trainer_r.png',
-        family: PortraitCardFamily.trainer,
-      ),
     ];
   }
 
   static PortraitGameFrame? byId(Game game, String? id) {
     if (id == null) return null;
+    final normalizedId = id.replaceFirst('_exp', '');
     for (final frame in forGame(game)) {
-      if (frame.id == id) return frame;
+      if (frame.id == normalizedId) return frame;
     }
     return null;
   }

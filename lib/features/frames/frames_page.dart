@@ -135,7 +135,7 @@ class _FramesPageState extends State<FramesPage> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Carta clásica en GB/GBC y carta EXP en GBA.',
+                    'Diseño dinámico basado en cartas de Energía reales.',
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -322,36 +322,12 @@ class _PortraitFramePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = switch (frame.typeKey) {
-      'agua' => const [Color(0xFFBCEBFA), Color(0xFF277EBA)],
-      'electrico' => const [Color(0xFFFFF3A0), Color(0xFFE8A817)],
-      'fuego' => const [Color(0xFFFFD09B), Color(0xFFB72E2E)],
-      'hoja' => const [Color(0xFFCFF0A4), Color(0xFF247548)],
-      'lucha' => const [Color(0xFFEAC58F), Color(0xFF754128)],
-      'metal' => const [Color(0xFFE9EEF0), Color(0xFF64737D)],
-      'oscuridad' => const [Color(0xFF7B8190), Color(0xFF17191F)],
-      'psi' => const [Color(0xFFF1C2EC), Color(0xFF633D86)],
-      'dragon' => const [Color(0xFFC7CAC2), Color(0xFF4B4930)],
-      'hada' => const [Color(0xFFFFD8EC), Color(0xFFB85B94)],
-      _ => const [Color(0xFFF5E8C9), Color(0xFF9D8764)],
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
-        ),
-        border: Border.all(color: const Color(0xFFFFD21C), width: 7),
-      ),
-      child: Center(
-        child: Image.asset(
-          frame.energyAssetPath,
-          width: 64,
-          height: 64,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.none,
-        ),
+    return ColoredBox(
+      color: const Color(0xFF202024),
+      child: Image.asset(
+        frame.referenceCardAssetPath,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
       ),
     );
   }
