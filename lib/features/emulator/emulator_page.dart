@@ -829,6 +829,15 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             child: Stack(
               fit: StackFit.expand,
               children: [
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black38, blurRadius: 6),
+                    ],
+                  ),
+                ),
                 ClipOval(
                   child: ColoredBox(
                     color: palette.stage,
@@ -854,9 +863,6 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(color: palette.line, width: 3),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black38, blurRadius: 6),
-                      ],
                     ),
                   ),
                 ),
