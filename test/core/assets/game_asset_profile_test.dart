@@ -39,10 +39,30 @@ void main() {
     expect(profile.game, PokemonAssetGame.fireRedLeafGreen);
     expect(profile.region, PokemonAssetRegion.kanto);
     expect(profile.pokemonSpriteSet, 'gba/fire_red_leaf_green');
+    expect(profile.femaleProtagonistAsset, contains('leaf_'));
     expect(
       profile.protagonistAsset,
       'assets/sprites/characters/protagonists/red_fire_red_leaf_green.png',
     );
+  });
+
+  test('incluye protagonistas femeninas en todas las ediciones compatibles', () {
+    final titles = <String>[
+      'Pokémon Cristal',
+      'Pokémon Rubí',
+      'Pokémon Esmeralda',
+      'Pokémon Verde Hoja',
+      'Pokémon Perla',
+      'Pokémon Platino',
+      'Pokémon HeartGold',
+      'Pokémon Blanco',
+      'Pokémon Negro 2',
+    ];
+
+    for (final title in titles) {
+      final profile = GameAssetProfile.fromTitle(title: title, console: 'NDS');
+      expect(profile.femaleProtagonistAsset, isNotNull, reason: title);
+    }
   });
 
   test('reconoce HGSS y usa sus sprites NDS de Johto', () {
