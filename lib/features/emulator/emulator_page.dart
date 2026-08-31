@@ -1,4381 +1,6 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:math' as math;
-
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
-import 'presentation/widget/retrohub_console_logo.dart';
-import 'presentation/widget/retrohub_quick_menu.dart';
-import 'presentation/widget/speed_button.dart';
-import '../../core/assets/game_asset_profile.dart';
-import '../../core/assets/sprite_resolver.dart';
-import '../../core/emulation/core_loader.dart';
-import '../../core/utils/cover_helper.dart';
-import '../../data/database/app_database.dart';
-import '../../data/database/database_provider.dart';
-import '../frames/frames_page.dart';
-import '../frames/frame_catalog.dart';
-import '../frames/frame_preferences.dart';
-import '../frames/portrait_frame_catalog.dart';
-import '../profile/auth/auth_provider.dart';
-import '../profile/cloud/cloud_save_coordinator.dart';
-import '../journal/journal_page.dart';
-import '../journal/services/journal_event_service.dart';
-import '../pokemon/services/pokemon_journal_tracker.dart';
-import '../pokemon/models/pokemon_game_profile.dart';
-import 'data/save_state_service.dart';
-import 'presentation/widget/libretro_game_view.dart';
-import 'memory_inspector/memory_inspector_page.dart';
-import 'settings/emulator_preferences.dart';
-import 'settings/emulator_settings_page.dart';
-import 'special_events/special_events_page.dart';
-import 'save_states/save_states_page.dart';
-import 'link/link_state.dart';
-import 'link/link_manager.dart';
-import 'link/bluetooth/bluetooth_discovery.dart';
-
-class EmulatorPage extends ConsumerStatefulWidget {
-  final Game game;
-
-  const EmulatorPage({super.key, required this.game});
-
-  @override
-  ConsumerState<EmulatorPage> createState() => _EmulatorPageState();
-}
-
-class _EmulatorPageState extends ConsumerState<EmulatorPage>
-    with WidgetsBindingObserver {
-  static const int _buttonB = 0;
-  static const int _buttonY = 1;
-  static const int _buttonSelect = 2;
-  static const int _buttonStart = 3;
-  static const int _buttonUp = 4;
-  static const int _buttonDown = 5;
-  static const int _buttonLeft = 6;
-  static const int _buttonRight = 7;
-  static const int _buttonA = 8;
-  static const int _buttonX = 9;
-  static const int _buttonL = 10;
-  static const int _buttonR = 11;
-
-  final LibretroGameController _gameController = LibretroGameController();
-  final GlobalKey _gameViewKey = GlobalKey(debugLabel: 'libretro-game-view');
-
-  late final AppDatabase _database;
-  late final JournalEventService _journalEventService;
-  PokemonJournalTracker? _pokemonJournalTracker;
-  late final DateTime _sessionStartedAt;
-  bool _sessionClosedLogged = false;
-  bool _sessionPersisted = false;
-  bool _isClosing = false;
-  bool _allowPop = false;
-  String _closingStatus = 'Guardando partidaâ€¦';
-  bool _exitDialogOpen = false;
-  Timer? _headerRefreshTimer;
-  int? _ndsTouchPointer;
-  List<int> _partySpeciesIds = const <int>[];
-  EmulatorPreferences _preferences = const EmulatorPreferences();
-  GameFrame? _selectedFrame;
-  PortraitGameFrame? _selectedPortraitFrame;
-
-  Game get game => widget.game;
-
-  bool get _isAndroidSnes =>
-      defaultTargetPlatform == TargetPlatform.android &&
-      CoreLoader.isSnesRom(game.romPath);
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
-    if (_isAndroidSnes) {
-      unawaited(
-        SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]),
-      );
-    }
-
-    _sessionStartedAt = DateTime.now();
-    unawaited(_loadEmulatorPreferences());
-    _database = ref.read(databaseProvider);
-
-    unawaited(_database.markGameOpened(game.id, _sessionStartedAt));
-
-    _journalEventService = JournalEventService(
-      database: _database,
-      gameId: game.id,
-    );
-
-    final PokemonGameProfile pokemonProfile =
-        PokemonGameProfile.fromGameIdentity(
-          gameTitle: game.title,
-          romPath: game.romPath,
-        );
-    final bool supportsPokemonJournal =
-        pokemonProfile.isGen4 ||
-        pokemonProfile.isGen5 ||
-        CoreLoader.isGameBoyRom(game.romPath) ||
-        (CoreLoader.isGbaRom(game.romPath) &&
-            (pokemonProfile.version == PokemonGameVersion.emerald ||
-                pokemonProfile.version == PokemonGameVersion.ruby ||
-                pokemonProfile.version == PokemonGameVersion.sapphire ||
-                pokemonProfile.version == PokemonGameVersion.fireRed ||
-                pokemonProfile.version == PokemonGameVersion.leafGreen));
-
-    if (supportsPokemonJournal) {
-      _pokemonJournalTracker = PokemonJournalTracker(
-        database: _database,
-        gameId: game.id,
-        gameTitle: game.title,
-        romPath: game.romPath,
-        controller: _gameController,
-        playTimeMinutes: () => _currentPlayTimeMinutes,
-      )..start();
-      unawaited(_refreshHeaderParty());
-      _headerRefreshTimer = Timer.periodic(
-        const Duration(seconds: 2),
-        (_) => unawaited(_refreshHeaderParty()),
-      );
-    }
-
-    unawaited(
-      _journalEventService.logGameStarted(
-        playTimeMinutes: game.playTimeSeconds ~/ 60,
-      ),
-    );
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (CoreLoader.isSnesRom(game.romPath) ||
-        !_preferences.pauseInBackground) {
-      return;
-    }
-    _gameController.setPaused(state != AppLifecycleState.resumed);
-  }
-
-  Future<void> _loadEmulatorPreferences() async {
-    final preferences = await EmulatorPreferences.load();
-    final frameId = await FramePreferences.load(game.id);
-    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
-    if (!mounted) return;
-    setState(() {
-      _preferences = preferences;
-      _selectedFrame = FrameCatalog.byId(game, frameId);
-      _selectedPortraitFrame = portraitFrameId == 'none'
-          ? null
-          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
-              PortraitFrameCatalog.recommendedFor(game);
-    });
-    await _applyDisplayPreferences(preferences);
-  }
-
-  Future<void> _reloadSelectedFrame() async {
-    final frameId = await FramePreferences.load(game.id);
-    final portraitFrameId = await FramePreferences.loadPortrait(game.id);
-    if (!mounted) return;
-    setState(() {
-      _selectedFrame = FrameCatalog.byId(game, frameId);
-      _selectedPortraitFrame = portraitFrameId == 'none'
-          ? null
-          : PortraitFrameCatalog.byId(game, portraitFrameId) ??
-              PortraitFrameCatalog.recommendedFor(game);
-    });
-  }
-
-  Future<void> _applyDisplayPreferences(EmulatorPreferences preferences) async {
-    if (CoreLoader.isSnesRom(game.romPath)) {
-      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
-      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      await SystemChrome.setEnabledSystemUIMode(
-        preferences.snesFullscreen
-            ? SystemUiMode.immersiveSticky
-            : SystemUiMode.edgeToEdge,
-      );
-      return;
-    }
-    if (CoreLoader.isNdsRom(game.romPath) && preferences.ndsFullscreen) {
-      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
-      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      return;
-    }
-    if ((CoreLoader.isGbaRom(game.romPath) && preferences.gbaFullscreen) ||
-        (CoreLoader.isGameBoyRom(game.romPath) &&
-            preferences.gameBoyFullscreen)) {
-      await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
-      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      return;
-    }
-    await WakelockPlus.toggle(enable: preferences.keepScreenAwake);
-    final orientations = switch (preferences.orientation) {
-      EmulatorOrientation.automatic => const <DeviceOrientation>[],
-      EmulatorOrientation.portrait => const <DeviceOrientation>[
-          DeviceOrientation.portraitUp,
-        ],
-      EmulatorOrientation.landscape => const <DeviceOrientation>[
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ],
-    };
-    await SystemChrome.setPreferredOrientations(orientations);
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  }
-
-  Future<void> _refreshHeaderParty() async {
-    final snapshot = await _database.getLatestProgressSnapshot(game.id);
-    if (!mounted || snapshot?.partyJson == null) return;
-
-    try {
-      final decoded = jsonDecode(snapshot!.partyJson!);
-      if (decoded is! List) return;
-
-      final ids = decoded
-          .whereType<Map>()
-          .map((pokemon) {
-            final bool isEgg =
-                pokemon['isEgg'] == true ||
-                pokemon['isEgg']?.toString() == 'true';
-            if (isEgg) return 0;
-
-            final dynamic rawId = pokemon['id'];
-            if (rawId is num) return rawId.toInt();
-            return int.tryParse(rawId?.toString() ?? '');
-          })
-          .whereType<int>()
-          .where((id) => id >= 0)
-          .take(6)
-          .toList(growable: false);
-
-      if (!_sameIds(ids, _partySpeciesIds)) {
-        setState(() => _partySpeciesIds = ids);
-      }
-    } catch (_) {
-      // A corrupt or older snapshot must not affect the emulator screen.
-    }
-  }
-
-  bool _sameIds(List<int> first, List<int> second) {
-    if (first.length != second.length) return false;
-    for (var index = 0; index < first.length; index++) {
-      if (first[index] != second[index]) return false;
-    }
-    return true;
-  }
-
-  int get _currentPlayTimeMinutes {
-    final int controllerMinutes = _gameController.currentPlayTimeMinutes;
-
-    if (controllerMinutes > 0) {
-      return controllerMinutes;
-    }
-
-    final int sessionMinutes = DateTime.now()
-        .difference(_sessionStartedAt)
-        .inMinutes;
-
-    return (game.playTimeSeconds ~/ 60) + sessionMinutes;
-  }
-
-  Future<void> _persistSession() async {
-    if (_sessionPersisted) return;
-    _sessionPersisted = true;
-    final endedAt = DateTime.now();
-    await _database.addGamePlayTime(
-      gameId: game.id,
-      sessionSeconds: endedAt.difference(_sessionStartedAt).inSeconds,
-      closedAt: endedAt,
-    );
-  }
-
-  Future<void> _logSessionClosed() async {
-    if (_sessionClosedLogged) {
-      return;
-    }
-
-    _sessionClosedLogged = true;
-
-    await _persistSession();
-
-    await _journalEventService.logGameClosed(
-      playTimeMinutes: _currentPlayTimeMinutes,
-      sessionDurationMinutes: DateTime.now()
-          .difference(_sessionStartedAt)
-          .inMinutes,
-    );
-  }
-
-  Future<void> _handleMenuAction(BuildContext context, String value) async {
-    switch (value) {
-      case 'save_state':
-        await _openSaveStates(context, mode: SaveStatesMode.save);
-        break;
-
-      case 'load_state':
-        await _openSaveStates(context, mode: SaveStatesMode.load);
-        break;
-      case 'screenshot':
-        await _journalEventService.logScreenshot(
-          playTimeMinutes: _currentPlayTimeMinutes,
-        );
-
-        if (!context.mounted) return;
-
-        _showActionMessage(context, 'Captura registrada en la bitÃ¡cora');
-        break;
-      case 'change_frame':
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => FramesPage(game: game)),
-        );
-        await _reloadSelectedFrame();
-        break;
-      case 'open_journal':
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => JournalPage(game: game)));
-        break;
-      case 'open_stats':
-        _showActionMessage(context, 'Abrir estadÃ­sticas');
-        break;
-      case 'memory_inspector':
-        if (!_gameController.isAttached) {
-          _showActionMessage(context, 'El emulador todavÃ­a no estÃ¡ listo.');
-          break;
-        }
-
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => MemoryInspectorPage(controller: _gameController),
-          ),
-        );
-        break;
-      case 'settings':
-        await _openEmulatorSettings(context);
-        break;
-      case 'exit':
-        await _requestExit(context);
-        break;
-    }
-  }
-
-  Future<void> _openEmulatorSettings(BuildContext context) async {
-    final PokemonGameProfile pokemonProfile =
-        PokemonGameProfile.fromGameIdentity(
-          gameTitle: game.title,
-          romPath: game.romPath,
-        );
-
-    final preferences = await Navigator.of(context).push<EmulatorPreferences>(
-      MaterialPageRoute(
-        builder: (_) => EmulatorSettingsPage(
-          gameTitle: game.title,
-          supportsGameBoyOptions:
-              CoreLoader.isGameBoyRom(game.romPath) ||
-              CoreLoader.isGbaRom(game.romPath),
-          supportsSnesOptions: CoreLoader.isSnesRom(game.romPath),
-          supportsNdsOptions: CoreLoader.isNdsRom(game.romPath),
-          supportsGbaFullscreen: CoreLoader.isGbaRom(game.romPath),
-          supportsGameBoyFullscreen: CoreLoader.isGameBoyRom(game.romPath),
-          initialPreferences: _preferences,
-          saveStateService: SaveStateService(
-            gameId: game.id,
-            romPath: game.romPath,
-          ),
-          specialEventsSubtitle: switch (pokemonProfile.version) {
-            PokemonGameVersion.crystal => 'GS Ball Â· Celebi',
-            PokemonGameVersion.ruby || PokemonGameVersion.sapphire =>
-              'Ticket EÃ³n Â· Latias/Latios',
-            PokemonGameVersion.emerald =>
-              'Mew, Deoxys, Lugia, Ho-Oh y PokÃ©mon EÃ³n',
-            PokemonGameVersion.fireRed || PokemonGameVersion.leafGreen =>
-              'Deoxys, Lugia y Ho-Oh',
-            _ => 'Eventos oficiales',
-          },
-          onOpenSpecialEvents:
-              _supportsSpecialEvents(pokemonProfile.version)
-              ? () async {
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => SpecialEventsPage(
-                        version: pokemonProfile.version,
-                        inspectGsBall: _gameController.inspectGsBall,
-                        activateGsBall: _gameController.activateGsBall,
-                        inspectGen3Event: _gameController.inspectGen3Event,
-                        activateGen3Event: _gameController.activateGen3Event,
-                      ),
-                    ),
-                  );
-                }
-              : null,
-          onRestart: _gameController.restart,
-          onSaveState: (slot, title) async {
-            final saved = await _gameController.saveState(
-              slot: slot,
-              title: title,
-            );
-            if (saved) {
-              await _journalEventService.logSaveState(
-                slot: slot,
-                title: title,
-                playTimeMinutes: _currentPlayTimeMinutes,
-              );
-            }
-            return saved;
-          },
-          onLoadState: (slot) async {
-            final loaded = await _gameController.loadState(slot);
-            if (loaded) {
-              await _journalEventService.logLoadState(
-                slot: slot,
-                playTimeMinutes: _currentPlayTimeMinutes,
-              );
-            }
-            return loaded;
-          },
-        ),
-      ),
-    );
-    if (preferences != null && mounted) {
-      setState(() => _preferences = preferences);
-      await _applyDisplayPreferences(preferences);
-    }
-  }
-
-  bool _supportsSpecialEvents(PokemonGameVersion version) {
-    return version == PokemonGameVersion.crystal ||
-        version == PokemonGameVersion.ruby ||
-        version == PokemonGameVersion.sapphire ||
-        version == PokemonGameVersion.emerald ||
-        version == PokemonGameVersion.fireRed ||
-        version == PokemonGameVersion.leafGreen;
-  }
-
-  Future<void> _requestExit(BuildContext context) async {
-    if (_isClosing || _exitDialogOpen) return;
-    _exitDialogOpen = true;
-
-    final visualTheme = _EmulatorVisualTheme.forGame(game);
-    final cloudAvailable = ref.read(authUserProvider).value != null;
-    final exitAction = await showDialog<_ExitGameAction>(
-      context: context,
-      builder: (dialogContext) => _ExitGameDialog(
-        game: game,
-        accent: visualTheme.accent,
-        partySpeciesIds: _partySpeciesIds,
-        cloudAvailable: cloudAvailable,
-      ),
-    );
-    _exitDialogOpen = false;
-
-    if (exitAction == null ||
-        exitAction == _ExitGameAction.keepPlaying ||
-        !context.mounted) {
-      return;
-    }
-    await _closeAndPop(
-      uploadCloud: exitAction == _ExitGameAction.cloudBackup,
-    );
-  }
-
-  Future<void> _closeAndPop({required bool uploadCloud}) async {
-    if (_isClosing) return;
-    final navigator = Navigator.of(this.context);
-    final emulatorRoute = ModalRoute.of(this.context);
-    final messenger = ScaffoldMessenger.of(this.context);
-    setState(() {
-      _isClosing = true;
-      _allowPop = false;
-      _closingStatus = 'Guardando partida localâ€¦';
-    });
-
-    if (!CoreLoader.isSnesRom(game.romPath) &&
-        _preferences.autoSaveOnExit) {
-      await _gameController.saveState(
-        slot: SaveStateService.autoSaveSlot,
-        title: 'Guardado automÃ¡tico',
-      );
-    }
-    await _gameController.saveSram();
-    String? cloudError;
-    final user = ref.read(authUserProvider).value;
-    if (uploadCloud && user != null) {
-      if (mounted) {
-        setState(() => _closingStatus = 'Subiendo a RetroHub Cloudâ€¦');
-      }
-      try {
-        await CloudSaveCoordinator(
-          authService: ref.read(googleAuthServiceProvider),
-        ).uploadGame(
-          gameId: game.id,
-          gameTitle: game.title,
-          romPath: game.romPath,
-          requestAuthorizationIfNeeded: false,
-        );
-      } catch (error) {
-        cloudError = error.toString();
-      }
-    }
-    if (mounted) setState(() => _closingStatus = 'Cerrando juegoâ€¦');
-    final tracker = _pokemonJournalTracker;
-    if (tracker != null) await tracker.stop();
-    await _logSessionClosed();
-
-    if (!mounted) return;
-
-    await _waitForAppToResume();
-    if (!mounted) return;
-
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-
-    if (emulatorRoute != null && emulatorRoute.isActive) {
-      navigator.popUntil((route) => route == emulatorRoute);
-      setState(() => _allowPop = true);
-      await WidgetsBinding.instance.endOfFrame;
-      if (mounted && emulatorRoute.isCurrent) navigator.pop();
-    } else {
-      setState(() => _allowPop = true);
-      await WidgetsBinding.instance.endOfFrame;
-      if (mounted) navigator.pop();
-    }
-
-    if (cloudError != null) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'La partida quedÃ³ guardada localmente, pero no se pudo subir a la nube: $cloudError',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _waitForAppToResume() async {
-    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-      return;
-    }
-
-    final completer = Completer<void>();
-    late final AppLifecycleListener listener;
-    listener = AppLifecycleListener(
-      onResume: () {
-        if (!completer.isCompleted) completer.complete();
-        listener.dispose();
-      },
-    );
-    await completer.future.timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => listener.dispose(),
-    );
-  }
-
-  Future<void> _openSaveStates(
-    BuildContext context, {
-    required SaveStatesMode mode,
-  }) async {
-    final SaveStateService service = SaveStateService(
-      gameId: game.id,
-      romPath: game.romPath,
-    );
-
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => SaveStatesPage(
-          gameTitle: game.title,
-          mode: mode,
-          service: service,
-          onSave: (int slot, String title) async {
-            final bool saved = await _gameController.saveState(
-              slot: slot,
-              title: title,
-            );
-
-            if (saved) {
-              await _journalEventService.logSaveState(
-                slot: slot,
-                title: title,
-                playTimeMinutes: _currentPlayTimeMinutes,
-              );
-            }
-
-            return saved;
-          },
-          onLoad: (int slot) async {
-            final bool loaded = await _gameController.loadState(slot);
-
-            if (loaded) {
-              await _journalEventService.logLoadState(
-                slot: slot,
-                playTimeMinutes: _currentPlayTimeMinutes,
-              );
-            }
-
-            return loaded;
-          },
-          confirmBeforeOverwrite: _preferences.confirmBeforeOverwrite,
-        ),
-      ),
-    );
-  }
-
-  void _showActionMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _headerRefreshTimer?.cancel();
-    _gameController.resetInput();
-    final tracker = _pokemonJournalTracker;
-    if (tracker != null) unawaited(tracker.stop());
-    unawaited(_logSessionClosed());
-    if (_isAndroidSnes) {
-      unawaited(
-        SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
-          DeviceOrientation.portraitUp,
-        ]),
-      );
-    } else {
-      unawaited(SystemChrome.setPreferredOrientations(const []));
-    }
-    unawaited(WakelockPlus.disable());
-    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    super.dispose();
-  }
-
-  Widget _ndsTouchSurface({
-    required double width,
-    required double height,
-  }) {
-    void updateTouch(PointerEvent event) {
-      _gameController.setTouchState(
-        x: ((event.localPosition.dx / width) * 255)
-            .round()
-            .clamp(0, 255)
-            .toInt(),
-        y: ((event.localPosition.dy / height) * 191)
-            .round()
-            .clamp(0, 191)
-            .toInt(),
-        pressed: true,
-      );
-    }
-
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (event) {
-        if (_ndsTouchPointer != null) return;
-        _ndsTouchPointer = event.pointer;
-        updateTouch(event);
-      },
-      onPointerMove: (event) {
-        if (_ndsTouchPointer != event.pointer) return;
-        updateTouch(event);
-      },
-      onPointerUp: (event) {
-        if (_ndsTouchPointer != event.pointer) return;
-        _gameController.releaseTouch();
-        _ndsTouchPointer = null;
-      },
-      onPointerCancel: (event) {
-        if (_ndsTouchPointer != event.pointer) return;
-        _gameController.releaseTouch();
-        _ndsTouchPointer = null;
-      },
-    );
-  }
-
-  Widget _buildPortraitCardLayout({
-    required BoxConstraints constraints,
-    required Widget gameView,
-    required PortraitGameFrame frame,
-    required bool isGba,
-    required bool isGbc,
-    required _EmulatorVisualTheme visualTheme,
-  }) {
-    final palette = _PortraitCardPalette.forFrame(frame.id);
-    final width = constraints.maxWidth;
-    final height = constraints.maxHeight;
-    final screenWidth = width * .92;
-    final screenHeight = screenWidth / (isGba ? 3 / 2 : 10 / 9);
-    final screenRect = Rect.fromLTWH(
-      (width - screenWidth) / 2,
-      height * .18,
-      screenWidth,
-      screenHeight,
-    );
-    final dpadSize = math.min(38 * _preferences.sizeScale, width * .11);
-    final actionSize = math.min(52 * _preferences.sizeScale, width * .15);
-    final coverDiameter = math.min(width * .19, height * .095);
-    final controlsY = height * (isGba ? .59 : .70);
-    final coverPath = CoverHelper.getCover(game.title, game.console);
-    final consoleLogo = isGba
-        ? RetroHubConsoleType.gameBoyAdvance
-        : isGbc
-            ? RetroHubConsoleType.gameBoyColor
-            : RetroHubConsoleType.gameBoy;
-
-    return ColoredBox(
-      color: visualTheme.background,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [palette.top, palette.middle, palette.bottom],
-                  stops: const [0, .48, 1],
-                ),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: palette.border, width: 8),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 12,
-                    offset: Offset(0, 5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            left: width * .035,
-            right: width * .035,
-            top: height * .025,
-            height: height * .105,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: palette.header.withValues(alpha: .58),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: palette.line.withValues(alpha: .85),
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-          // La pantalla mantiene el mismo ancho Ãºtil del modo vertical normal.
-          Positioned(
-            left: screenRect.left,
-            top: screenRect.top,
-            width: screenRect.width,
-            height: screenRect.height,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: screenRect.left,
-            top: screenRect.top,
-            width: screenRect.width,
-            height: screenRect.height,
-            child: ColoredBox(color: Colors.black, child: gameView),
-          ),
-          Positioned(
-            left: screenRect.left - 3,
-            top: screenRect.top - 3,
-            width: screenRect.width + 6,
-            height: screenRect.height + 6,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: palette.line, width: 3),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: width * .04,
-            top: height * .025,
-            width: coverDiameter,
-            height: coverDiameter,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black38, blurRadius: 6),
-                    ],
-                  ),
-                ),
-                ClipOval(
-                  child: ColoredBox(
-                    color: palette.stage,
-                    child: coverPath == null
-                        ? Icon(
-                            Icons.sports_esports_rounded,
-                            color: visualTheme.accent,
-                            size: 24,
-                          )
-                        : Image.asset(
-                            coverPath,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Icon(
-                              Icons.sports_esports_rounded,
-                              color: visualTheme.accent,
-                              size: 24,
-                            ),
-                          ),
-                  ),
-                ),
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: palette.line, width: 3),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: width * .23,
-            width: width * .59,
-            top: height * .047,
-            height: height * .065,
-            child: FittedBox(
-              alignment: Alignment.centerLeft,
-              fit: BoxFit.scaleDown,
-              child: _PartySprites(
-                game: game,
-                speciesIds: _partySpeciesIds,
-                accent: isGba ? palette.partyAccent : visualTheme.accent,
-              ),
-            ),
-          ),
-          Positioned(
-            right: width * .03,
-            top: height * .055,
-            child: Transform.scale(
-              scale: .82,
-              child: RetroHubQuickMenu(
-                onAction: (value) => _handleMenuAction(context, value),
-                anchorChild: Image.asset(
-                  palette.energyAsset,
-                  width: 32,
-                  height: 32,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.none,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: width * .055,
-            top: controlsY,
-            child: Opacity(
-              opacity: _preferences.controlOpacity,
-              child: _DirectionalControl(
-                type: _preferences.directionalControl,
-                keySize: dpadSize,
-                controller: _gameController,
-                buttonUp: _buttonUp,
-                buttonDown: _buttonDown,
-                buttonLeft: _buttonLeft,
-                buttonRight: _buttonRight,
-              ),
-            ),
-          ),
-          Positioned(
-            right: width * .055,
-            top: controlsY + dpadSize * .45,
-            child: Opacity(
-              opacity: _preferences.controlOpacity,
-              child: Row(
-                children: [
-                  _GameBoyActionButton(
-                    size: actionSize,
-                    label: _preferences.swapAB ? 'A' : 'B',
-                    buttonId: _preferences.swapAB ? _buttonA : _buttonB,
-                    controller: _gameController,
-                  ),
-                  SizedBox(width: width * .025),
-                  _GameBoyActionButton(
-                    size: actionSize,
-                    label: _preferences.swapAB ? 'B' : 'A',
-                    buttonId: _preferences.swapAB ? _buttonB : _buttonA,
-                    controller: _gameController,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (isGba) ...[
-            Positioned(
-              left: width * .08,
-              top: height * .50,
-              child: _GameBoyShoulderButton(
-                label: 'L',
-                buttonId: _buttonL,
-                controller: _gameController,
-              ),
-            ),
-            Positioned(
-              right: width * .08,
-              top: height * .50,
-              child: _GameBoyShoulderButton(
-                label: 'R',
-                buttonId: _buttonR,
-                controller: _gameController,
-              ),
-            ),
-          ],
-          Positioned(
-            left: width * .20,
-            right: width * .20,
-            top: height * (isGba ? .80 : .875),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _GameBoySystemButton(
-                  width: 68,
-                  height: 27,
-                  label: 'SELECT',
-                  buttonId: _buttonSelect,
-                  controller: _gameController,
-                ),
-                _GameBoySystemButton(
-                  width: 68,
-                  height: 27,
-                  label: 'START',
-                  buttonId: _buttonStart,
-                  controller: _gameController,
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: width * .055,
-            right: width * .055,
-            top: height * .12,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (CoreLoader.isGameBoyRom(game.romPath))
-                  _LinkStatusChip(linkManager: _gameController.linkManager)
-                else
-                  const SizedBox(width: 92),
-                SizedBox(
-                  width: 92,
-                  height: 32,
-                  child: SpeedButton(
-                    speedMultiplier: _gameController.speedMultiplier,
-                    onTap: _gameController.cycleSpeed,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: width * .25,
-            right: width * .25,
-            top: screenRect.bottom + height * .012,
-            height: height * .075,
-            child: IgnorePointer(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: RetroHubConsoleLogo(console: consoleLogo),
-              ),
-            ),
-          ),
-          Positioned(
-            left: width * .07,
-            right: width * .07,
-            bottom: height * .018,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(height: 2, color: palette.line),
-                const SizedBox(height: 5),
-                DefaultTextStyle(
-                  style: TextStyle(
-                    color: palette.ink,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('debilidad'),
-                      Text('resistencia'),
-                      Text('retirada'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final EmulationCore core = CoreLoader.coreForRom(game.romPath);
-    final String? corePath = CoreLoader.findCorePath(game.romPath);
-    final bool isGba = CoreLoader.isGbaRom(game.romPath);
-    final bool isSnes = CoreLoader.isSnesRom(game.romPath);
-    final bool isNds = CoreLoader.isNdsRom(game.romPath);
-    final bool isGbc =
-        game.console.toLowerCase().contains('gbc') ||
-        game.console.toLowerCase().contains('game boy color');
-    final bool pageLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-    final bool portraitCardActive =
-        !pageLandscape && _selectedPortraitFrame != null;
-    final _EmulatorVisualTheme visualTheme = _EmulatorVisualTheme.forGame(game);
-    final bool snesFullscreen = isSnes && _preferences.snesFullscreen;
-    final bool gbaFullscreen = isGba && _preferences.gbaFullscreen;
-    final bool gameBoyFullscreen =
-        CoreLoader.isGameBoyRom(game.romPath) &&
-        _preferences.gameBoyFullscreen;
-    final bool ndsFullscreen = isNds && _preferences.ndsFullscreen;
-    final bool consoleFullscreen =
-        snesFullscreen || gbaFullscreen || gameBoyFullscreen || ndsFullscreen;
-    final bool borderlessGameSurface =
-        consoleFullscreen || portraitCardActive;
-    _gameController.hapticsEnabled = !isSnes &&
-        (isNds
-            ? _preferences.ndsVibrationEnabled
-            : _preferences.vibrationEnabled);
-
-    return PopScope(
-      canPop: _allowPop,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) unawaited(_requestExit(context));
-      },
-      child: Scaffold(
-        backgroundColor: visualTheme.background,
-        appBar: consoleFullscreen || portraitCardActive ? null : AppBar(
-          toolbarHeight: 58,
-          backgroundColor: visualTheme.appBar,
-          foregroundColor: Colors.white,
-          titleSpacing: 4,
-          title: _EmulatorHeader(
-            game: game,
-            accent: visualTheme.accent,
-            partySpeciesIds: _partySpeciesIds,
-          ),
-        ),
-        body: Stack(
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(gradient: visualTheme.gradient),
-              child: SafeArea(
-                top: portraitCardActive,
-                left: !consoleFullscreen,
-                right: !consoleFullscreen,
-                bottom: !consoleFullscreen,
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints constraints) {
-                    final bool landscape =
-                        constraints.maxWidth > constraints.maxHeight;
-                    final double padding = landscape ? 8 : 14;
-                    final double ndsMiddleControlsHeight = math.max(
-                      30 * _preferences.ndsShoulderScale,
-                      25 * _preferences.ndsSystemScale,
-                    );
-                    const double ndsPortraitScreenGap = 4;
-
-                    final Widget gameView = Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(
-                          borderlessGameSurface ? 0 : 18,
-                        ),
-                        border: borderlessGameSurface ? null : Border.all(
-                          color: corePath != null
-                              ? visualTheme.accent
-                              : Theme.of(context).colorScheme.error,
-                          width: 3,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(
-                          borderlessGameSurface ? 0 : 15,
-                        ),
-                        child: corePath != null
-                            ? LibretroGameView(
-                                key: _gameViewKey,
-                                gameId: game.id,
-                                gameTitle: game.title,
-                                corePath: corePath,
-                                romPath: game.romPath,
-                                initialPlayTimeMinutes:
-                                    game.playTimeSeconds ~/ 60,
-                                controller: _gameController,
-                                screenFit: portraitCardActive
-                                    ? BoxFit.fill
-                                    : switch (_preferences.screenScale) {
-                                        EmulatorScreenScale.aspectRatio =>
-                                          BoxFit.contain,
-                                        EmulatorScreenScale.fitWidth =>
-                                          BoxFit.fitWidth,
-                                        EmulatorScreenScale.stretch =>
-                                          BoxFit.fill,
-                                      },
-                                filterQuality: _preferences.screenFilter ==
-                                        EmulatorScreenFilter.pixel
-                                    ? FilterQuality.none
-                                    : FilterQuality.medium,
-                                autoLoadState:
-                                    _preferences.autoLoadOnStart && !isSnes,
-                                displayAspectRatio: isSnes ? 4 / 3 : null,
-                                splitNdsScreens: isNds,
-                                ndsTopScreenScale: isNds
-                                    ? _ndsTopScreenScale(_preferences)
-                                    : 1,
-                                ndsBottomScreenScale: isNds
-                                    ? _ndsBottomScreenScale(_preferences)
-                                    : 1,
-                                ndsSwapScreens: isNds && _preferences.ndsSwapScreens,
-                                ndsScreensScale: isNds && landscape
-                                    ? (ndsFullscreen
-                                        ? 1
-                                        : _preferences.ndsScreensScale)
-                                    : 1,
-                                ndsHorizontalLayout: isNds && landscape,
-                                ndsScreenGap: isNds && !landscape
-                                    ? ndsPortraitScreenGap
-                                    : 4,
-                              )
-                            : _CoreNotFoundView(
-                                romPath: game.romPath,
-                                core: core,
-                              ),
-                      ),
-                    );
-
-                    final selectedFrame = _selectedFrame;
-                    if (consoleFullscreen &&
-                        landscape &&
-                        selectedFrame != null) {
-                      final scale = math.min(
-                        constraints.maxWidth / 1280,
-                        constraints.maxHeight / 720,
-                      );
-                      final frameWidth = 1280 * scale;
-                      final frameHeight = 720 * scale;
-                      final frameLeft = (constraints.maxWidth - frameWidth) / 2;
-                      final frameTop = (constraints.maxHeight - frameHeight) / 2;
-                      final viewportLeft = frameLeft +
-                          frameWidth * selectedFrame.viewportLeft;
-                      final viewportTop = frameTop +
-                          frameHeight * selectedFrame.viewportTop;
-                      final viewportWidth =
-                          frameWidth * selectedFrame.viewportWidth;
-                      final viewportHeight =
-                          frameHeight * selectedFrame.viewportHeight;
-                      final leftControlsWidth = math.max(132.0, viewportLeft);
-                      final rightControlsWidth = math.max(
-                        150.0,
-                        constraints.maxWidth -
-                            (viewportLeft + viewportWidth),
-                      );
-                      final showShoulders = isSnes || isGba;
-                      final consoleLogo = isSnes
-                          ? RetroHubConsoleType.superNintendo
-                          : isGba
-                              ? RetroHubConsoleType.gameBoyAdvance
-                              : isGbc
-                                  ? RetroHubConsoleType.gameBoyColor
-                                  : RetroHubConsoleType.gameBoy;
-
-                      return ColoredBox(
-                        color: Color(selectedFrame.backgroundColorValue),
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: viewportLeft,
-                              top: viewportTop,
-                              width: viewportWidth,
-                              height: viewportHeight,
-                              child: ColoredBox(
-                                color: Colors.black,
-                                child: Center(
-                                  child: AspectRatio(
-                                    aspectRatio: selectedFrame.gameAspectRatio,
-                                    child: gameView,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: frameLeft,
-                              top: frameTop,
-                              width: frameWidth,
-                              height: frameHeight,
-                              child: IgnorePointer(
-                                child: Image.asset(
-                                  selectedFrame.assetPath,
-                                  fit: BoxFit.fill,
-                                  filterQuality: FilterQuality.none,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: viewportLeft,
-                              top: viewportTop,
-                              width: viewportWidth,
-                              height: viewportHeight,
-                              child: _FullscreenPartyOverlay(
-                                game: game,
-                                speciesIds: _partySpeciesIds,
-                                accent: visualTheme.accent,
-                              ),
-                            ),
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: leftControlsWidth,
-                              child: Opacity(
-                                opacity: _preferences.controlOpacity,
-                                child: _LandscapeLeftControls(
-                                  controller: _gameController,
-                                  directionalControl:
-                                      _preferences.directionalControl,
-                                  buttonUp: _buttonUp,
-                                  buttonDown: _buttonDown,
-                                  buttonLeft: _buttonLeft,
-                                  buttonRight: _buttonRight,
-                                  buttonSelect: _buttonSelect,
-                                  buttonL: _buttonL,
-                                  showShoulder: showShoulders,
-                                  consoleLogo: consoleLogo,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: rightControlsWidth,
-                              child: Opacity(
-                                opacity: _preferences.controlOpacity,
-                                child: _LandscapeRightControls(
-                                  controller: _gameController,
-                                  buttonA: _preferences.swapAB
-                                      ? _buttonB
-                                      : _buttonA,
-                                  buttonB: _preferences.swapAB
-                                      ? _buttonA
-                                      : _buttonB,
-                                  buttonX: _buttonX,
-                                  buttonY: _buttonY,
-                                  buttonStart: _buttonStart,
-                                  buttonR: _buttonR,
-                                  showShoulder: showShoulders,
-                                  isSnes: isSnes,
-                                  rotateActions: !isSnes,
-                                  buttonAColor: isSnes
-                                      ? Color(_preferences.snesButtonAColor)
-                                      : const Color(0xFF5E4B8B),
-                                  buttonBColor: isSnes
-                                      ? Color(_preferences.snesButtonBColor)
-                                      : const Color(0xFF8173AE),
-                                  buttonXColor: isSnes
-                                      ? Color(_preferences.snesButtonXColor)
-                                      : const Color(0xFF8173AE),
-                                  buttonYColor: isSnes
-                                      ? Color(_preferences.snesButtonYColor)
-                                      : const Color(0xFF5E4B8B),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (snesFullscreen && landscape) {
-                      final gameWidth = (constraints.maxHeight * 4 / 3)
-                          .clamp(0.0, constraints.maxWidth)
-                          .toDouble();
-                      final sideWidth =
-                          ((constraints.maxWidth - gameWidth) / 2)
-                              .clamp(0.0, constraints.maxWidth / 2)
-                              .toDouble();
-                      return ColoredBox(
-                        color: const Color(0xFFC8C7CC),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: true,
-                                opacity: _preferences.controlOpacity,
-                                child: _LandscapeLeftControls(
-                                  controller: _gameController,
-                                  directionalControl:
-                                      _preferences.directionalControl,
-                                  buttonUp: _buttonUp,
-                                  buttonDown: _buttonDown,
-                                  buttonLeft: _buttonLeft,
-                                  buttonRight: _buttonRight,
-                                  buttonSelect: _buttonSelect,
-                                  buttonL: _buttonL,
-                                  showShoulder: true,
-                                  consoleLogo:
-                                      RetroHubConsoleType.superNintendo,
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: gameWidth,
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(child: gameView),
-                                  Positioned.fill(
-                                    child: _FullscreenPartyOverlay(
-                                      game: game,
-                                      speciesIds: _partySpeciesIds,
-                                      accent: visualTheme.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: false,
-                                opacity: _preferences.controlOpacity,
-                                child: _LandscapeRightControls(
-                                  controller: _gameController,
-                                  buttonA: _buttonA,
-                                  buttonB: _buttonB,
-                                  buttonX: _buttonX,
-                                  buttonY: _buttonY,
-                                  buttonStart: _buttonStart,
-                                  buttonR: _buttonR,
-                                  showShoulder: true,
-                                  isSnes: true,
-                                  buttonAColor:
-                                      Color(_preferences.snesButtonAColor),
-                                  buttonBColor:
-                                      Color(_preferences.snesButtonBColor),
-                                  buttonXColor:
-                                      Color(_preferences.snesButtonXColor),
-                                  buttonYColor:
-                                      Color(_preferences.snesButtonYColor),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (gbaFullscreen && landscape) {
-                      final gameWidth = (constraints.maxHeight * 3 / 2)
-                          .clamp(0.0, constraints.maxWidth)
-                          .toDouble();
-                      final sideWidth =
-                          ((constraints.maxWidth - gameWidth) / 2)
-                              .clamp(0.0, constraints.maxWidth / 2)
-                              .toDouble();
-                      return ColoredBox(
-                        color: visualTheme.background,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: true,
-                                opacity: _preferences.controlOpacity,
-                                topColor: visualTheme.background,
-                                bottomColor: visualTheme.gradient.colors[2],
-                                borderColor: visualTheme.accent.withValues(
-                                  alpha: .55,
-                                ),
-                                child: _LandscapeLeftControls(
-                                  controller: _gameController,
-                                  directionalControl:
-                                      _preferences.directionalControl,
-                                  buttonUp: _buttonUp,
-                                  buttonDown: _buttonDown,
-                                  buttonLeft: _buttonLeft,
-                                  buttonRight: _buttonRight,
-                                  buttonSelect: _buttonSelect,
-                                  buttonL: _buttonL,
-                                  showShoulder: true,
-                                  consoleLogo:
-                                      RetroHubConsoleType.gameBoyAdvance,
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: gameWidth,
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(child: gameView),
-                                  Positioned.fill(
-                                    child: _FullscreenPartyOverlay(
-                                      game: game,
-                                      speciesIds: _partySpeciesIds,
-                                      accent: visualTheme.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: false,
-                                opacity: _preferences.controlOpacity,
-                                topColor: visualTheme.background,
-                                bottomColor: visualTheme.gradient.colors[2],
-                                borderColor: visualTheme.accent.withValues(
-                                  alpha: .55,
-                                ),
-                                child: _LandscapeRightControls(
-                                  controller: _gameController,
-                                  buttonA: _preferences.swapAB
-                                      ? _buttonB
-                                      : _buttonA,
-                                  buttonB: _preferences.swapAB
-                                      ? _buttonA
-                                      : _buttonB,
-                                  buttonX: _buttonX,
-                                  buttonY: _buttonY,
-                                  buttonStart: _buttonStart,
-                                  buttonR: _buttonR,
-                                  showShoulder: true,
-                                  isSnes: false,
-                                  rotateActions: false,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (gameBoyFullscreen && landscape) {
-                      final gameWidth = (constraints.maxHeight * 10 / 9)
-                          .clamp(0.0, constraints.maxWidth)
-                          .toDouble();
-                      final sideWidth =
-                          ((constraints.maxWidth - gameWidth) / 2)
-                              .clamp(0.0, constraints.maxWidth / 2)
-                              .toDouble();
-                      final consoleLogo = isGbc
-                          ? RetroHubConsoleType.gameBoyColor
-                          : RetroHubConsoleType.gameBoy;
-                      return ColoredBox(
-                        color: visualTheme.background,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: true,
-                                opacity: _preferences.controlOpacity,
-                                topColor: visualTheme.background,
-                                bottomColor: visualTheme.gradient.colors[2],
-                                borderColor: visualTheme.accent.withValues(
-                                  alpha: .55,
-                                ),
-                                child: _LandscapeLeftControls(
-                                  controller: _gameController,
-                                  directionalControl:
-                                      _preferences.directionalControl,
-                                  buttonUp: _buttonUp,
-                                  buttonDown: _buttonDown,
-                                  buttonLeft: _buttonLeft,
-                                  buttonRight: _buttonRight,
-                                  buttonSelect: _buttonSelect,
-                                  buttonL: _buttonL,
-                                  showShoulder: false,
-                                  consoleLogo: consoleLogo,
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: gameWidth,
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(child: gameView),
-                                  Positioned.fill(
-                                    child: _FullscreenPartyOverlay(
-                                      game: game,
-                                      speciesIds: _partySpeciesIds,
-                                      accent: visualTheme.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              width: sideWidth,
-                              child: _SnesSidePanel(
-                                isLeft: false,
-                                opacity: _preferences.controlOpacity,
-                                topColor: visualTheme.background,
-                                bottomColor: visualTheme.gradient.colors[2],
-                                borderColor: visualTheme.accent.withValues(
-                                  alpha: .55,
-                                ),
-                                child: _LandscapeRightControls(
-                                  controller: _gameController,
-                                  buttonA: _preferences.swapAB
-                                      ? _buttonB
-                                      : _buttonA,
-                                  buttonB: _preferences.swapAB
-                                      ? _buttonA
-                                      : _buttonB,
-                                  buttonX: _buttonX,
-                                  buttonY: _buttonY,
-                                  buttonStart: _buttonStart,
-                                  buttonR: _buttonR,
-                                  showShoulder: false,
-                                  isSnes: false,
-                                  rotateActions: false,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (landscape && isNds) {
-                      const double leftControlsWidth = 154;
-                      const double rightControlsWidth = 174;
-                      final double topFactor =
-                          _ndsTopScreenScale(_preferences);
-                      final double bottomFactor =
-                          _ndsBottomScreenScale(_preferences);
-                      final double controlOpacity =
-                          _preferences.ndsControlOpacity;
-
-                      return Padding(
-                        padding: ndsFullscreen
-                            ? EdgeInsets.zero
-                            : EdgeInsets.symmetric(
-                                horizontal: padding,
-                                vertical: 4,
-                              ),
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: LayoutBuilder(
-                                builder: (context, stageConstraints) {
-                                  final destinations =
-                                      _ndsHorizontalDestinations(
-                                    Size(
-                                      stageConstraints.maxWidth,
-                                      stageConstraints.maxHeight,
-                                    ),
-                                    topScreenScale: topFactor,
-                                    bottomScreenScale: bottomFactor,
-                                    screensScale: ndsFullscreen
-                                        ? 1
-                                        : _preferences.ndsScreensScale,
-                                  );
-                                  final touchRect =
-                                      _preferences.ndsSwapScreens
-                                          ? destinations.$1
-                                          : destinations.$2;
-                                  final overlayRect = destinations.$2;
-                                  return Stack(
-                                    children: [
-                                      Positioned.fill(child: gameView),
-                                      Positioned.fromRect(
-                                        rect: touchRect,
-                                        child: _ndsTouchSurface(
-                                          width: touchRect.width,
-                                          height: touchRect.height,
-                                        ),
-                                      ),
-                                      if (ndsFullscreen)
-                                        Positioned.fromRect(
-                                          rect: overlayRect,
-                                          child: _FullscreenPartyOverlay(
-                                            game: game,
-                                            speciesIds: _partySpeciesIds,
-                                            accent: visualTheme.accent,
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: leftControlsWidth,
-                              child: Opacity(
-                                opacity: controlOpacity,
-                                child: _LandscapeLeftControls(
-                                  controller: _gameController,
-                                  directionalControl:
-                                      _preferences.ndsDirectionalControl,
-                                  buttonUp: _buttonUp,
-                                  buttonDown: _buttonDown,
-                                  buttonLeft: _buttonLeft,
-                                  buttonRight: _buttonRight,
-                                  buttonSelect: _buttonSelect,
-                                  buttonL: _buttonL,
-                                  showShoulder: true,
-                                  consoleLogo:
-                                      RetroHubConsoleType.nintendoDs,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: rightControlsWidth,
-                              child: Opacity(
-                                opacity: controlOpacity,
-                                child: _LandscapeRightControls(
-                                  controller: _gameController,
-                                  buttonA: _preferences.ndsSwapAB
-                                      ? _buttonB
-                                      : _buttonA,
-                                  buttonB: _preferences.ndsSwapAB
-                                      ? _buttonA
-                                      : _buttonB,
-                                  buttonX: _buttonX,
-                                  buttonY: _buttonY,
-                                  buttonStart: _buttonStart,
-                                  buttonR: _buttonR,
-                                  showShoulder: true,
-                                  isSnes: true,
-                                  buttonAColor: visualTheme.accent,
-                                  buttonBColor: Color.lerp(
-                                    visualTheme.accent,
-                                    visualTheme.background,
-                                    .28,
-                                  )!,
-                                  buttonXColor: Color.lerp(
-                                    visualTheme.accent,
-                                    Colors.white,
-                                    .22,
-                                  )!,
-                                  buttonYColor: Color.lerp(
-                                    visualTheme.accent,
-                                    visualTheme.gradient.colors[2],
-                                    .48,
-                                  )!,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (landscape) {
-                      return Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: padding,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 138,
-                              child: _LandscapeLeftControls(
-                                controller: _gameController,
-                                directionalControl: isNds
-                                    ? _preferences.ndsDirectionalControl
-                                    : _preferences.directionalControl,
-                                buttonUp: _buttonUp,
-                                buttonDown: _buttonDown,
-                                buttonLeft: _buttonLeft,
-                                buttonRight: _buttonRight,
-                                buttonSelect: _buttonSelect,
-                                buttonL: _buttonL,
-                                showShoulder: isGba || isSnes || isNds,
-                                consoleLogo: isNds
-                                    ? RetroHubConsoleType.nintendoDs
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Center(
-                                child: AspectRatio(
-                                  aspectRatio: isSnes
-                                      ? 4 / 3
-                                      : isGba
-                                      ? 3 / 2
-                                      : isNds
-                                      ? 1 / 1.305
-                                      : 10 / 9,
-                                  child: gameView,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 166,
-                              child: _LandscapeRightControls(
-                                controller: _gameController,
-                                buttonA: isNds && _preferences.ndsSwapAB
-                                    ? _buttonB
-                                    : _buttonA,
-                                buttonB: isNds && _preferences.ndsSwapAB
-                                    ? _buttonA
-                                    : _buttonB,
-                                buttonX: _buttonX,
-                                buttonY: _buttonY,
-                                buttonStart: _buttonStart,
-                                buttonR: _buttonR,
-                                showShoulder: isGba || isSnes || isNds,
-                                isSnes: isSnes || isNds,
-                                buttonAColor: isNds
-                                    ? visualTheme.accent
-                                    : Color(_preferences.snesButtonAColor),
-                                buttonBColor: isNds
-                                    ? Color.lerp(visualTheme.accent, visualTheme.background, .28)!
-                                    : Color(_preferences.snesButtonBColor),
-                                buttonXColor: isNds
-                                    ? Color.lerp(visualTheme.accent, Colors.white, .22)!
-                                    : Color(_preferences.snesButtonXColor),
-                                buttonYColor: isNds
-                                    ? Color.lerp(visualTheme.accent, visualTheme.gradient.colors[2], .48)!
-                                    : Color(_preferences.snesButtonYColor),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (isNds) {
-                      final double topFactor = _ndsTopScreenScale(_preferences);
-                      final double bottomFactor = _ndsBottomScreenScale(_preferences);
-                      final double layoutWidth =
-                          constraints.maxWidth * _preferences.ndsScreensScale;
-                      final double topWidth = layoutWidth * topFactor;
-                      final double bottomWidth = layoutWidth * bottomFactor;
-                      final double topHeight = topWidth / (4 / 3);
-                      final double bottomHeight = bottomWidth / (4 / 3);
-                      final double screenGap = ndsPortraitScreenGap;
-                      final double screenHeight =
-                          topHeight + bottomHeight + screenGap;
-                      final double screenLeft =
-                          (constraints.maxWidth - layoutWidth) / 2;
-                      final bool touchIsTop = _preferences.ndsSwapScreens;
-                      final double touchScreenTop = touchIsTop
-                          ? 0
-                          : topHeight + screenGap;
-                      final double touchScreenWidth =
-                          touchIsTop ? topWidth : bottomWidth;
-                      final double touchScreenHeight =
-                          touchIsTop ? topHeight : bottomHeight;
-                      final double touchScreenLeft =
-                          (constraints.maxWidth - touchScreenWidth) / 2;
-                      final double shoulderRowTop = topHeight +
-                          (screenGap - ndsMiddleControlsHeight) / 2;
-                      final double logoTop = screenHeight + 6;
-                      final double mainControlsTop = logoTop;
-                      final double controlOpacity = _preferences.ndsControlOpacity;
-                      final Color ndsA = visualTheme.accent;
-                      final Color ndsB = Color.lerp(visualTheme.accent, visualTheme.background, .28)!;
-                      final Color ndsX = Color.lerp(visualTheme.accent, Colors.white, .22)!;
-                      final Color ndsY = Color.lerp(visualTheme.accent, visualTheme.gradient.colors[2], .48)!;
-
-                      return Stack(
-                        clipBehavior: Clip.hardEdge,
-                        children: [
-                          Positioned(
-                            top: 0,
-                            left: screenLeft,
-                            width: layoutWidth,
-                            height: screenHeight,
-                            child: gameView,
-                          ),
-                          Positioned(
-                            top: touchScreenTop,
-                            left: touchScreenLeft,
-                            width: touchScreenWidth,
-                            height: touchScreenHeight,
-                            child: Listener(
-                              behavior: HitTestBehavior.opaque,
-                              onPointerDown: (PointerDownEvent event) {
-                                if (_ndsTouchPointer != null) return;
-                                _ndsTouchPointer = event.pointer;
-                                _gameController.setTouchState(
-                                  x: ((event.localPosition.dx /
-                                              touchScreenWidth) *
-                                          255)
-                                      .round()
-                                      .clamp(0, 255)
-                                      .toInt(),
-                                  y: ((event.localPosition.dy /
-                                              touchScreenHeight) *
-                                          191)
-                                      .round()
-                                      .clamp(0, 191)
-                                      .toInt(),
-                                  pressed: true,
-                                );
-                              },
-                              onPointerMove: (PointerMoveEvent event) {
-                                if (_ndsTouchPointer != event.pointer) return;
-                                _gameController.setTouchState(
-                                  x: ((event.localPosition.dx /
-                                              touchScreenWidth) *
-                                          255)
-                                      .round()
-                                      .clamp(0, 255)
-                                      .toInt(),
-                                  y: ((event.localPosition.dy /
-                                              touchScreenHeight) *
-                                          191)
-                                      .round()
-                                      .clamp(0, 191)
-                                      .toInt(),
-                                  pressed: true,
-                                );
-                              },
-                              onPointerUp: (PointerUpEvent event) {
-                                if (_ndsTouchPointer != event.pointer) return;
-                                _gameController.releaseTouch();
-                                _ndsTouchPointer = null;
-                              },
-                              onPointerCancel: (PointerCancelEvent event) {
-                                if (_ndsTouchPointer != event.pointer) return;
-                                _gameController.releaseTouch();
-                                _ndsTouchPointer = null;
-                              },
-                            ),
-                          ),
-                          Positioned(
-                            top: 8,
-                            left: 10,
-                            child: Opacity(
-                              opacity: .72,
-                              child: SizedBox(
-                                width: 92,
-                                height: 32,
-                                child: SpeedButton(
-                                  speedMultiplier:
-                                      _gameController.speedMultiplier,
-                                  onTap: _gameController.cycleSpeed,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 6,
-                            right: 10,
-                            child: Opacity(
-                              opacity: .68,
-                              child: RetroHubQuickMenu(
-                                onAction: (String value) =>
-                                    _handleMenuAction(context, value),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: shoulderRowTop,
-                            left: 10,
-                            right: 10,
-                            child: Opacity(
-                              opacity: controlOpacity,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Transform.scale(
-                                    scale: _preferences.ndsShoulderScale,
-                                    child: _GameBoyShoulderButton(label: 'L', buttonId: _buttonL, controller: _gameController),
-                                  ),
-                                  Transform.scale(
-                                    scale: _preferences.ndsSystemScale,
-                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                      _GameBoySystemButton(width: 64, height: 25, label: 'SELECT', buttonId: _buttonSelect, controller: _gameController),
-                                      const SizedBox(width: 8),
-                                      _GameBoySystemButton(width: 64, height: 25, label: 'START', buttonId: _buttonStart, controller: _gameController),
-                                    ]),
-                                  ),
-                                  Transform.scale(
-                                    scale: _preferences.ndsShoulderScale,
-                                    child: _GameBoyShoulderButton(label: 'R', buttonId: _buttonR, controller: _gameController),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: mainControlsTop,
-                            left: 12,
-                            right: 12,
-                            child: Opacity(
-                              opacity: controlOpacity,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Transform.translate(
-                                    offset: Offset(_preferences.ndsDpadX * 28, _preferences.ndsDpadY * 24),
-                                    child: _DirectionalControl(
-                                      type: _preferences.ndsDirectionalControl,
-                                      keySize: 36 * _preferences.ndsDpadScale,
-                                      controller: _gameController,
-                                      buttonUp: _buttonUp,
-                                      buttonDown: _buttonDown,
-                                      buttonLeft: _buttonLeft,
-                                      buttonRight: _buttonRight,
-                                    ),
-                                  ),
-                                  Transform.translate(
-                                    offset: Offset(_preferences.ndsActionX * 28, _preferences.ndsActionY * 24),
-                                    child: _SnesActionPad(
-                                      size: 38 * _preferences.ndsActionScale,
-                                      controller: _gameController,
-                                      buttonA: _preferences.ndsSwapAB ? _buttonB : _buttonA,
-                                      buttonB: _preferences.ndsSwapAB ? _buttonA : _buttonB,
-                                      buttonX: _buttonX,
-                                      buttonY: _buttonY,
-                                      buttonAColor: ndsA,
-                                      buttonBColor: ndsB,
-                                      buttonXColor: ndsX,
-                                      buttonYColor: ndsY,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: logoTop,
-                            left: 0,
-                            right: 0,
-                            child: IgnorePointer(
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: RetroHubConsoleLogo(
-                                    console: RetroHubConsoleType.nintendoDs,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-
-                    final portraitFrame = _selectedPortraitFrame;
-                    if (portraitFrame != null && !isSnes) {
-                      return _buildPortraitCardLayout(
-                        constraints: constraints,
-                        gameView: gameView,
-                        frame: portraitFrame,
-                        isGba: isGba,
-                        isGbc: isGbc,
-                        visualTheme: visualTheme,
-                      );
-                    }
-
-                    return Padding(
-                      padding: EdgeInsets.all(padding),
-                      child: Column(
-                        children: [
-                          if (!isSnes) ...[
-                            SizedBox(
-                              height: 54,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: SizedBox(
-                                      width: 92,
-                                      height: 32,
-                                      child: SpeedButton(
-                                        speedMultiplier:
-                                            _gameController.speedMultiplier,
-                                        onTap: _gameController.cycleSpeed,
-                                      ),
-                                    ),
-                                  ),
-                                  if (CoreLoader.isGameBoyRom(game.romPath))
-                                    Align(
-                                      alignment: Alignment.center,
-                                      child: _LinkStatusChip(
-                                        linkManager:
-                                            _gameController.linkManager,
-                                      ),
-                                    ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: RetroHubQuickMenu(
-                                      onAction: (String value) =>
-                                          _handleMenuAction(context, value),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                          ],
-                          Flexible(
-                            fit: FlexFit.loose,
-                            child: AspectRatio(
-                              aspectRatio: isSnes
-                                  ? 4 / 3
-                                  : isGba
-                                  ? 3 / 2
-                                  : isNds
-                                  ? 1 / 1.305
-                                  : 10 / 9,
-                              child: gameView,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-
-                          if (!isSnes &&
-                              isGba &&
-                              _preferences.layout ==
-                                  GameBoyControlLayout.classic)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _GameBoyShoulderButton(
-                                  label: 'L',
-                                  buttonId: _buttonL,
-                                  controller: _gameController,
-                                ),
-                                if (_preferences.showConsoleIdentity)
-                                  const RetroHubConsoleLogo(
-                                    console: RetroHubConsoleType.gameBoyAdvance,
-                                  )
-                                else
-                                  const Spacer(),
-                                _GameBoyShoulderButton(
-                                  label: 'R',
-                                  buttonId: _buttonR,
-                                  controller: _gameController,
-                                ),
-                              ],
-                            )
-                          else if (!isNds &&
-                              (isSnes || _preferences.showConsoleIdentity))
-                            RetroHubConsoleLogo(
-                              console: isSnes
-                                  ? RetroHubConsoleType.superNintendo
-                                  : isNds
-                                  ? RetroHubConsoleType.nintendoDs
-                                  : isGba
-                                  ? RetroHubConsoleType.gameBoyAdvance
-                                  : isGbc
-                                  ? RetroHubConsoleType.gameBoyColor
-                                  : RetroHubConsoleType.gameBoy,
-                            ),
-                          SizedBox(
-                            height: isNds ||
-                                    (!isSnes &&
-                                        !isGba &&
-                                        !_preferences.showConsoleIdentity)
-                                ? 2
-                                : 10,
-                          ),
-
-                          _GameBoyControls(
-                            compact: false,
-                            classicLayout: !isSnes &&
-                                _preferences.layout ==
-                                    GameBoyControlLayout.classic,
-                            sizeScale: isSnes ? 1 : _preferences.sizeScale,
-                            opacity: _preferences.controlOpacity,
-                            swapLabels:
-                                !isSnes && !isNds && _preferences.swapAB,
-                            controller: _gameController,
-                            directionalControl:
-                                _preferences.directionalControl,
-                            buttonUp: _buttonUp,
-                            buttonDown: _buttonDown,
-                            buttonLeft: _buttonLeft,
-                            buttonRight: _buttonRight,
-                            buttonA: !isSnes &&
-                                    !isNds &&
-                                    _preferences.swapAB
-                                ? _buttonB
-                                : _buttonA,
-                            buttonB: !isSnes &&
-                                    !isNds &&
-                                    _preferences.swapAB
-                                ? _buttonA
-                                : _buttonB,
-                            buttonX: _buttonX,
-                            buttonY: _buttonY,
-                            buttonSelect: _buttonSelect,
-                            buttonStart: _buttonStart,
-                            buttonL: _buttonL,
-                            buttonR: _buttonR,
-                            showShoulder: isSnes ||
-                                isNds ||
-                                (isGba &&
-                                    _preferences.layout !=
-                                        GameBoyControlLayout.classic),
-                            isSnes: isSnes || isNds,
-                            buttonAColor:
-                                Color(_preferences.snesButtonAColor),
-                            buttonBColor:
-                                Color(_preferences.snesButtonBColor),
-                            buttonXColor:
-                                Color(_preferences.snesButtonXColor),
-                            buttonYColor:
-                                Color(_preferences.snesButtonYColor),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            if (isSnes || pageLandscape)
-              Positioned(
-                top: 8,
-                right: 14,
-                child: RetroHubQuickMenu(
-                  onAction: (String value) =>
-                      _handleMenuAction(context, value),
-                ),
-              ),
-            if (isSnes || pageLandscape)
-              Positioned(
-                top: 62,
-                right: 14,
-                child: SpeedButton(
-                  speedMultiplier: _gameController.speedMultiplier,
-                  onTap: _gameController.cycleSpeed,
-                ),
-              ),
-            if ((isSnes || pageLandscape) &&
-                CoreLoader.isGameBoyRom(game.romPath))
-              Positioned(
-                top: 100,
-                right: 14,
-                child: _LinkStatusChip(
-                  linkManager: _gameController.linkManager,
-                ),
-              ),
-            if (_isClosing)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: .72),
-                  child: Center(
-                    child: Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 38),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 30,
-                          vertical: 24,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(),
-                            const SizedBox(height: 18),
-                            Text(
-                              _closingStatus,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No cierres RetroHub mientras termina el respaldo.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmulatorHeader extends StatelessWidget {
-  final Game game;
-  final Color accent;
-  final List<int> partySpeciesIds;
-
-  const _EmulatorHeader({
-    required this.game,
-    required this.accent,
-    required this.partySpeciesIds,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final coverPath = CoverHelper.getCover(game.title, game.console);
-
-    final bool isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-
-    return Row(
-      children: [
-        _GameArtwork(
-          coverPath: coverPath,
-          accent: accent,
-          width: 36,
-          height: 44,
-          iconSize: 20,
-        ),
-        const SizedBox(width: 9),
-        if (isLandscape)
-          Expanded(
-            child: Text(
-              _cleanGameTitle(game.title),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          )
-        else
-          const Spacer(),
-        if (partySpeciesIds.isNotEmpty) ...[
-          if (isLandscape) const SizedBox(width: 8),
-          _PartySprites(
-            game: game,
-            speciesIds: partySpeciesIds,
-            accent: accent,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _FullscreenPartyOverlay extends StatelessWidget {
-  final Game game;
-  final List<int> speciesIds;
-  final Color accent;
-
-  const _FullscreenPartyOverlay({
-    required this.game,
-    required this.speciesIds,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (speciesIds.isEmpty) return const SizedBox.shrink();
-    return IgnorePointer(
-      child: Align(
-        alignment: Alignment.topRight,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .42),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              child: _PartySprites(
-                game: game,
-                speciesIds: speciesIds,
-                accent: accent,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PartySprites extends StatelessWidget {
-  final Game game;
-  final List<int> speciesIds;
-  final Color accent;
-
-  const _PartySprites({
-    required this.game,
-    required this.speciesIds,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final visibleIds = speciesIds.take(6).toList(growable: false);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: visibleIds
-          .map((speciesId) {
-            return Padding(
-              padding: const EdgeInsets.only(left: 2),
-              child: _PokemonAvatar(
-                spritePath: _pokemonSpritePath(game, speciesId),
-                accent: accent,
-                size: 30,
-                fallback: const Icon(
-                  Icons.catching_pokemon,
-                  size: 18,
-                  color: Colors.white70,
-                ),
-              ),
-            );
-          })
-          .toList(growable: false),
-    );
-  }
-}
-
-class _PokemonAvatar extends StatelessWidget {
-  final String spritePath;
-  final Color accent;
-  final double size;
-  final double padding;
-  final Widget fallback;
-
-  const _PokemonAvatar({
-    required this.spritePath,
-    required this.accent,
-    required this.size,
-    required this.fallback,
-    this.padding = 2,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(padding),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          center: const Alignment(-0.25, -0.3),
-          radius: 0.9,
-          colors: <Color>[
-            accent.withValues(alpha: 0.22),
-            Color.lerp(accent, Colors.black, 0.78)!,
-          ],
-        ),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.58),
-          width: size >= 60 ? 2 : 1,
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: size >= 60 ? 10 : 4,
-            offset: Offset(0, size >= 60 ? 4 : 2),
-          ),
-        ],
-      ),
-      child: ClipOval(
-        child: Image.asset(
-          spritePath,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.none,
-          errorBuilder: (_, __, ___) => Center(child: fallback),
-        ),
-      ),
-    );
-  }
-}
-
-enum _ExitGameAction { keepPlaying, localOnly, cloudBackup }
-
-class _ExitGameDialog extends StatelessWidget {
-  final Game game;
-  final Color accent;
-  final List<int> partySpeciesIds;
-  final bool cloudAvailable;
-
-  const _ExitGameDialog({
-    required this.game,
-    required this.accent,
-    required this.partySpeciesIds,
-    required this.cloudAvailable,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final coverPath = CoverHelper.getCover(game.title, game.console);
-    final firstPokemon = partySpeciesIds.isEmpty ? null : partySpeciesIds.first;
-
-    return AlertDialog(
-      backgroundColor: Color.lerp(accent, Colors.black, 0.82),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: accent, width: 2),
-      ),
-      icon: SizedBox(
-        width: 92,
-        height: 92,
-        child: firstPokemon == null
-            ? _GameArtwork(
-                coverPath: coverPath,
-                accent: accent,
-                width: 92,
-                height: 92,
-                iconSize: 46,
-              )
-            : _PokemonAvatar(
-                spritePath: _pokemonSpritePath(game, firstPokemon),
-                accent: accent,
-                size: 92,
-                padding: 5,
-                fallback: _GameArtwork(
-                  coverPath: coverPath,
-                  accent: accent,
-                  width: 92,
-                  height: 92,
-                  iconSize: 46,
-                ),
-              ),
-      ),
-      title: const Text(
-        'Â¿Salir del juego?',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-      ),
-      content: Text(
-        cloudAvailable
-            ? 'El progreso de ${_cleanGameTitle(game.title)} siempre se guardarÃ¡ localmente. Elige si tambiÃ©n quieres reemplazar su respaldo en la nube.'
-            : 'El progreso de ${_cleanGameTitle(game.title)} se guardarÃ¡ localmente antes de salir. Inicia sesiÃ³n con Google para respaldarlo en la nube.',
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white70),
-      ),
-      actionsAlignment: MainAxisAlignment.spaceEvenly,
-      actions: [
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(_ExitGameAction.keepPlaying),
-          child: const Text('Seguir jugando'),
-        ),
-        if (cloudAvailable)
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: accent,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () =>
-                Navigator.of(context).pop(_ExitGameAction.cloudBackup),
-            child: const Text('Respaldar y salir'),
-          ),
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: const BorderSide(color: Colors.white54),
-          ),
-          onPressed: () =>
-              Navigator.of(context).pop(_ExitGameAction.localOnly),
-          child: const Text('Salir sin respaldar'),
-        ),
-      ],
-    );
-  }
-}
-
-class _GameArtwork extends StatelessWidget {
-  final String? coverPath;
-  final Color accent;
-  final double width;
-  final double height;
-  final double iconSize;
-
-  const _GameArtwork({
-    required this.coverPath,
-    required this.accent,
-    required this.width,
-    required this.height,
-    required this.iconSize,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withValues(alpha: 0.65)),
-      ),
-      child: coverPath == null
-          ? Icon(Icons.sports_esports_rounded, color: accent, size: iconSize)
-          : Image.asset(
-              coverPath!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Icon(
-                Icons.sports_esports_rounded,
-                color: accent,
-                size: iconSize,
-              ),
-            ),
-    );
-  }
-}
-
-String _cleanGameTitle(String title) {
-  final cleaned = title
-      .replaceAll('_', ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-  if (cleaned.isEmpty) return 'Juego';
-
-  return cleaned
-      .split(' ')
-      .map(
-        (word) => word.isEmpty
-            ? word
-            : '${word[0].toUpperCase()}${word.substring(1)}',
-      )
-      .join(' ')
-      .replaceAll(RegExp(r'^Pokemon\b', caseSensitive: false), 'PokÃ©mon');
-}
-
-double _ndsTopScreenScale(EmulatorPreferences preferences) {
-  final emphasis = preferences.ndsScreenEmphasis;
-  final relative = emphasis == NdsScreenEmphasis.bottom ? .82 : 1.0;
-  return relative;
-}
-
-double _ndsBottomScreenScale(EmulatorPreferences preferences) {
-  final emphasis = preferences.ndsScreenEmphasis;
-  final relative = emphasis == NdsScreenEmphasis.top ? .82 : 1.0;
-  return relative;
-}
-
-(Rect, Rect) _ndsHorizontalDestinations(
-  Size size, {
-  required double topScreenScale,
-  required double bottomScreenScale,
-  required double screensScale,
-}) {
-  const gap = 4.0;
-  const aspectRatio = 4 / 3;
-  final widthBase =
-      (size.width - gap) / (topScreenScale + bottomScreenScale);
-  final heightBase = size.height * aspectRatio /
-      math.max(topScreenScale, bottomScreenScale);
-  final layoutWidth = math.min(widthBase, heightBase) * screensScale;
-  final topWidth = layoutWidth * topScreenScale;
-  final bottomWidth = layoutWidth * bottomScreenScale;
-  final topHeight = topWidth / aspectRatio;
-  final bottomHeight = bottomWidth / aspectRatio;
-  final contentWidth = topWidth + gap + bottomWidth;
-  final left = (size.width - contentWidth) / 2;
-  return (
-    Rect.fromLTWH(
-      left,
-      (size.height - topHeight) / 2,
-      topWidth,
-      topHeight,
-    ),
-    Rect.fromLTWH(
-      left + topWidth + gap,
-      (size.height - bottomHeight) / 2,
-      bottomWidth,
-      bottomHeight,
-    ),
-  );
-}
-
-String _pokemonSpritePath(Game game, int speciesId) {
-  final profile = GameAssetProfile.fromGame(game);
-
-  if (speciesId == 0) {
-    return SpriteResolver.eggForGame(profile: profile);
-  }
-
-  return SpriteResolver.pokemonForGame(profile: profile, pokemonId: speciesId);
-}
-
-class _PortraitCardPalette {
-  final Color top;
-  final Color middle;
-  final Color bottom;
-  final Color header;
-  final Color stage;
-  final Color line;
-  final Color border;
-  final Color ink;
-  final Color partyAccent;
-  final String energyAsset;
-
-  const _PortraitCardPalette({
-    required this.top,
-    required this.middle,
-    required this.bottom,
-    required this.header,
-    required this.stage,
-    required this.line,
-    required this.border,
-    required this.ink,
-    required this.partyAccent,
-    required this.energyAsset,
-  });
-
-  factory _PortraitCardPalette.forFrame(String frameId) {
-    final type = frameId.replaceFirst('portrait_', '');
-    final colors = switch (type) {
-      'agua' => const [Color(0xFFBCEBFA), Color(0xFF68BDE7), Color(0xFF277EBA)],
-      'electrico' => const [Color(0xFFFFF3A0), Color(0xFFFFD838), Color(0xFFE8A817)],
-      'fuego' => const [Color(0xFFFFD09B), Color(0xFFF47742), Color(0xFFB72E2E)],
-      'hoja' => const [Color(0xFFCFF0A4), Color(0xFF70BC5A), Color(0xFF247548)],
-      'lucha' => const [Color(0xFFEAC58F), Color(0xFFC1844C), Color(0xFF754128)],
-      'metal' => const [Color(0xFFE9EEF0), Color(0xFFAAB6BE), Color(0xFF64737D)],
-      'oscuridad' => const [Color(0xFF7B8190), Color(0xFF3A3E49), Color(0xFF17191F)],
-      'psi' => const [Color(0xFFF1C2EC), Color(0xFFB56AB8), Color(0xFF633D86)],
-      'dragon' => const [
-          Color(0xFFC7CAC2),
-          Color(0xFF858358),
-          Color(0xFF4B4930),
-        ],
-      'hada' => const [Color(0xFFFFD8EC), Color(0xFFE89AC4), Color(0xFFB85B94)],
-      _ => const [Color(0xFFF5E8C9), Color(0xFFD7C49E), Color(0xFF9D8764)],
-    };
-    final icon = switch (type) {
-      'dragon' => 'dragon',
-      'hada' => 'hada',
-      String value when value == 'electrico' => 'electrico',
-      String value when value == 'hoja' => 'hoja',
-      String value when value == 'psi' => 'psi',
-      String value when value == 'oscuridad' => 'oscuridad',
-      String value when value == 'metal' => 'metal',
-      String value when value == 'lucha' => 'lucha',
-      String value when value == 'fuego' => 'fuego',
-      String value when value == 'agua' => 'agua',
-      _ => 'normal',
-    };
-    final dark = type == 'oscuridad';
-    final partyAccent = switch (type) {
-      'agua' => const Color(0xFF2D91C7),
-      'electrico' => const Color(0xFFE0A900),
-      'fuego' => const Color(0xFFC74432),
-      'hoja' => const Color(0xFF3E8B47),
-      'lucha' => const Color(0xFF9C6338),
-      'metal' => const Color(0xFF73838C),
-      'oscuridad' => const Color(0xFF535663),
-      'psi' => const Color(0xFF8A4FA0),
-      'dragon' => const Color(0xFF777253),
-      'hada' => const Color(0xFFD36C9E),
-      _ => const Color(0xFF9C8665),
-    };
-    return _PortraitCardPalette(
-      top: colors[0],
-      middle: colors[1],
-      bottom: colors[2],
-      header: type == 'dragon' ? const Color(0xFFD5D7D2) : colors[0],
-      stage: type == 'dragon' ? const Color(0xFFADB2AC) : colors[1],
-      line: type == 'dragon'
-          ? const Color(0xFF77786A)
-          : dark
-              ? const Color(0xFFC8B85B)
-              : const Color(0xFFB88A18),
-      border: const Color(0xFFFFD21C),
-      ink: dark ? Colors.white : const Color(0xFF241D13),
-      partyAccent: partyAccent,
-      energyAsset: 'assets/frames/portrait/energy/$icon.png',
-    );
-  }
-}
-
-class _EmulatorVisualTheme {
-  final Color background;
-  final Color appBar;
-  final Color accent;
-  final LinearGradient gradient;
-
-  const _EmulatorVisualTheme({
-    required this.background,
-    required this.appBar,
-    required this.accent,
-    required this.gradient,
-  });
-
-  factory _EmulatorVisualTheme.forGame(Game game) {
-    final String identity = '${game.title} ${game.console}'.toLowerCase();
-    final PokemonGameVersion pokemonVersion =
-        PokemonGameProfile.fromGameIdentity(
-          gameTitle: game.title,
-          romPath: game.romPath,
-        ).version;
-
-    Color primary;
-    Color secondary;
-    Color accent;
-
-    if (identity.contains('platinum') ||
-        identity.contains('platino')) {
-      primary = const Color(0xFF241C24);
-      secondary = const Color(0xFF4C2730);
-      accent = const Color(0xFFE0B85A);
-    } else if (identity.contains('diamond') ||
-        identity.contains('diamante')) {
-      primary = const Color(0xFF102A46);
-      secondary = const Color(0xFF176B88);
-      accent = const Color(0xFF7DE8FF);
-    } else if (identity.contains('pearl') ||
-        identity.contains('perla')) {
-      primary = const Color(0xFF3D1839);
-      secondary = const Color(0xFF7B3B71);
-      accent = const Color(0xFFFFA7E3);
-    } else if (identity.contains('heartgold') ||
-        identity.contains('heart gold')) {
-      primary = const Color(0xFF3A2A10);
-      secondary = const Color(0xFF77551A);
-      accent = const Color(0xFFFFD86A);
-    } else if (identity.contains('soulsilver') ||
-        identity.contains('soul silver')) {
-      primary = const Color(0xFF17283A);
-      secondary = const Color(0xFF49647A);
-      accent = const Color(0xFFDCEBFA);
-    } else if (identity.contains('black 2') ||
-        identity.contains('negro 2') ||
-        identity.contains('negra 2')) {
-      primary = const Color(0xFF111318);
-      secondary = const Color(0xFF263A54);
-      accent = const Color(0xFF64B5F6);
-    } else if (identity.contains('white 2') ||
-        identity.contains('blanco 2') ||
-        identity.contains('blanca 2')) {
-      primary = const Color(0xFF334E63);
-      secondary = const Color(0xFFB83243);
-      accent = const Color(0xFFF7FCFF);
-    } else if (identity.contains('black') ||
-        identity.contains('negra') ||
-        identity.contains('negro')) {
-      primary = const Color(0xFF555B63);
-      secondary = const Color(0xFFA94343);
-      accent = const Color(0xFFFFF3DF);
-    } else if (identity.contains('white') ||
-        identity.contains('blanca') ||
-        identity.contains('blanco')) {
-      primary = const Color(0xFF070A10);
-      secondary = const Color(0xFF183451);
-      accent = const Color(0xFF43C7E8);
-    } else if (pokemonVersion == PokemonGameVersion.fireRed) {
-      primary = const Color(0xFFF05A24);
-      secondary = const Color(0xFF7A260E);
-      accent = const Color(0xFFFFC44F);
-    } else if (pokemonVersion == PokemonGameVersion.leafGreen) {
-      primary = const Color(0xFF62C947);
-      secondary = const Color(0xFF286A22);
-      accent = const Color(0xFFD0F58F);
-    } else if (identity.contains('emerald') || identity.contains('esmeralda')) {
-      primary = const Color(0xFF0E382D);
-      secondary = const Color(0xFF176A4B);
-      accent = const Color(0xFF66E6A4);
-    } else if (identity.contains('sapphire') || identity.contains('zafiro')) {
-      primary = const Color(0xFF102A4A);
-      secondary = const Color(0xFF175A88);
-      accent = const Color(0xFF6ED4FF);
-    } else if (identity.contains('ruby') ||
-        identity.contains('rubi') ||
-        identity.contains('rubÃ­')) {
-      primary = const Color(0xFF42131C);
-      secondary = const Color(0xFF7A2135);
-      accent = const Color(0xFFFF6F86);
-    } else if (identity.contains('crystal') || identity.contains('cristal')) {
-      primary = const Color(0xFF102A43);
-      secondary = const Color(0xFF39265F);
-      accent = const Color(0xFF7DE3FF);
-    } else if (identity.contains('gold') || identity.contains('oro')) {
-      primary = const Color(0xFF3B2A10);
-      secondary = const Color(0xFF6A4A16);
-      accent = const Color(0xFFFFD56A);
-    } else if (identity.contains('silver') || identity.contains('plata')) {
-      primary = const Color(0xFF202938);
-      secondary = const Color(0xFF465264);
-      accent = const Color(0xFFD7E4F2);
-    } else if (identity.contains('yellow') || identity.contains('amarillo')) {
-      primary = const Color(0xFF3D3210);
-      secondary = const Color(0xFF6A4A18);
-      accent = const Color(0xFFFFE66D);
-    } else if (identity.contains('red') || identity.contains('rojo')) {
-      primary = const Color(0xFF3D151B);
-      secondary = const Color(0xFF651E2A);
-      accent = const Color(0xFFFF7188);
-    } else if (identity.contains('blue') || identity.contains('azul')) {
-      primary = const Color(0xFF102A4A);
-      secondary = const Color(0xFF174B70);
-      accent = const Color(0xFF72D5FF);
-    } else if (identity.contains('snes')) {
-      primary = const Color(0xFF26243B);
-      secondary = const Color(0xFF514B72);
-      accent = const Color(0xFFC9C2F2);
-    } else if (identity.contains('nds') || identity.contains('nintendo ds')) {
-      primary = const Color(0xFF24282E);
-      secondary = const Color(0xFF4A515B);
-      accent = const Color(0xFFE6EBF0);
-    } else if (identity.contains('gba')) {
-      primary = const Color(0xFF202842);
-      secondary = const Color(0xFF35305F);
-      accent = const Color(0xFFA7B8FF);
-    } else if (identity.contains('gbc')) {
-      primary = const Color(0xFF241B3D);
-      secondary = const Color(0xFF3F2B5B);
-      accent = const Color(0xFFC9A7FF);
-    } else {
-      primary = const Color(0xFF252D20);
-      secondary = const Color(0xFF3E4934);
-      accent = const Color(0xFFB8D47A);
-    }
-
-    return _EmulatorVisualTheme(
-      background: primary,
-      appBar: Color.lerp(primary, Colors.black, 0.28)!,
-      accent: accent,
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: <Color>[
-          Color.lerp(primary, Colors.black, 0.18)!,
-          primary,
-          secondary,
-          Color.lerp(secondary, Colors.black, 0.34)!,
-        ],
-        stops: const <double>[0, 0.35, 0.72, 1],
-      ),
-    );
-  }
-}
-
-class _CoreNotFoundView extends StatelessWidget {
-  final String romPath;
-  final EmulationCore core;
-
-  const _CoreNotFoundView({required this.romPath, required this.core});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(24),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: Colors.redAccent,
-              size: 52,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No se encontrÃ³ ${core.displayName}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 19,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No se encontrÃ³ el core necesario para esta ROM.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.75),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Rutas revisadas:\n${CoreLoader.debugCoreSearchPathsForRom(romPath)}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'ROM:\n$romPath',
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SnesSidePanel extends StatelessWidget {
-  final bool isLeft;
-  final double opacity;
-  final Widget child;
-  final Color topColor;
-  final Color bottomColor;
-  final Color borderColor;
-
-  const _SnesSidePanel({
-    required this.isLeft,
-    required this.opacity,
-    required this.child,
-    this.topColor = const Color(0xFFD9D8DC),
-    this.bottomColor = const Color(0xFFB8B7BD),
-    this.borderColor = const Color(0xFF77747F),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[topColor, bottomColor],
-        ),
-        border: Border(
-          left: isLeft
-              ? BorderSide.none
-              : BorderSide(color: borderColor, width: 2),
-          right: isLeft
-              ? BorderSide(color: borderColor, width: 2)
-              : BorderSide.none,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        child: Opacity(opacity: opacity, child: child),
-      ),
-    );
-  }
-}
-
-class _LandscapeLeftControls extends StatelessWidget {
-  final LibretroGameController controller;
-  final DirectionalControlType directionalControl;
-  final int buttonUp;
-  final int buttonDown;
-  final int buttonLeft;
-  final int buttonRight;
-  final int buttonSelect;
-  final int buttonL;
-  final bool showShoulder;
-  final RetroHubConsoleType? consoleLogo;
-
-  const _LandscapeLeftControls({
-    required this.controller,
-    required this.directionalControl,
-    required this.buttonUp,
-    required this.buttonDown,
-    required this.buttonLeft,
-    required this.buttonRight,
-    required this.buttonSelect,
-    required this.buttonL,
-    required this.showShoulder,
-    this.consoleLogo,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (showShoulder) ...[
-          _GameBoyShoulderButton(
-            label: 'L',
-            buttonId: buttonL,
-            controller: controller,
-          ),
-          const SizedBox(height: 10),
-        ],
-        _GameBoySystemButton(
-          width: 76,
-          height: 26,
-          label: 'SELECT',
-          buttonId: buttonSelect,
-          controller: controller,
-        ),
-        const SizedBox(height: 22),
-        _DirectionalControl(
-          type: directionalControl,
-          keySize: 38,
-          controller: controller,
-          buttonUp: buttonUp,
-          buttonDown: buttonDown,
-          buttonLeft: buttonLeft,
-          buttonRight: buttonRight,
-        ),
-        if (consoleLogo != null) ...[
-          const SizedBox(height: 14),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: RetroHubConsoleLogo(console: consoleLogo!),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _LandscapeRightControls extends StatelessWidget {
-  final LibretroGameController controller;
-  final int buttonA;
-  final int buttonB;
-  final int buttonX;
-  final int buttonY;
-  final int buttonStart;
-  final int buttonR;
-  final bool showShoulder;
-  final bool isSnes;
-  final bool rotateActions;
-  final Color buttonAColor;
-  final Color buttonBColor;
-  final Color buttonXColor;
-  final Color buttonYColor;
-
-  const _LandscapeRightControls({
-    required this.controller,
-    required this.buttonA,
-    required this.buttonB,
-    required this.buttonX,
-    required this.buttonY,
-    required this.buttonStart,
-    required this.buttonR,
-    required this.showShoulder,
-    required this.isSnes,
-    this.rotateActions = true,
-    this.buttonAColor = const Color(0xFF5E4B8B),
-    this.buttonBColor = const Color(0xFF8173AE),
-    this.buttonXColor = const Color(0xFF8173AE),
-    this.buttonYColor = const Color(0xFF5E4B8B),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (showShoulder) ...[
-          _GameBoyShoulderButton(
-            label: 'R',
-            buttonId: buttonR,
-            controller: controller,
-          ),
-          const SizedBox(height: 10),
-        ],
-        _GameBoySystemButton(
-          width: 76,
-          height: 26,
-          label: 'START',
-          buttonId: buttonStart,
-          controller: controller,
-        ),
-        const SizedBox(height: 22),
-        if (isSnes)
-          _SnesActionPad(
-            size: 42,
-            controller: controller,
-            buttonA: buttonA,
-            buttonB: buttonB,
-            buttonX: buttonX,
-            buttonY: buttonY,
-            buttonAColor: buttonAColor,
-            buttonBColor: buttonBColor,
-            buttonXColor: buttonXColor,
-            buttonYColor: buttonYColor,
-          )
-        else
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Transform.rotate(
-              angle: rotateActions ? -0.20 : 0,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _GameBoyActionButton(
-                    size: 58,
-                    label: 'B',
-                    buttonId: buttonB,
-                    controller: controller,
-                  ),
-                  const SizedBox(width: 14),
-                  _GameBoyActionButton(
-                    size: 58,
-                    label: 'A',
-                    buttonId: buttonA,
-                    controller: controller,
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _GameBoyControls extends StatelessWidget {
-  final bool compact;
-  final bool classicLayout;
-  final double sizeScale;
-  final double opacity;
-  final bool swapLabels;
-  final LibretroGameController controller;
-  final DirectionalControlType directionalControl;
-  final int buttonUp;
-  final int buttonDown;
-  final int buttonLeft;
-  final int buttonRight;
-  final int buttonA;
-  final int buttonB;
-  final int buttonX;
-  final int buttonY;
-  final int buttonSelect;
-  final int buttonStart;
-  final int buttonL;
-  final int buttonR;
-  final bool showShoulder;
-  final bool isSnes;
-  final Color buttonAColor;
-  final Color buttonBColor;
-  final Color buttonXColor;
-  final Color buttonYColor;
-
-  const _GameBoyControls({
-    required this.compact,
-    this.classicLayout = false,
-    this.sizeScale = 1,
-    this.opacity = 1,
-    this.swapLabels = false,
-    required this.controller,
-    required this.directionalControl,
-    required this.buttonUp,
-    required this.buttonDown,
-    required this.buttonLeft,
-    required this.buttonRight,
-    required this.buttonA,
-    required this.buttonB,
-    required this.buttonX,
-    required this.buttonY,
-    required this.buttonSelect,
-    required this.buttonStart,
-    required this.buttonL,
-    required this.buttonR,
-    required this.showShoulder,
-    required this.isSnes,
-    this.buttonAColor = const Color(0xFF5E4B8B),
-    this.buttonBColor = const Color(0xFF8173AE),
-    this.buttonXColor = const Color(0xFF8173AE),
-    this.buttonYColor = const Color(0xFF5E4B8B),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final double dPadKeySize = (compact ? 30 : 42) * sizeScale;
-    final double actionSize = (compact ? 54 : 66) * sizeScale;
-    final double systemWidth = (compact ? 68 : 82) * sizeScale;
-    final double systemHeight = (compact ? 24 : 28) * sizeScale;
-
-    final Widget dPad = _DirectionalControl(
-      type: directionalControl,
-      keySize: dPadKeySize,
-      controller: controller,
-      buttonUp: buttonUp,
-      buttonDown: buttonDown,
-      buttonLeft: buttonLeft,
-      buttonRight: buttonRight,
-    );
-
-    final Widget actions = isSnes
-        ? _SnesActionPad(
-            size: compact ? 38 : 45,
-            controller: controller,
-            buttonA: buttonA,
-            buttonB: buttonB,
-            buttonX: buttonX,
-            buttonY: buttonY,
-            buttonAColor: buttonAColor,
-            buttonBColor: buttonBColor,
-            buttonXColor: buttonXColor,
-            buttonYColor: buttonYColor,
-          )
-        : Transform.rotate(
-            angle: -0.20,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _GameBoyActionButton(
-                  size: actionSize,
-                  label: swapLabels ? 'A' : 'B',
-                  buttonId: buttonB,
-                  controller: controller,
-                ),
-                SizedBox(width: compact ? 12 : 16),
-                _GameBoyActionButton(
-                  size: actionSize,
-                  label: swapLabels ? 'B' : 'A',
-                  buttonId: buttonA,
-                  controller: controller,
-                ),
-              ],
-            ),
-          );
-
-    final Widget systemButtons = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _GameBoySystemButton(
-          width: systemWidth,
-          height: systemHeight,
-          label: 'SELECT',
-          buttonId: buttonSelect,
-          controller: controller,
-        ),
-        SizedBox(width: compact ? 10 : 14),
-        _GameBoySystemButton(
-          width: systemWidth,
-          height: systemHeight,
-          label: 'START',
-          buttonId: buttonStart,
-          controller: controller,
-        ),
-      ],
-    );
-
-    if (compact) {
-      return const SizedBox.shrink();
-    }
-
-    final Widget shoulderButtons = Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _GameBoyShoulderButton(
-          label: 'L',
-          buttonId: buttonL,
-          controller: controller,
-        ),
-        _GameBoyShoulderButton(
-          label: 'R',
-          buttonId: buttonR,
-          controller: controller,
-        ),
-      ],
-    );
-
-    final controls = SizedBox(
-      height: (showShoulder ? 224 : 184) * sizeScale,
-      child: Column(
-        children: [
-          if (showShoulder) ...[shoulderButtons, const SizedBox(height: 10)],
-          if (!classicLayout) ...[systemButtons, const SizedBox(height: 10)],
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [dPad, actions],
-            ),
-          ),
-          if (classicLayout) ...[
-            const SizedBox(height: 10),
-            systemButtons,
-          ],
-        ],
-      ),
-    );
-    return Opacity(opacity: opacity, child: controls);
-  }
-}
-
-class _SnesActionPad extends StatelessWidget {
-  final double size;
-  final LibretroGameController controller;
-  final int buttonA;
-  final int buttonB;
-  final int buttonX;
-  final int buttonY;
-  final Color buttonAColor;
-  final Color buttonBColor;
-  final Color buttonXColor;
-  final Color buttonYColor;
-
-  const _SnesActionPad({
-    required this.size,
-    required this.controller,
-    required this.buttonA,
-    required this.buttonB,
-    required this.buttonX,
-    required this.buttonY,
-    required this.buttonAColor,
-    required this.buttonBColor,
-    required this.buttonXColor,
-    required this.buttonYColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isAndroid = Theme.of(context).platform == TargetPlatform.android;
-    final double buttonStep = size * (isAndroid ? .94 : .78);
-
-    return SizedBox(
-      width: (buttonStep * 2) + size,
-      height: (buttonStep * 2) + size,
-      child: Stack(
-        children: [
-          Positioned(
-            left: buttonStep,
-            child: _GameBoyActionButton(size: size, label: 'X', buttonId: buttonX, controller: controller, color: buttonXColor),
-          ),
-          Positioned(
-            top: buttonStep,
-            child: _GameBoyActionButton(size: size, label: 'Y', buttonId: buttonY, controller: controller, color: buttonYColor),
-          ),
-          Positioned(
-            top: buttonStep,
-            right: 0,
-            child: _GameBoyActionButton(size: size, label: 'A', buttonId: buttonA, controller: controller, color: buttonAColor),
-          ),
-          Positioned(
-            left: buttonStep,
-            bottom: 0,
-            child: _GameBoyActionButton(size: size, label: 'B', buttonId: buttonB, controller: controller, color: buttonBColor),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DirectionalControl extends StatelessWidget {
-  final DirectionalControlType type;
-  final double keySize;
-  final LibretroGameController controller;
-  final int buttonUp;
-  final int buttonDown;
-  final int buttonLeft;
-  final int buttonRight;
-
-  const _DirectionalControl({
-    required this.type,
-    required this.keySize,
-    required this.controller,
-    required this.buttonUp,
-    required this.buttonDown,
-    required this.buttonLeft,
-    required this.buttonRight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (type == DirectionalControlType.joystick) {
-      return _VirtualJoystick(
-        size: keySize * 3,
-        controller: controller,
-        buttonUp: buttonUp,
-        buttonDown: buttonDown,
-        buttonLeft: buttonLeft,
-        buttonRight: buttonRight,
-      );
-    }
-    return _GameBoyDPad(
-      keySize: keySize,
-      controller: controller,
-      buttonUp: buttonUp,
-      buttonDown: buttonDown,
-      buttonLeft: buttonLeft,
-      buttonRight: buttonRight,
-    );
-  }
-}
-
-class _VirtualJoystick extends StatefulWidget {
-  final double size;
-  final LibretroGameController controller;
-  final int buttonUp;
-  final int buttonDown;
-  final int buttonLeft;
-  final int buttonRight;
-
-  const _VirtualJoystick({
-    required this.size,
-    required this.controller,
-    required this.buttonUp,
-    required this.buttonDown,
-    required this.buttonLeft,
-    required this.buttonRight,
-  });
-
-  @override
-  State<_VirtualJoystick> createState() => _VirtualJoystickState();
-}
-
-class _VirtualJoystickState extends State<_VirtualJoystick> {
-  Offset _knobOffset = Offset.zero;
-  final Set<int> _pressedButtons = <int>{};
-  int? _activePointer;
-
-  double get _travelRadius => widget.size * .27;
-
-  void _updatePosition(Offset localPosition) {
-    final center = Offset(widget.size / 2, widget.size / 2);
-    final rawOffset = localPosition - center;
-    final distance = rawOffset.distance;
-    final clampedOffset = distance <= _travelRadius || distance == 0
-        ? rawOffset
-        : rawOffset / distance * _travelRadius;
-    final normalized = clampedOffset / _travelRadius;
-    final desiredButtons = <int>{};
-
-    // The threshold creates a central dead zone and still allows diagonals.
-    if (normalized.dx < -.32) desiredButtons.add(widget.buttonLeft);
-    if (normalized.dx > .32) desiredButtons.add(widget.buttonRight);
-    if (normalized.dy < -.32) desiredButtons.add(widget.buttonUp);
-    if (normalized.dy > .32) desiredButtons.add(widget.buttonDown);
-
-    _setPressedButtons(desiredButtons);
-    setState(() => _knobOffset = clampedOffset);
-  }
-
-  void _setPressedButtons(Set<int> desiredButtons) {
-    for (final button in _pressedButtons.difference(desiredButtons)) {
-      widget.controller.releaseButton(button);
-    }
-    for (final button in desiredButtons.difference(_pressedButtons)) {
-      widget.controller.pressButton(button);
-    }
-    _pressedButtons
-      ..clear()
-      ..addAll(desiredButtons);
-  }
-
-  void _release() {
-    _setPressedButtons(<int>{});
-    if (mounted) setState(() => _knobOffset = Offset.zero);
-  }
-
-  @override
-  void didUpdateWidget(covariant _VirtualJoystick oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller ||
-        oldWidget.buttonUp != widget.buttonUp ||
-        oldWidget.buttonDown != widget.buttonDown ||
-        oldWidget.buttonLeft != widget.buttonLeft ||
-        oldWidget.buttonRight != widget.buttonRight) {
-      for (final button in _pressedButtons) {
-        oldWidget.controller.releaseButton(button);
-      }
-      _pressedButtons.clear();
-      _knobOffset = Offset.zero;
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final button in _pressedButtons) {
-      widget.controller.releaseButton(button);
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final knobSize = widget.size * .44;
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (event) {
-        if (_activePointer != null) return;
-        _activePointer = event.pointer;
-        _updatePosition(event.localPosition);
-      },
-      onPointerMove: (event) {
-        if (_activePointer == event.pointer) {
-          _updatePosition(event.localPosition);
-        }
-      },
-      onPointerUp: (event) {
-        if (_activePointer != event.pointer) return;
-        _activePointer = null;
-        _release();
-      },
-      onPointerCancel: (event) {
-        if (_activePointer != event.pointer) return;
-        _activePointer = null;
-        _release();
-      },
-      child: SizedBox.square(
-        dimension: widget.size,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const RadialGradient(
-              colors: <Color>[
-                Color(0xFF34343B),
-                Color(0xFF202026),
-                Color(0xFF111116),
-              ],
-              stops: <double>[0, .72, 1],
-            ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .14),
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: .48),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: .06),
-                blurRadius: 4,
-                offset: const Offset(-2, -2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Transform.translate(
-              offset: _knobOffset,
-              child: Container(
-                width: knobSize,
-                height: knobSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: <Color>[Color(0xFF77777F), Color(0xFF3D3D44)],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: .22),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: .55),
-                      blurRadius: 8,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GameBoyDPad extends StatelessWidget {
-  final double keySize;
-  final LibretroGameController controller;
-  final int buttonUp;
-  final int buttonDown;
-  final int buttonLeft;
-  final int buttonRight;
-
-  const _GameBoyDPad({
-    required this.keySize,
-    required this.controller,
-    required this.buttonUp,
-    required this.buttonDown,
-    required this.buttonLeft,
-    required this.buttonRight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: keySize * 3,
-      height: keySize * 3,
-      child: Stack(
-        children: [
-          Positioned(
-            left: keySize,
-            top: 0,
-            child: _GameBoyDPadKey(
-              size: keySize,
-              buttonId: buttonUp,
-              controller: controller,
-              icon: Icons.keyboard_arrow_up_rounded,
-              topLeft: true,
-              topRight: true,
-            ),
-          ),
-          Positioned(
-            left: keySize,
-            top: keySize * 2,
-            child: _GameBoyDPadKey(
-              size: keySize,
-              buttonId: buttonDown,
-              controller: controller,
-              icon: Icons.keyboard_arrow_down_rounded,
-              bottomLeft: true,
-              bottomRight: true,
-            ),
-          ),
-          Positioned(
-            left: 0,
-            top: keySize,
-            child: _GameBoyDPadKey(
-              size: keySize,
-              buttonId: buttonLeft,
-              controller: controller,
-              icon: Icons.keyboard_arrow_left_rounded,
-              topLeft: true,
-              bottomLeft: true,
-            ),
-          ),
-          Positioned(
-            left: keySize * 2,
-            top: keySize,
-            child: _GameBoyDPadKey(
-              size: keySize,
-              buttonId: buttonRight,
-              controller: controller,
-              icon: Icons.keyboard_arrow_right_rounded,
-              topRight: true,
-              bottomRight: true,
-            ),
-          ),
-          Positioned(
-            left: keySize,
-            top: keySize,
-            child: Container(
-              width: keySize,
-              height: keySize,
-              decoration: BoxDecoration(
-                color: const Color(0xFF242328),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.38),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Container(
-                  width: 17,
-                  height: 17,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.35),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GameBoyDPadKey extends StatelessWidget {
-  final double size;
-  final int buttonId;
-  final LibretroGameController controller;
-  final IconData icon;
-  final bool topLeft;
-  final bool topRight;
-  final bool bottomLeft;
-  final bool bottomRight;
-
-  const _GameBoyDPadKey({
-    required this.size,
-    required this.buttonId,
-    required this.controller,
-    required this.icon,
-    this.topLeft = false,
-    this.topRight = false,
-    this.bottomLeft = false,
-    this.bottomRight = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _PressableControl(
-      buttonId: buttonId,
-      controller: controller,
-      borderRadius: BorderRadius.only(
-        topLeft: Radius.circular(topLeft ? 10 : 0),
-        topRight: Radius.circular(topRight ? 10 : 0),
-        bottomLeft: Radius.circular(bottomLeft ? 10 : 0),
-        bottomRight: Radius.circular(bottomRight ? 10 : 0),
-      ),
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: const Color(0xFF2B2A30),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(topLeft ? 10 : 0),
-            topRight: Radius.circular(topRight ? 10 : 0),
-            bottomLeft: Radius.circular(bottomLeft ? 10 : 0),
-            bottomRight: Radius.circular(bottomRight ? 10 : 0),
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.38),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          color: Colors.white.withValues(alpha: 0.9),
-          size: size * 0.60,
-        ),
-      ),
-    );
-  }
-}
-
-class _GameBoyActionButton extends StatelessWidget {
-  final double size;
-  final String label;
-  final int buttonId;
-  final LibretroGameController controller;
-  final Color color;
-
-  const _GameBoyActionButton({
-    required this.size,
-    required this.label,
-    required this.buttonId,
-    required this.controller,
-    this.color = const Color(0xFF8B3E67),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _PressableControl(
-      buttonId: buttonId,
-      controller: controller,
-      borderRadius: BorderRadius.circular(40),
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.32),
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.42),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: 0.09),
-              blurRadius: 3,
-              offset: const Offset(-2, -2),
-            ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: size * 0.34,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GameBoyShoulderButton extends StatelessWidget {
-  final String label;
-  final int buttonId;
-  final LibretroGameController controller;
-
-  const _GameBoyShoulderButton({
-    required this.label,
-    required this.buttonId,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _PressableControl(
-      buttonId: buttonId,
-      controller: controller,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 64,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF47464D),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 7,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GameBoySystemButton extends StatelessWidget {
-  final double width;
-  final double height;
-  final String label;
-  final int buttonId;
-  final LibretroGameController controller;
-
-  const _GameBoySystemButton({
-    required this.width,
-    required this.height,
-    required this.label,
-    required this.buttonId,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _PressableControl(
-      buttonId: buttonId,
-      controller: controller,
-      borderRadius: BorderRadius.circular(30),
-      child: Transform.rotate(
-        angle: -0.12,
-        child: Container(
-          width: width,
-          height: height,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFF66636B),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.36),
-                blurRadius: 7,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PressableControl extends StatefulWidget {
-  final int buttonId;
-  final LibretroGameController controller;
-  final BorderRadius borderRadius;
-  final Widget child;
-
-  const _PressableControl({
-    required this.buttonId,
-    required this.controller,
-    required this.borderRadius,
-    required this.child,
-  });
-
-  @override
-  State<_PressableControl> createState() => _PressableControlState();
-}
-
-class _PressableControlState extends State<_PressableControl> {
-  bool _pressed = false;
-
-  void _press() {
-    if (!mounted || _pressed) {
-      return;
-    }
-
-    setState(() {
-      _pressed = true;
-    });
-
-    widget.controller.pressButton(widget.buttonId);
-  }
-
-  void _release() {
-    if (!mounted || !_pressed) {
-      return;
-    }
-
-    setState(() {
-      _pressed = false;
-    });
-
-    widget.controller.releaseButton(widget.buttonId);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => _press(),
-      onPointerUp: (_) => _release(),
-      onPointerCancel: (_) => _release(),
-      child: AnimatedScale(
-        scale: _pressed ? 0.90 : 1,
-        duration: const Duration(milliseconds: 65),
-        child: AnimatedOpacity(
-          opacity: _pressed ? 0.76 : 1,
-          duration: const Duration(milliseconds: 65),
-          child: ClipRRect(
-            borderRadius: widget.borderRadius,
-            child: widget.child,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Control del Cable Link Bluetooth.
-///
-/// Muestra el estado actual y permite crear, buscar o cerrar
-/// una sesiÃ³n Link directamente desde el emulador.
-class _LinkStatusChip extends StatelessWidget {
-  const _LinkStatusChip({required this.linkManager});
-
-  final LinkManager? linkManager;
-
-  @override
-  Widget build(BuildContext context) {
-    final LinkManager? manager = linkManager;
-
-    if (manager == null) {
-      return const SizedBox.shrink();
-    }
-
-    return StreamBuilder<LinkState>(
-      stream: manager.onStateChanged,
-      initialData: manager.state,
-      builder: (context, snapshot) {
-        final LinkState state = snapshot.data ?? LinkState.disconnected;
-
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => _handleTap(context, manager, state),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.60),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.cable, size: 13, color: Colors.white70),
-                  const SizedBox(width: 4),
-                  Text(
-                    _labelFor(state),
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _handleTap(
-    BuildContext context,
-    LinkManager manager,
-    LinkState state,
-  ) async {
-    switch (state) {
-      case LinkState.connected:
-      case LinkState.syncing:
-      case LinkState.hosting:
-      case LinkState.connecting:
-      case LinkState.searching:
-        await _showActiveSessionDialog(context, manager);
-        return;
-
-      case LinkState.disconnected:
-      case LinkState.error:
-        await _showConnectionDialog(context, manager);
-        return;
-    }
-  }
-
-  Future<void> _showConnectionDialog(
-    BuildContext context,
-    LinkManager manager,
-  ) async {
-    final String? action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: const Color(0xFF181818),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ListTile(
-                  leading: Icon(Icons.cable, color: Colors.white),
-                  title: Text(
-                    'Cable Link',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Conecta dos dispositivos por Bluetooth',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                ),
-                const Divider(color: Colors.white12),
-                ListTile(
-                  leading: const Icon(
-                    Icons.wifi_tethering,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    'Crear sesiÃ³n',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: const Text(
-                    'Este dispositivo esperarÃ¡ al otro jugador',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                  onTap: () {
-                    Navigator.pop(sheetContext, 'host');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.search, color: Colors.white70),
-                  title: const Text(
-                    'Buscar sesiÃ³n',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  subtitle: const Text(
-                    'Busca otro dispositivo RetroHub',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                  onTap: () {
-                    Navigator.pop(sheetContext, 'join');
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (!context.mounted || action == null) {
-      return;
-    }
-
-    if (action == 'host') {
-      await _createSession(context, manager);
-    } else if (action == 'join') {
-      await _searchSession(context, manager);
-    }
-  }
-
-  Future<void> _createSession(BuildContext context, LinkManager manager) async {
-    const BluetoothDiscovery discovery = BluetoothDiscovery();
-
-    try {
-      if (!await discovery.isEnabled()) {
-        final bool enabled = await discovery.requestEnable();
-
-        if (!enabled) {
-          return;
-        }
-      }
-
-      // Evitamos requestDiscoverable(): el plugin puede provocar un crash
-      // al regresar de la Activity de Android en algunos dispositivos.
-      await manager.host(localName: 'RetroHub');
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo crear la sesiÃ³n: $error')),
-      );
-    }
-  }
-
-  Future<void> _searchSession(BuildContext context, LinkManager manager) async {
-    const BluetoothDiscovery discovery = BluetoothDiscovery();
-
-    try {
-      if (!await discovery.isEnabled()) {
-        final bool enabled = await discovery.requestEnable();
-
-        if (!enabled || !context.mounted) {
-          return;
-        }
-      }
-
-      final List<BluetoothDevice> bonded = await discovery
-          .bondedRetroHubDevices();
-
-      if (!context.mounted) {
-        return;
-      }
-
-      final BluetoothDevice?
-      selected = await showModalBottomSheet<BluetoothDevice>(
-        context: context,
-        backgroundColor: const Color(0xFF181818),
-        builder: (sheetContext) {
-          if (bonded.isEmpty) {
-            return const SafeArea(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No hay dispositivos Bluetooth emparejados.',
-                  style: TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ListTile(
-                  leading: Icon(Icons.bluetooth_searching, color: Colors.white),
-                  title: Text(
-                    'Buscar sesiÃ³n',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Selecciona el telÃ©fono que creÃ³ la sesiÃ³n',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                ),
-                const Divider(color: Colors.white12),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: bonded.length,
-                    itemBuilder: (context, index) {
-                      final BluetoothDevice device = bonded[index];
-
-                      final String name = device.name?.trim().isNotEmpty == true
-                          ? device.name!
-                          : 'Dispositivo Bluetooth';
-
-                      return ListTile(
-                        leading: const Icon(
-                          Icons.phone_android,
-                          color: Colors.white70,
-                        ),
-                        title: Text(
-                          name,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        subtitle: Text(
-                          device.address,
-                          style: const TextStyle(color: Colors.white54),
-                        ),
-                        onTap: () {
-                          Navigator.pop(sheetContext, device);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-
-      if (selected == null) {
-        return;
-      }
-
-      await manager.join(localName: 'RetroHub', target: selected.address);
-    } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo conectar: $error')));
-    }
-  }
-
-  Future<void> _showActiveSessionDialog(
-    BuildContext context,
-    LinkManager manager,
-  ) async {
-    final bool? disconnect = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: const Color(0xFF181818),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.cable, color: Colors.greenAccent),
-                  title: Text(
-                    _labelFor(manager.state),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Cable Link Bluetooth',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                ),
-                const Divider(color: Colors.white12),
-                ListTile(
-                  leading: const Icon(Icons.link_off, color: Colors.redAccent),
-                  title: const Text(
-                    'Desconectar',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(sheetContext, true);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (disconnect == true) {
-      await manager.close();
-    }
-  }
-
-  String _labelFor(LinkState state) {
-    switch (state) {
-      case LinkState.disconnected:
-        return 'Cable Link';
-      case LinkState.searching:
-        return 'Buscando';
-      case LinkState.hosting:
-        return 'Esperando';
-      case LinkState.connecting:
-        return 'Conectando';
-      case LinkState.connected:
-        return 'Conectado';
-      case LinkState.syncing:
-        return 'Sincronizando';
-      case LinkState.error:
-        return 'Sin conexiÃ³n';
-    }
-  }
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíç~ôÑ:-jZ.¶›­–)Ş³V–×÷'BvF'C¦7–æ2s°¦–×÷'BvF'C¦6öçfW'Bs°¦–×÷'BvF'C¦ÖF‚r2ÖFƒ° ¦–×÷'Bw6¶vS¦fÇWGFW"öf÷VæFF–öâæF'Bs°¦–×÷'Bw6¶vS¦fÇWGFW"öÖFW&–ÂæF'Bs°¦–×÷'Bw6¶vS¦fÇWGFW"÷6W'f–6W2æF'Bs°¦–×÷'Bw6¶vS¦fÇWGFW%÷&—fW'öBöfÇWGFW%÷&—fW'öBæF'Bs°¦–×÷'Bw6¶vS¦G&–gBöG&–gBæF'Br6†÷rfÇVS°¦–×÷'Bw6¶vS¦fÇWGFW%ö&ÇVWFö÷F…÷6W&–ÂöfÇWGFW%ö&ÇVWFö÷F…÷6W&–ÂæF'Bs°¦–×÷'Bw6¶vS§v¶VÆö6µ÷ÇW2÷v¶VÆö6µ÷ÇW2æF'Bs°¦–×÷'Bw&W6VçFF–öâ÷v–FvWB÷&WG&ö‡V%ö6öç6öÆUöÆövòæF'Bs°¦–×÷'Bw&W6VçFF–öâ÷v–FvWB÷&WG&ö‡V%÷V–6µöÖVçRæF'Bs°¦–×÷'Bw&W6VçFF–öâ÷v–FvWB÷7VVEö'WGFöâæF'Bs°¦–×÷'Brââòââö6÷&Rö76WG2övÖUö76WE÷&öf–ÆRæF'Bs°¦–×÷'Brââòââö6÷&Rö76WG2÷7&—FU÷&W6öÇfW"æF'Bs°¦–×÷'Brââòââö6÷&RöV×VÆF–öâö6÷&UöÆöFW"æF'Bs°¦–×÷'Brââòââö6÷&R÷WF–Ç2ö6÷fW%ö†VÇW"æF'Bs°¦–×÷'BrââòââöFFöFF&6RööFF&6RæF'Bs°¦–×÷'BrââòââöFFöFF&6RöFF&6U÷&÷f–FW"æF'Bs°¦–×÷'Brââög&ÖW2ög&ÖW5÷vRæF'Bs°¦–×÷'Brââög&ÖW2ög&ÖUö6FÆöræF'Bs°¦–×÷'Brââög&ÖW2ög&ÖU÷&VfW&Væ6W2æF'Bs°¦–×÷'Brââög&ÖW2÷÷'G&—Eög&ÖUö6FÆöræF'Bs°¦–×÷'Brââ÷&öf–ÆRöWF‚öWF…÷&÷f–FW"æF'Bs°¦–×÷'Brââ÷&öf–ÆRö6Æ÷VBö6Æ÷VE÷6fUö6ö÷&F–æF÷"æF'Bs°¦–×÷'Brââö¦÷W&æÂö¦÷W&æÅ÷vRæF'Bs°¦–×÷'Brââö¦÷W&æÂ÷6W'f–6W2ö¦÷W&æÅöWfVçE÷6W'f–6RæF'Bs°¦–×÷'Brââ÷ö¶VÖöâ÷6W'f–6W2÷ö¶VÖöåö¦÷W&æÅ÷G&6¶W"æF'Bs°¦–×÷'Brââ÷ö¶VÖöâöÖöFVÇ2÷ö¶VÖöåövÖU÷&öf–ÆRæF'Bs°¦–×÷'BvFF÷6fU÷7FFU÷6W'f–6RæF'Bs°¦–×÷'Bw&W6VçFF–öâ÷v–FvWBöÆ–'&WG&õövÖU÷f–WræF'Bs°¦–×÷'BvÖVÖ÷'•ö–ç7V7F÷"öÖVÖ÷'•ö–ç7V7F÷%÷vRæF'Bs°¦–×÷'Bw6WGF–æw2öV×VÆF÷%÷&VfW&Væ6W2æF'Bs°¦–×÷'Bw6WGF–æw2öV×VÆF÷%÷6WGF–æw5÷vRæF'Bs°¦–×÷'Bw7V6–ÅöWfVçG2÷7V6–ÅöWfVçG5÷vRæF'Bs°¦–×÷'Bw7V6–ÅöWfVçG2övVã%÷&VE÷&Wv&BæF'Bs°¦–×÷'Bw7V6–ÅöWfVçG2övVã%÷&VE÷&Wv&E÷6W'f–6RæF'Bs°¦–×÷'Bw6fU÷7FFW2÷6fU÷7FFW5÷vRæF'Bs°¦–×÷'BvÆ–æ²öÆ–æµ÷7FFRæF'Bs°¦–×÷'BvÆ–æ²öÆ–æµöÖævW"æF'Bs°¦–×÷'BvÆ–æ²ö&ÇVWFö÷F‚ö&ÇVWFö÷F…öF—66÷fW'’æF'Bs° ¦6Æ72V×VÆF÷%vRW‡FVæG26öç7VÖW%7FFVgVÅv–FvWB°¢f–æÂvÖRvÖS° ¢6öç7BV×VÆF÷%vR‡·7WW"æ¶W’Â&WV—&VBF†—2ævÖWÒ“° ¢÷fW'&–FP¢6öç7VÖW%7FFSÄV×VÆF÷%vSâ7&VFU7FFR‚’ÓâôV×VÆF÷%vU7FFR‚“°§Ğ ¦6Æ72ôV×VÆF÷%vU7FFRW‡FVæG26öç7VÖW%7FFSÄV×VÆF÷%vSà¢v—F‚v–FvWG4&–æF–ætö'6W'fW"°¢7FF–26öç7B–çBö'WGFöä"Ò°¢7FF–26öç7B–çBö'WGFöå’Ò°¢7FF–26öç7B–çBö'WGFöå6VÆV7BÒ#°¢7FF–26öç7B–çBö'WGFöå7F'BÒ3°¢7FF–26öç7B–çBö'WGFöåWÒC°¢7FF–26öç7B–çBö'WGFöäF÷vâÒS°¢7FF–26öç7B–çBö'WGFöäÆVgBÒc°¢7FF–26öç7B–çBö'WGFöå&–v‡BÒs°¢7FF–26öç7B–çBö'WGFöäÒƒ°¢7FF–26öç7B–çBö'WGFöå‚Ò“°¢7FF–26öç7B–çBö'WGFöäÂÒ°¢7FF–26öç7B–çBö'WGFöå"Ò° ¢f–æÂÆ–'&WG&ôvÖT6öçG&öÆÆW"övÖT6öçG&öÆÆW"ÒÆ–'&WG&ôvÖT6öçG&öÆÆW"‚“°¢f–æÂvÆö&Ä¶W’övÖUf–Wt¶W’ÒvÆö&Ä¶W’†FV'VtÆ&VÃ¢vÆ–'&WG&òÖvÖR×f–Wrr“° ¢ÆFRf–æÂFF&6RöFF&6S°¢ÆFRf–æÂ¦÷W&æÄWfVçE6W'f–6Rö¦÷W&æÄWfVçE6W'f–6S°¢ö¶VÖöä¦÷W&æÅG&6¶W#ò÷ö¶VÖöä¦÷W&æÅG&6¶W#°¢ÆFRf–æÂFFUF–ÖR÷6W76–öå7F'FVDC°¢&ööÂ÷6W76–öä6Æ÷6VDÆövvVBÒfÇ6S°¢&ööÂ÷6W76–öåW'6—7FVBÒfÇ6S°¢&ööÂö—46Æ÷6–ærÒfÇ6S°¢&ööÂöÆÆ÷u÷ÒfÇ6S°¢7G&–ærö6Æ÷6–æu7FGW2ÒtwV&FæFò'F–F(
+bs°¢&ööÂöW†—DF–Æöt÷VâÒfÇ6S°¢F–ÖW#òö†VFW%&Vg&W6…F–ÖW#°¢–çCòöæG5F÷V6…ö–çFW#°¢Æ—7CÆ–çCâ÷'G•7V6–W4–G2Ò6öç7BÆ–çCåµÓ°¢V×VÆF÷%&VfW&Væ6W2÷&VfW&Væ6W2Ò6öç7BV×VÆF÷%&VfW&Væ6W2‚“°¢vÖTg&ÖSò÷6VÆV7FVDg&ÖS°¢÷'G&—DvÖTg&ÖSò÷6VÆV7FVE÷'G&—Dg&ÖS° ¢vÖRvWBvÖRÓâv–FvWBævÖS° ¢&ööÂvWBö—4æG&ö–E6æW2Óà¢FVfVÇEF&vWEÆFf÷&ÒÓÒF&vWEÆFf÷&ÒææG&ö–Bb`¢6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚“° ¢÷fW'&–FP¢fö–B–æ—E7FFR‚’°¢7WW"æ–æ—E7FFR‚“°¢v–FvWG4&–æF–æræ–ç7Fæ6RæFDö'6W'fW"‡F†—2“° ¢–b…ö—4æG&ö–E6æW2’°¢Væv—FVB€¢7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâæÆæG66TÆVgBÀ¢FWf–6T÷&–VçFF–öâæÆæG66U&–v‡BÀ¢Ò’À¢“°¢Ğ ¢÷6W76–öå7F'FVDBÒFFUF–ÖRææ÷r‚“°¢Væv—FVB…öÆöDV×VÆF÷%&VfW&Væ6W2‚’“°¢öFF&6RÒ&Vbç&VB†FF&6U&÷f–FW"“° ¢Væv—FVB…öFF&6RæÖ&´vÖT÷VæVB†vÖRæ–BÂ÷6W76–öå7F'FVDB’“° ¢ö¦÷W&æÄWfVçE6W'f–6RÒ¦÷W&æÄWfVçE6W'f–6R€¢FF&6S¢öFF&6RÀ¢vÖT–C¢vÖRæ–BÀ¢“° ¢f–æÂö¶VÖöävÖU&öf–ÆRö¶VÖöå&öf–ÆRĞ¢ö¶VÖöävÖU&öf–ÆRæg&öÔvÖT–FVçF—G’€¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢“°¢f–æÂ&ööÂ7W÷'G5ö¶VÖöä¦÷W&æÂĞ¢ö¶VÖöå&öf–ÆRæ—4vVãBÇÀ¢ö¶VÖöå&öf–ÆRæ—4vVãRÇÀ¢6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’ÇÀ¢„6÷&TÆöFW"æ—4v&&öÒ†vÖRç&öÕF‚’b`¢‡ö¶VÖöå&öf–ÆRçfW'6–öâÓÒö¶VÖöävÖUfW'6–öâæVÖW&ÆBÇÀ¢ö¶VÖöå&öf–ÆRçfW'6–öâÓÒö¶VÖöävÖUfW'6–öâç'V'’ÇÀ¢ö¶VÖöå&öf–ÆRçfW'6–öâÓÒö¶VÖöävÖUfW'6–öâç6†—&RÇÀ¢ö¶VÖöå&öf–ÆRçfW'6–öâÓÒö¶VÖöävÖUfW'6–öâæf—&U&VBÇÀ¢ö¶VÖöå&öf–ÆRçfW'6–öâÓÒö¶VÖöävÖUfW'6–öâæÆVdw&VVâ’“° ¢–b‡7W÷'G5ö¶VÖöä¦÷W&æÂ’°¢÷ö¶VÖöä¦÷W&æÅG&6¶W"Òö¶VÖöä¦÷W&æÅG&6¶W"€¢FF&6S¢öFF&6RÀ¢vÖT–C¢vÖRæ–BÀ¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢Æ•F–ÖTÖ–çWFW3¢‚’Óâö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢’âç7F'B‚“°¢Væv—FVB…÷&Vg&W6„†VFW%'G’‚’“°¢ö†VFW%&Vg&W6…F–ÖW"ÒF–ÖW"çW&–öF–2€¢6öç7BGW&F–öâ‡6V6öæG3¢"’À¢…ò’ÓâVæv—FVB…÷&Vg&W6„†VFW%'G’‚’’À¢“°¢Ğ ¢Væv—FVB€¢ö¦÷W&æÄWfVçE6W'f–6RæÆötvÖU7F'FVB€¢Æ•F–ÖTÖ–çWFW3¢vÖRçÆ•F–ÖU6V6öæG2âòcÀ¢’À¢“°¢Ğ ¢÷fW'&–FP¢fö–BF–D6†ævTÆ–fV7–6ÆU7FFR„Æ–fV7–6ÆU7FFR7FFR’°¢–b„6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚’ÇÀ¢÷&VfW&Væ6W2çW6T–ä&6¶w&÷VæB’°¢&WGW&ã°¢Ğ¢övÖT6öçG&öÆÆW"ç6WEW6VB‡7FFRÒÆ–fV7–6ÆU7FFRç&W7VÖVB“°¢Ğ ¢gWGW&SÇfö–CâöÆöDV×VÆF÷%&VfW&Væ6W2‚’7–æ2°¢f–æÂ&VfW&Væ6W2Òv—BV×VÆF÷%&VfW&Væ6W2æÆöB‚“°¢f–æÂg&ÖT–BÒv—Bg&ÖU&VfW&Væ6W2æÆöB†vÖRæ–B“°¢f–æÂ÷'G&—Dg&ÖT–BÒv—Bg&ÖU&VfW&Væ6W2æÆöE÷'G&—B†vÖRæ–B“°¢–b‚Ö÷VçFVB’&WGW&ã°¢6WE7FFR‚‚’°¢÷&VfW&Væ6W2Ò&VfW&Væ6W3°¢÷6VÆV7FVDg&ÖRÒg&ÖT6FÆöræ'”–B†vÖRÂg&ÖT–B“°¢÷6VÆV7FVE÷'G&—Dg&ÖRÒ÷'G&—Dg&ÖT–BÓÒvæöæRp¢òçVÆÀ¢¢÷'G&—Dg&ÖT6FÆöræ'”–B†vÖRÂ÷'G&—Dg&ÖT–B’óğ¢÷'G&—Dg&ÖT6FÆörç&V6öÖÖVæFVDf÷"†vÖR“°¢Ò“°¢v—BöÇ”F—7Æ•&VfW&Væ6W2‡&VfW&Væ6W2“°¢Ğ ¢gWGW&SÇfö–Câ÷&VÆöE6VÆV7FVDg&ÖR‚’7–æ2°¢f–æÂg&ÖT–BÒv—Bg&ÖU&VfW&Væ6W2æÆöB†vÖRæ–B“°¢f–æÂ÷'G&—Dg&ÖT–BÒv—Bg&ÖU&VfW&Væ6W2æÆöE÷'G&—B†vÖRæ–B“°¢–b‚Ö÷VçFVB’&WGW&ã°¢6WE7FFR‚‚’°¢÷6VÆV7FVDg&ÖRÒg&ÖT6FÆöræ'”–B†vÖRÂg&ÖT–B“°¢÷6VÆV7FVE÷'G&—Dg&ÖRÒ÷'G&—Dg&ÖT–BÓÒvæöæRp¢òçVÆÀ¢¢÷'G&—Dg&ÖT6FÆöræ'”–B†vÖRÂ÷'G&—Dg&ÖT–B’óğ¢÷'G&—Dg&ÖT6FÆörç&V6öÖÖVæFVDf÷"†vÖR“°¢Ò“°¢Ğ ¢gWGW&SÇfö–CâöÇ”F—7Æ•&VfW&Væ6W2„V×VÆF÷%&VfW&Væ6W2&VfW&Væ6W2’7–æ2°¢–b„6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚’’°¢v—Bv¶VÆö6µÇW2çFövvÆR†Væ&ÆS¢&VfW&Væ6W2æ¶VW67&VVäv¶R“°¢v—B7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâæÆæG66TÆVgBÀ¢FWf–6T÷&–VçFF–öâæÆæG66U&–v‡BÀ¢Ò“°¢v—B7—7FVÔ6‡&öÖRç6WDVæ&ÆVE7—7FVÕT”ÖöFR€¢&VfW&Væ6W2ç6æW4gVÆÇ67&VVà¢ò7—7FVÕV”ÖöFRæ–ÖÖW'6—fU7F–6·¢¢7—7FVÕV”ÖöFRæVFvUFôVFvRÀ¢“°¢&WGW&ã°¢Ğ¢–b„6÷&TÆöFW"æ—4æG5&öÒ†vÖRç&öÕF‚’bb&VfW&Væ6W2ææG4gVÆÇ67&VVâ’°¢v—Bv¶VÆö6µÇW2çFövvÆR†Væ&ÆS¢&VfW&Væ6W2æ¶VW67&VVäv¶R“°¢v—B7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâæÆæG66TÆVgBÀ¢FWf–6T÷&–VçFF–öâæÆæG66U&–v‡BÀ¢Ò“°¢v—B7—7FVÔ6‡&öÖRç6WDVæ&ÆVE7—7FVÕT”ÖöFR…7—7FVÕV”ÖöFRæ–ÖÖW'6—fU7F–6·’“°¢&WGW&ã°¢Ğ¢–b‚„6÷&TÆöFW"æ—4v&&öÒ†vÖRç&öÕF‚’bb&VfW&Væ6W2æv&gVÆÇ67&VVâ’ÇÀ¢„6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’b`¢&VfW&Væ6W2ævÖT&÷”gVÆÇ67&VVâ’’°¢v—Bv¶VÆö6µÇW2çFövvÆR†Væ&ÆS¢&VfW&Væ6W2æ¶VW67&VVäv¶R“°¢v—B7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâæÆæG66TÆVgBÀ¢FWf–6T÷&–VçFF–öâæÆæG66U&–v‡BÀ¢Ò“°¢v—B7—7FVÔ6‡&öÖRç6WDVæ&ÆVE7—7FVÕT”ÖöFR…7—7FVÕV”ÖöFRæ–ÖÖW'6—fU7F–6·’“°¢&WGW&ã°¢Ğ¢v—Bv¶VÆö6µÇW2çFövvÆR†Væ&ÆS¢&VfW&Væ6W2æ¶VW67&VVäv¶R“°¢f–æÂ÷&–VçFF–öç2Ò7v—F6‚‡&VfW&Væ6W2æ÷&–VçFF–öâ’°¢V×VÆF÷$÷&–VçFF–öâæWFöÖF–2Óâ6öç7BÄFWf–6T÷&–VçFF–öãåµÒÀ¢V×VÆF÷$÷&–VçFF–öâç÷'G&—BÓâ6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâç÷'G&—EWÀ¢ÒÀ¢V×VÆF÷$÷&–VçFF–öâæÆæG66RÓâ6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâæÆæG66TÆVgBÀ¢FWf–6T÷&–VçFF–öâæÆæG66U&–v‡BÀ¢ÒÀ¢Ó°¢v—B7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†÷&–VçFF–öç2“°¢v—B7—7FVÔ6‡&öÖRç6WDVæ&ÆVE7—7FVÕT”ÖöFR…7—7FVÕV”ÖöFRæVFvUFôVFvR“°¢Ğ ¢gWGW&SÇfö–Câ÷&Vg&W6„†VFW%'G’‚’7–æ2°¢f–æÂ6æ6†÷BÒv—BöFF&6RævWDÆFW7E&öw&W756æ6†÷B†vÖRæ–B“°¢–b‚Ö÷VçFVBÇÂ6æ6†÷Còç'G”§6öâÓÒçVÆÂ’&WGW&ã° ¢G'’°¢f–æÂFV6öFVBÒ§6öäFV6öFR‡6æ6†÷Bç'G”§6öâ“°¢–b†FV6öFVB—2Æ—7B’&WGW&ã° ¢f–æÂ–G2ÒFV6öFV@¢çv†W&UG—SÄÖâ‚¢æÖ‚‡ö¶VÖöâ’°¢f–æÂ&ööÂ—4VvrĞ¢ö¶VÖöå²v—4VvruÒÓÒG'VRÇÀ¢ö¶VÖöå²v—4VvruÓòçFõ7G&–ær‚’ÓÒwG'VRs°¢–b†—4Vvr’&WGW&â° ¢f–æÂG–æÖ–2&t–BÒö¶VÖöå²v–BuÓ°¢–b‡&t–B—2çVÒ’&WGW&â&t–BçFô–çB‚“°¢&WGW&â–çBçG'•'6R‡&t–CòçFõ7G&–ær‚’óòrr“°¢Ò¢çv†W&UG—SÆ–çCâ‚¢çv†W&R‚†–B’Óâ–BãÒ¢çF¶Rƒb¢çFôÆ—7B†w&÷v&ÆS¢fÇ6R“° ¢–b‚÷6ÖT–G2†–G2Â÷'G•7V6–W4–G2’’°¢6WE7FFR‚‚’Óâ÷'G•7V6–W4–G2Ò–G2“°¢Ğ¢Ò6F6‚…ò’°¢òò6÷''WB÷"öÆFW"6æ6†÷B×W7Bæ÷BffV7BF†RV×VÆF÷"67&VVâà¢Ğ¢Ğ ¢&ööÂ÷6ÖT–G2„Æ—7CÆ–çCâf—'7BÂÆ—7CÆ–çCâ6V6öæB’°¢–b†f—'7BæÆVæwF‚Ò6V6öæBæÆVæwF‚’&WGW&âfÇ6S°¢f÷"‡f"–æFW‚Ò²–æFW‚Âf—'7BæÆVæwFƒ²–æFW‚²²’°¢–b†f—'7E¶–æFW…ÒÒ6V6öæE¶–æFW…Ò’&WGW&âfÇ6S°¢Ğ¢&WGW&âG'VS°¢Ğ ¢–çBvWBö7W'&VçEÆ•F–ÖTÖ–çWFW2°¢f–æÂ–çB6öçG&öÆÆW$Ö–çWFW2ÒövÖT6öçG&öÆÆW"æ7W'&VçEÆ•F–ÖTÖ–çWFW3° ¢–b†6öçG&öÆÆW$Ö–çWFW2â’°¢&WGW&â6öçG&öÆÆW$Ö–çWFW3°¢Ğ ¢f–æÂ–çB6W76–öäÖ–çWFW2ÒFFUF–ÖRææ÷r‚¢æF–ffW&Væ6R…÷6W76–öå7F'FVDB¢æ–äÖ–çWFW3° ¢&WGW&â†vÖRçÆ•F–ÖU6V6öæG2âòc’²6W76–öäÖ–çWFW3°¢Ğ ¢gWGW&SÇfö–Câ÷W'6—7E6W76–öâ‚’7–æ2°¢–b…÷6W76–öåW'6—7FVB’&WGW&ã°¢÷6W76–öåW'6—7FVBÒG'VS°¢f–æÂVæFVDBÒFFUF–ÖRææ÷r‚“°¢v—BöFF&6RæFDvÖUÆ•F–ÖR€¢vÖT–C¢vÖRæ–BÀ¢6W76–öå6V6öæG3¢VæFVDBæF–ffW&Væ6R…÷6W76–öå7F'FVDB’æ–å6V6öæG2À¢6Æ÷6VDC¢VæFVDBÀ¢“°¢Ğ ¢gWGW&SÇfö–CâöÆöu6W76–öä6Æ÷6VB‚’7–æ2°¢–b…÷6W76–öä6Æ÷6VDÆövvVB’°¢&WGW&ã°¢Ğ ¢÷6W76–öä6Æ÷6VDÆövvVBÒG'VS° ¢v—B÷W'6—7E6W76–öâ‚“° ¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆötvÖT6Æ÷6VB€¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢6W76–öäGW&F–öäÖ–çWFW3¢FFUF–ÖRææ÷r‚¢æF–ffW&Væ6R…÷6W76–öå7F'FVDB¢æ–äÖ–çWFW2À¢“°¢Ğ ¢gWGW&SÇfö–Câö†æFÆTÖVçT7F–öâ„'V–ÆD6öçFW‡B6öçFW‡BÂ7G&–ærfÇVR’7–æ2°¢7v—F6‚‡fÇVR’°¢66Rw6fU÷7FFRs ¢v—Bö÷Vå6fU7FFW2†6öçFW‡BÂÖöFS¢6fU7FFW4ÖöFRç6fR“°¢'&V³° ¢66RvÆöE÷7FFRs ¢v—Bö÷Vå6fU7FFW2†6öçFW‡BÂÖöFS¢6fU7FFW4ÖöFRæÆöB“°¢'&V³°¢66Rw67&VVç6†÷Bs ¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆöu67&VVç6†÷B€¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢“° ¢–b‚6öçFW‡BæÖ÷VçFVB’&WGW&ã° ¢÷6†÷t7F–öäÖW76vR†6öçFW‡BÂt6GW&&Vv—7G&FVâÆ&—L:6÷&r“°¢'&V³°¢66Rv6†ævUög&ÖRs ¢v—Bæf–vF÷"æöb†6öçFW‡B’çW6‚€¢ÖFW&–ÅvU&÷WFR†'V–ÆFW#¢…ò’Óâg&ÖW5vR†vÖS¢vÖR’’À¢“°¢v—B÷&VÆöE6VÆV7FVDg&ÖR‚“°¢'&V³°¢66Rv÷Våö¦÷W&æÂs ¢æf–vF÷"æöb€¢6öçFW‡BÀ¢’çW6‚„ÖFW&–ÅvU&÷WFR†'V–ÆFW#¢…ò’Óâ¦÷W&æÅvR†vÖS¢vÖR’’“°¢'&V³°¢66Rv÷Vå÷7FG2s ¢÷6†÷t7F–öäÖW76vR†6öçFW‡BÂt'&—"W7FL:×7F–62r“°¢'&V³°¢66RvÖVÖ÷'•ö–ç7V7F÷"s ¢–b‚övÖT6öçG&öÆÆW"æ—4GF6†VB’°¢÷6†÷t7F–öäÖW76vR†6öçFW‡BÂtVÂV×VÆF÷"FöFl:ÖæòW7L:Æ—7Fòâr“°¢'&V³°¢Ğ ¢v—Bæf–vF÷"æöb†6öçFW‡B’çW6ƒÇfö–Câ€¢ÖFW&–ÅvU&÷WFR€¢'V–ÆFW#¢…ò’ÓâÖVÖ÷'”–ç7V7F÷%vR†6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"’À¢’À¢“°¢'&V³°¢66Rw6WGF–æw2s ¢v—Bö÷VäV×VÆF÷%6WGF–æw2†6öçFW‡B“°¢'&V³°¢66RvW†—Bs ¢v—B÷&WVW7DW†—B†6öçFW‡B“°¢'&V³°¢Ğ¢Ğ ¢gWGW&SÇfö–Câö÷VäV×VÆF÷%6WGF–æw2„'V–ÆD6öçFW‡B6öçFW‡B’7–æ2°¢f–æÂö¶VÖöävÖU&öf–ÆRö¶VÖöå&öf–ÆRĞ¢ö¶VÖöävÖU&öf–ÆRæg&öÔvÖT–FVçF—G’€¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢“° ¢f–æÂ&VfW&Væ6W2Òv—Bæf–vF÷"æöb†6öçFW‡B’çW6ƒÄV×VÆF÷%&VfW&Væ6W3â€¢ÖFW&–ÅvU&÷WFR€¢'V–ÆFW#¢…ò’ÓâV×VÆF÷%6WGF–æw5vR€¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢7W÷'G4vÖT&÷”÷F–öç3 ¢6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’ÇÀ¢6÷&TÆöFW"æ—4v&&öÒ†vÖRç&öÕF‚’À¢7W÷'G56æW4÷F–öç3¢6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚’À¢7W÷'G4æG4÷F–öç3¢6÷&TÆöFW"æ—4æG5&öÒ†vÖRç&öÕF‚’À¢7W÷'G4v&gVÆÇ67&VVã¢6÷&TÆöFW"æ—4v&&öÒ†vÖRç&öÕF‚’À¢7W÷'G4vÖT&÷”gVÆÇ67&VVã¢6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’À¢–æ—F–Å&VfW&Væ6W3¢÷&VfW&Væ6W2À¢6fU7FFU6W'f–6S¢6fU7FFU6W'f–6R€¢vÖT–C¢vÖRæ–BÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢’À¢7V6–ÄWfVçG57V'F—FÆS¢7v—F6‚‡ö¶VÖöå&öf–ÆRçfW'6–öâ’°¢ö¶VÖöävÖUfW'6–öâævöÆBÇÂö¶VÖöävÖUfW'6–öâç6–ÇfW"Óà¢tFW6l:ÖòFR&ö¦ò+rö¼:–Ööâf&–ö6öÆ÷"rÀ¢ö¶VÖöävÖUfW'6–öâæ7'—7FÂÓà¢tFW6l:ÖòFR&ö¦ò+ru2&ÆÂ+r6VÆV&’rÀ¢ö¶VÖöävÖUfW'6–öâç'V'’ÇÂö¶VÖöävÖUfW'6–öâç6†—&RÓà¢uF–6¶WB\;6â+rÆF–2ôÆF–÷2rÀ¢ö¶VÖöävÖUfW'6–öâæVÖW&ÆBÓà¢tÖWrÂFV÷‡—2ÂÇVv–Â†òÔö‚’ö¼:–Ööâ\;6ârÀ¢ö¶VÖöävÖUfW'6–öâæf—&U&VBÇÂö¶VÖöävÖUfW'6–öâæÆVdw&VVâÓà¢tFV÷‡—2ÂÇVv–’†òÔö‚rÀ¢òÓâtWfVçF÷2öf–6–ÆW2rÀ¢ÒÀ¢öä÷Vå7V6–ÄWfVçG3 ¢÷7W÷'G57V6–ÄWfVçG2‡ö¶VÖöå&öf–ÆRçfW'6–öâ¢ò‚’7–æ2°¢f–æÂ&VE7FFRÒv—BöÆöE&VE&Wv&E7FFR‚“°¢–b‚6öçFW‡BæÖ÷VçFVB’&WGW&ã°¢v—Bæf–vF÷"æöb†6öçFW‡B’çW6ƒÇfö–Câ€¢ÖFW&–ÅvU&÷WFR€¢'V–ÆFW#¢…ò’Óâ7V6–ÄWfVçG5vR€¢fW'6–öã¢ö¶VÖöå&öf–ÆRçfW'6–öâÀ¢–ç7V7Dw4&ÆÃ¢övÖT6öçG&öÆÆW"æ–ç7V7Dw4&ÆÂÀ¢7F—fFTw4&ÆÃ¢övÖT6öçG&öÆÆW"æ7F—fFTw4&ÆÂÀ¢–ç7V7DvVã4WfVçC¢övÖT6öçG&öÆÆW"æ–ç7V7DvVã4WfVçBÀ¢7F—fFTvVã4WfVçC¢övÖT6öçG&öÆÆW"æ7F—fFTvVã4WfVçBÀ¢&VEf–7F÷&–W3¢&VE7FFRâCÀ¢6Æ–ÖVE&VE&Wv&G3¢&VE7FFRâC"À¢–ç7V7DvVã%&VE&Wv&C ¢övÖT6öçG&öÆÆW"æ–ç7V7DvVã%&VE&Wv&BÀ¢6Æ–ÔvVã%&VE&Wv&C¢ö6Æ–ÔvVã%&VE&Wv&BÀ¢’À¢’À¢“°¢Ğ¢¢çVÆÂÀ¢öå&W7F'C¢övÖT6öçG&öÆÆW"ç&W7F'BÀ¢öå6fU7FFS¢‡6Æ÷BÂF—FÆR’7–æ2°¢f–æÂ6fVBÒv—BövÖT6öçG&öÆÆW"ç6fU7FFR€¢6Æ÷C¢6Æ÷BÀ¢F—FÆS¢F—FÆRÀ¢“°¢–b‡6fVB’°¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆöu6fU7FFR€¢6Æ÷C¢6Æ÷BÀ¢F—FÆS¢F—FÆRÀ¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢“°¢Ğ¢&WGW&â6fVC°¢ÒÀ¢öäÆöE7FFS¢‡6Æ÷B’7–æ2°¢f–æÂÆöFVBÒv—BövÖT6öçG&öÆÆW"æÆöE7FFR‡6Æ÷B“°¢–b†ÆöFVB’°¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆötÆöE7FFR€¢6Æ÷C¢6Æ÷BÀ¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢“°¢Ğ¢&WGW&âÆöFVC°¢ÒÀ¢’À¢’À¢“°¢–b‡&VfW&Væ6W2ÒçVÆÂbbÖ÷VçFVB’°¢6WE7FFR‚‚’Óâ÷&VfW&Væ6W2Ò&VfW&Væ6W2“°¢v—BöÇ”F—7Æ•&VfW&Væ6W2‡&VfW&Væ6W2“°¢Ğ¢Ğ ¢&ööÂ÷7W÷'G57V6–ÄWfVçG2…ö¶VÖöävÖUfW'6–öâfW'6–öâ’°¢&WGW&âfW'6–öâÓÒö¶VÖöävÖUfW'6–öâævöÆBÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâç6–ÇfW"ÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâæ7'—7FÂÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâç'V'’ÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâç6†—&RÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâæVÖW&ÆBÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâæf—&U&VBÇÀ¢fW'6–öâÓÒö¶VÖöävÖUfW'6–öâæÆVdw&VVã°¢Ğ ¢gWGW&SÂ†–çBÂ6WCÅ7G&–æsâ“âöÆöE&VE&Wv&E7FFR‚’7–æ2°¢f–æÂWfVçG2Òv—BöFF&6RævWE&öw&W74WfVçG4'”vÖR†vÖRæ–B“°¢f"f–7F÷&–W2Ò°¢f–æÂ6Æ–ÖVBÒÅ7G&–æsç·Ó°¢f÷"†f–æÂWfVçB–âWfVçG2’°¢G'’°¢f–æÂÖWFFFÒ§6öäFV6öFR†WfVçBæÖWFFF§6öâóòrr“°¢–b†ÖWFFF—2Ö’6öçF–çVS°¢–b†WfVçBæWfVçEG—RÓÒwG&–æW%öFVfVFVBrb`¢ÖWFFF²wG&–æW$6Æ74–BuÓòçFõ7G&–ær‚’ÓÒsc2r’°¢f–7F÷&–W2²³°¢Ğ¢–b†WfVçBæWfVçEG—RÓÒw&VE÷&Wv&E÷&V6V—fVBr’°¢f–æÂ¶W’ÒÖWFFF²w&Wv&D¶W’uÓòçFõ7G&–ær‚“°¢–b†¶W’ÒçVÆÂ’6Æ–ÖVBæFB†¶W’“°¢Ğ¢Ò6F6‚…ò’·Ğ¢Ğ¢&WGW&â‡f–7F÷&–W2Â6Æ–ÖVB“°¢Ğ ¢gWGW&SÄvVã%&VE&Wv&E&W7VÇCâö6Æ–ÔvVã%&VE&Wv&B€¢vVã%&VE&Wv&B&Wv&BÀ¢’7–æ2°¢f–æÂ7FFRÒv—BöÆöE&VE&Wv&E7FFR‚“°¢–b‡7FFRâCÂ&Wv&Bç&WV—&VEf–7F÷&–W2ÇÂ7FFRâC"æ6öçF–ç2‡&Wv&BæWfVçD¶W’’’°¢&WGW&â6öç7BvVã%&VE&Wv&E&W7VÇB‡7FGW3¢vVã%&VE&Wv&E7FGW2çVç7W÷'FVB“°¢Ğ¢f–æÂ&W7VÇBÒv—BövÖT6öçG&öÆÆW"æ6Æ–ÔvVã%&VE&Wv&B‡&Wv&B“°¢–b‚&W7VÇBç7V66VVFVB’&WGW&â&W7VÇC°¢v—BöFF&6Ræ–ç6W'E&öw&W74WfVçB€¢vÖU&öw&W74WfVçG46ö×æ–öâæ–ç6W'B€¢vÖT–C¢vÖRæ–BÀ¢7&VFVDC¢FFUF–ÖRææ÷r‚’À¢WfVçEG—S¢w&VE÷&Wv&E÷&V6V—fVBrÀ¢F—FÆS¢u&V6–&œ;2G·&Wv&BææÖWÒf&–ö6öÆ÷"rÀ¢FW67&—F–öã¢fÇVR€¢u&VÖ–ò÷"G·&Wv&Bç&WV—&VEf–7F÷&–W7Òf–7F÷&–G·&Wv&Bç&WV—&VEf–7F÷&–W2ÓÒòrr¢w2wÒ6öçG&&ö¦òârÀ¢’À¢ÖWFFF§6öã¢fÇVR†§6öäVæ6öFRƒÅ7G&–ærÂG–æÖ–3ç°¢w&Wv&D¶W’s¢&Wv&BæWfVçD¶W’À¢w7V6–W4–Bs¢&Wv&Bç7V6–W4–BÀ¢v—56†–ç’s¢G'VRÀ¢w&WV—&VEf–7F÷&–W2s¢&Wv&Bç&WV—&VEf–7F÷&–W2À¢wÆ•F–ÖTÖ–çWFW2s¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢Ò’’À¢’À¢“°¢&WGW&â&W7VÇC°¢Ğ ¢gWGW&SÇfö–Câ÷&WVW7DW†—B„'V–ÆD6öçFW‡B6öçFW‡B’7–æ2°¢–b…ö—46Æ÷6–ærÇÂöW†—DF–Æöt÷Vâ’&WGW&ã°¢öW†—DF–Æöt÷VâÒG'VS° ¢f–æÂf—7VÅF†VÖRÒôV×VÆF÷%f—7VÅF†VÖRæf÷$vÖR†vÖR“°¢f–æÂ6Æ÷VDf–Æ&ÆRÒ&Vbç&VB†WF…W6W%&÷f–FW"’çfÇVRÒçVÆÃ°¢f–æÂW†—D7F–öâÒv—B6†÷tF–ÆösÅôW†—DvÖT7F–öãâ€¢6öçFW‡C¢6öçFW‡BÀ¢'V–ÆFW#¢†F–Æöt6öçFW‡B’ÓâôW†—DvÖTF–Æör€¢vÖS¢vÖRÀ¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢'G•7V6–W4–G3¢÷'G•7V6–W4–G2À¢6Æ÷VDf–Æ&ÆS¢6Æ÷VDf–Æ&ÆRÀ¢’À¢“°¢öW†—DF–Æöt÷VâÒfÇ6S° ¢–b†W†—D7F–öâÓÒçVÆÂÇÀ¢W†—D7F–öâÓÒôW†—DvÖT7F–öâæ¶VWÆ––ærÇÀ¢6öçFW‡BæÖ÷VçFVB’°¢&WGW&ã°¢Ğ¢v—Bö6Æ÷6TæE÷€¢WÆöD6Æ÷VC¢W†—D7F–öâÓÒôW†—DvÖT7F–öâæ6Æ÷VD&6·WÀ¢“°¢Ğ ¢gWGW&SÇfö–Câö6Æ÷6TæE÷‡·&WV—&VB&ööÂWÆöD6Æ÷VGÒ’7–æ2°¢–b…ö—46Æ÷6–ær’&WGW&ã°¢f–æÂæf–vF÷"Òæf–vF÷"æöb‡F†—2æ6öçFW‡B“°¢f–æÂV×VÆF÷%&÷WFRÒÖöFÅ&÷WFRæöb‡F†—2æ6öçFW‡B“°¢f–æÂÖW76VævW"Ò66fföÆDÖW76VævW"æöb‡F†—2æ6öçFW‡B“°¢6WE7FFR‚‚’°¢ö—46Æ÷6–ærÒG'VS°¢öÆÆ÷u÷ÒfÇ6S°¢ö6Æ÷6–æu7FGW2ÒtwV&FæFò'F–FÆö6Î(
+bs°¢Ò“° ¢–b‚6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚’b`¢÷&VfW&Væ6W2æWFõ6fTöäW†—B’°¢v—BövÖT6öçG&öÆÆW"ç6fU7FFR€¢6Æ÷C¢6fU7FFU6W'f–6RæWFõ6fU6Æ÷BÀ¢F—FÆS¢twV&FFòWFöÜ:F–6òrÀ¢“°¢Ğ¢v—BövÖT6öçG&öÆÆW"ç6fU7&Ò‚“°¢7G&–æsò6Æ÷VDW'&÷#°¢f–æÂW6W"Ò&Vbç&VB†WF…W6W%&÷f–FW"’çfÇVS°¢–b‡WÆöD6Æ÷VBbbW6W"ÒçVÆÂ’°¢–b†Ö÷VçFVB’°¢6WE7FFR‚‚’Óâö6Æ÷6–æu7FGW2Òu7V&–VæFò&WG&ô‡V"6Æ÷VN(
+br“°¢Ğ¢G'’°¢v—B6Æ÷VE6fT6ö÷&F–æF÷"€¢WF…6W'f–6S¢&Vbç&VB†vöövÆTWF…6W'f–6U&÷f–FW"’À¢’çWÆöDvÖR€¢vÖT–C¢vÖRæ–BÀ¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢&WVW7DWF†÷&—¦F–öä–dæVVFVC¢fÇ6RÀ¢“°¢Ò6F6‚†W'&÷"’°¢6Æ÷VDW'&÷"ÒW'&÷"çFõ7G&–ær‚“°¢Ğ¢Ğ¢–b†Ö÷VçFVB’6WE7FFR‚‚’Óâö6Æ÷6–æu7FGW2Òt6W'&æFò§VVvş(
+br“°¢f–æÂG&6¶W"Ò÷ö¶VÖöä¦÷W&æÅG&6¶W#°¢–b‡G&6¶W"ÒçVÆÂ’v—BG&6¶W"ç7F÷‚“°¢v—BöÆöu6W76–öä6Æ÷6VB‚“° ¢–b‚Ö÷VçFVB’&WGW&ã° ¢v—B÷v—Df÷$Fõ&W7VÖR‚“°¢–b‚Ö÷VçFVB’&WGW&ã° ¢v—Bv–FvWG4&–æF–æræ–ç7Fæ6RæVæDödg&ÖS°¢–b‚Ö÷VçFVB’&WGW&ã° ¢–b†V×VÆF÷%&÷WFRÒçVÆÂbbV×VÆF÷%&÷WFRæ—47F—fR’°¢æf–vF÷"ç÷VçF–Â‚‡&÷WFR’Óâ&÷WFRÓÒV×VÆF÷%&÷WFR“°¢6WE7FFR‚‚’ÓâöÆÆ÷u÷ÒG'VR“°¢v—Bv–FvWG4&–æF–æræ–ç7Fæ6RæVæDödg&ÖS°¢–b†Ö÷VçFVBbbV×VÆF÷%&÷WFRæ—47W'&VçB’æf–vF÷"ç÷‚“°¢ÒVÇ6R°¢6WE7FFR‚‚’ÓâöÆÆ÷u÷ÒG'VR“°¢v—Bv–FvWG4&–æF–æræ–ç7Fæ6RæVæDödg&ÖS°¢–b†Ö÷VçFVB’æf–vF÷"ç÷‚“°¢Ğ ¢–b†6Æ÷VDW'&÷"ÒçVÆÂ’°¢ÖW76VævW"ç6†÷u6æ6´&"€¢6æ6´&"€¢6öçFVçC¢FW‡B€¢tÆ'F–FVVL;2wV&FFÆö6ÆÖVçFRÂW&òæò6RVFò7V&—"ÆçV&S¢F6Æ÷VDW'&÷"rÀ¢’À¢’À¢“°¢Ğ¢Ğ ¢gWGW&SÇfö–Câ÷v—Df÷$Fõ&W7VÖR‚’7–æ2°¢–b…v–FvWG4&–æF–æræ–ç7Fæ6RæÆ–fV7–6ÆU7FFRÓÒÆ–fV7–6ÆU7FFRç&W7VÖVB’°¢&WGW&ã°¢Ğ ¢f–æÂ6ö×ÆWFW"Ò6ö×ÆWFW#Çfö–Câ‚“°¢ÆFRf–æÂÆ–fV7–6ÆTÆ—7FVæW"Æ—7FVæW#°¢Æ—7FVæW"ÒÆ–fV7–6ÆTÆ—7FVæW"€¢öå&W7VÖS¢‚’°¢–b‚6ö×ÆWFW"æ—46ö×ÆWFVB’6ö×ÆWFW"æ6ö×ÆWFR‚“°¢Æ—7FVæW"æF—7÷6R‚“°¢ÒÀ¢“°¢v—B6ö×ÆWFW"ægWGW&RçF–ÖV÷WB€¢6öç7BGW&F–öâ‡6V6öæG3¢"’À¢öåF–ÖV÷WC¢‚’ÓâÆ—7FVæW"æF—7÷6R‚’À¢“°¢Ğ ¢gWGW&SÇfö–Câö÷Vå6fU7FFW2€¢'V–ÆD6öçFW‡B6öçFW‡BÂ°¢&WV—&VB6fU7FFW4ÖöFRÖöFRÀ¢Ò’7–æ2°¢f–æÂ6fU7FFU6W'f–6R6W'f–6RÒ6fU7FFU6W'f–6R€¢vÖT–C¢vÖRæ–BÀ¢&öÕFƒ¢vÖRç&öÕF‚À¢“° ¢v—Bæf–vF÷"æöb†6öçFW‡B’çW6ƒÆ&ööÃâ€¢ÖFW&–ÅvU&÷WFR€¢'V–ÆFW#¢…ò’Óâ6fU7FFW5vR€¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢ÖöFS¢ÖöFRÀ¢6W'f–6S¢6W'f–6RÀ¢öå6fS¢†–çB6Æ÷BÂ7G&–ærF—FÆR’7–æ2°¢f–æÂ&ööÂ6fVBÒv—BövÖT6öçG&öÆÆW"ç6fU7FFR€¢6Æ÷C¢6Æ÷BÀ¢F—FÆS¢F—FÆRÀ¢“° ¢–b‡6fVB’°¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆöu6fU7FFR€¢6Æ÷C¢6Æ÷BÀ¢F—FÆS¢F—FÆRÀ¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢“°¢Ğ ¢&WGW&â6fVC°¢ÒÀ¢öäÆöC¢†–çB6Æ÷B’7–æ2°¢f–æÂ&ööÂÆöFVBÒv—BövÖT6öçG&öÆÆW"æÆöE7FFR‡6Æ÷B“° ¢–b†ÆöFVB’°¢v—Bö¦÷W&æÄWfVçE6W'f–6RæÆötÆöE7FFR€¢6Æ÷C¢6Æ÷BÀ¢Æ•F–ÖTÖ–çWFW3¢ö7W'&VçEÆ•F–ÖTÖ–çWFW2À¢“°¢Ğ ¢&WGW&âÆöFVC°¢ÒÀ¢6öæf—&Ô&Vf÷&T÷fW'w&—FS¢÷&VfW&Væ6W2æ6öæf—&Ô&Vf÷&T÷fW'w&—FRÀ¢’À¢’À¢“°¢Ğ ¢fö–B÷6†÷t7F–öäÖW76vR„'V–ÆD6öçFW‡B6öçFW‡BÂ7G&–ærÖW76vR’°¢66fföÆDÖW76VævW"æöb€¢6öçFW‡BÀ¢’ç6†÷u6æ6´&"…6æ6´&"†6öçFVçC¢FW‡B†ÖW76vR’’“°¢Ğ ¢÷fW'&–FP¢fö–BF—7÷6R‚’°¢v–FvWG4&–æF–æræ–ç7Fæ6Rç&VÖ÷fTö'6W'fW"‡F†—2“°¢ö†VFW%&Vg&W6…F–ÖW#òæ6æ6VÂ‚“°¢övÖT6öçG&öÆÆW"ç&W6WD–çWB‚“°¢f–æÂG&6¶W"Ò÷ö¶VÖöä¦÷W&æÅG&6¶W#°¢–b‡G&6¶W"ÒçVÆÂ’Væv—FVB‡G&6¶W"ç7F÷‚’“°¢Væv—FVB…öÆöu6W76–öä6Æ÷6VB‚’“°¢–b…ö—4æG&ö–E6æW2’°¢Væv—FVB€¢7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BÄFWf–6T÷&–VçFF–öãå°¢FWf–6T÷&–VçFF–öâç÷'G&—EWÀ¢Ò’À¢“°¢ÒVÇ6R°¢Væv—FVB…7—7FVÔ6‡&öÖRç6WE&VfW'&VD÷&–VçFF–öç2†6öç7BµÒ’“°¢Ğ¢Væv—FVB…v¶VÆö6µÇW2æF—6&ÆR‚’“°¢Væv—FVB…7—7FVÔ6‡&öÖRç6WDVæ&ÆVE7—7FVÕT”ÖöFR…7—7FVÕV”ÖöFRæVFvUFôVFvR’“°¢7WW"æF—7÷6R‚“°¢Ğ ¢v–FvWBöæG5F÷V6…7W&f6R‡°¢&WV—&VBF÷V&ÆRv–GF‚À¢&WV—&VBF÷V&ÆR†V–v‡BÀ¢Ò’°¢fö–BWFFUF÷V6‚…ö–çFW$WfVçBWfVçB’°¢övÖT6öçG&öÆÆW"ç6WEF÷V6…7FFR€¢ƒ¢‚†WfVçBæÆö6Å÷6—F–öâæG‚òv–GF‚’¢#SR¢ç&÷VæB‚¢æ6Æ×ƒÂ#SR¢çFô–çB‚’À¢“¢‚†WfVçBæÆö6Å÷6—F–öâæG’ò†V–v‡B’¢“¢ç&÷VæB‚¢æ6Æ×ƒÂ“¢çFô–çB‚’À¢&W76VC¢G'VRÀ¢“°¢Ğ ¢&WGW&âÆ—7FVæW"€¢&V†f–÷#¢†—EFW7D&V†f–÷"æ÷VRÀ¢öåö–çFW$F÷vã¢†WfVçB’°¢–b…öæG5F÷V6…ö–çFW"ÒçVÆÂ’&WGW&ã°¢öæG5F÷V6…ö–çFW"ÒWfVçBçö–çFW#°¢WFFUF÷V6‚†WfVçB“°¢ÒÀ¢öåö–çFW$Ö÷fS¢†WfVçB’°¢–b…öæG5F÷V6…ö–çFW"ÒWfVçBçö–çFW"’&WGW&ã°¢WFFUF÷V6‚†WfVçB“°¢ÒÀ¢öåö–çFW%W¢†WfVçB’°¢–b…öæG5F÷V6…ö–çFW"ÒWfVçBçö–çFW"’&WGW&ã°¢övÖT6öçG&öÆÆW"ç&VÆV6UF÷V6‚‚“°¢öæG5F÷V6…ö–çFW"ÒçVÆÃ°¢ÒÀ¢öåö–çFW$6æ6VÃ¢†WfVçB’°¢–b…öæG5F÷V6…ö–çFW"ÒWfVçBçö–çFW"’&WGW&ã°¢övÖT6öçG&öÆÆW"ç&VÆV6UF÷V6‚‚“°¢öæG5F÷V6…ö–çFW"ÒçVÆÃ°¢ÒÀ¢“°¢Ğ ¢v–FvWBö'V–ÆE÷'G&—D6&DÆ–÷WB‡°¢&WV—&VB&÷„6öç7G&–çG26öç7G&–çG2À¢&WV—&VBv–FvWBvÖUf–WrÀ¢&WV—&VB÷'G&—DvÖTg&ÖRg&ÖRÀ¢&WV—&VB&ööÂ—4v&À¢&WV—&VB&ööÂ—4v&2À¢&WV—&VBôV×VÆF÷%f—7VÅF†VÖRf—7VÅF†VÖRÀ¢Ò’°¢f–æÂÆWGFRÒõ÷'G&—D6&EÆWGFRæf÷$g&ÖR†g&ÖRæ–B“°¢f–æÂv–GF‚Ò6öç7G&–çG2æÖ…v–GFƒ°¢f–æÂ†V–v‡BÒ6öç7G&–çG2æÖ„†V–v‡C°¢f–æÂ67&VVåv–GF‚Òv–GF‚¢ã“#°¢f–æÂ67&VVä†V–v‡BÒ67&VVåv–GF‚ò†—4v&ò2ò"¢ò’“°¢f–æÂ67&VVå&V7BÒ&V7Bæg&öÔÅEt‚€¢‡v–GF‚Ò67&VVåv–GF‚’ò"À¢†V–v‡B¢ã‚À¢67&VVåv–GF‚À¢67&VVä†V–v‡BÀ¢“°¢f–æÂGE6—¦RÒÖF‚æÖ–âƒ3‚¢÷&VfW&Væ6W2ç6—¦U66ÆRÂv–GF‚¢ã“°¢f–æÂ7F–öå6—¦RÒÖF‚æÖ–âƒS"¢÷&VfW&Væ6W2ç6—¦U66ÆRÂv–GF‚¢ãR“°¢f–æÂ6÷fW$F–ÖWFW"ÒÖF‚æÖ–â‡v–GF‚¢ã’Â†V–v‡B¢ã“R“°¢f–æÂ6öçG&öÇ5’Ò†V–v‡B¢†—4v&òãS’¢ãs“°¢f–æÂ6÷fW%F‚Ò6÷fW$†VÇW"ævWD6÷fW"†vÖRçF—FÆRÂvÖRæ6öç6öÆR“°¢f–æÂ6öç6öÆTÆövòÒ—4v&¢ò&WG&ô‡V$6öç6öÆUG—RævÖT&÷”Gfæ6P¢¢—4v&0¢ò&WG&ô‡V$6öç6öÆUG—RævÖT&÷”6öÆ÷ ¢¢&WG&ô‡V$6öç6öÆUG—RævÖT&÷“° ¢&WGW&â6öÆ÷&VD&÷‚€¢6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢6†–ÆC¢7F6²€¢6Æ—&V†f–÷#¢6Æ—ææöæRÀ¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ€¢6†–ÆC¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢w&F–VçC¢Æ–æV$w&F–VçB€¢&Vv–ã¢Æ–væÖVçBçF÷ÆVgBÀ¢VæC¢Æ–væÖVçBæ&÷GFöÕ&–v‡BÀ¢6öÆ÷'3¢·ÆWGFRçF÷ÂÆWGFRæÖ–FFÆRÂÆWGFRæ&÷GFöÕÒÀ¢7F÷3¢6öç7B³ÂãC‚ÂÒÀ¢’À¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"ƒ#"’À¢&÷&FW#¢&÷&FW"æÆÂ†6öÆ÷#¢ÆWGFRæ&÷&FW"Âv–GFƒ¢‚’À¢&÷…6†F÷s¢6öç7B°¢&÷…6†F÷r€¢6öÆ÷#¢6öÆ÷'2æ&Æ6³SBÀ¢&ÇW%&F—W3¢"À¢öfg6WC¢öfg6WBƒÂR’À¢’À¢ÒÀ¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ã3RÀ¢&–v‡C¢v–GF‚¢ã3RÀ¢F÷¢†V–v‡B¢ã#RÀ¢†V–v‡C¢†V–v‡B¢ãRÀ¢6†–ÆC¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢6öÆ÷#¢ÆWGFRæ†VFW"çv—F…fÇVW2†Ç†¢ãS‚’À¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"ƒB’À¢&÷&FW#¢&÷&FW"æÆÂ€¢6öÆ÷#¢ÆWGFRæÆ–æRçv—F…fÇVW2†Ç†¢ãƒR’À¢v–GFƒ¢"À¢’À¢’À¢’À¢’À¢òòÆçFÆÆÖçF–VæRVÂÖ—6Öòæ6†ò;§F–ÂFVÂÖöFòfW'F–6Âæ÷&ÖÂà¢÷6—F–öæVB€¢ÆVgC¢67&VVå&V7BæÆVgBÀ¢F÷¢67&VVå&V7BçF÷À¢v–GFƒ¢67&VVå&V7Bçv–GF‚À¢†V–v‡C¢67&VVå&V7Bæ†V–v‡BÀ¢6†–ÆC¢–væ÷&Uö–çFW"€¢6†–ÆC¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢6öÆ÷#¢6öÆ÷'2æ&Æ6²À¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"ƒB’À¢&÷…6†F÷s¢6öç7B°¢&÷…6†F÷r€¢6öÆ÷#¢6öÆ÷'2æ&Æ6³CRÀ¢&ÇW%&F—W3¢‚À¢öfg6WC¢öfg6WBƒÂB’À¢’À¢ÒÀ¢’À¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢67&VVå&V7BæÆVgBÀ¢F÷¢67&VVå&V7BçF÷À¢v–GFƒ¢67&VVå&V7Bçv–GF‚À¢†V–v‡C¢67&VVå&V7Bæ†V–v‡BÀ¢6†–ÆC¢6öÆ÷&VD&÷‚†6öÆ÷#¢6öÆ÷'2æ&Æ6²Â6†–ÆC¢vÖUf–Wr’À¢’À¢÷6—F–öæVB€¢ÆVgC¢67&VVå&V7BæÆVgBÒ2À¢F÷¢67&VVå&V7BçF÷Ò2À¢v–GFƒ¢67&VVå&V7Bçv–GF‚²bÀ¢†V–v‡C¢67&VVå&V7Bæ†V–v‡B²bÀ¢6†–ÆC¢–væ÷&Uö–çFW"€¢6†–ÆC¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"ƒB’À¢&÷&FW#¢&÷&FW"æÆÂ†6öÆ÷#¢ÆWGFRæÆ–æRÂv–GFƒ¢2’À¢’À¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ãBÀ¢F÷¢†V–v‡B¢ã#RÀ¢v–GFƒ¢6÷fW$F–ÖWFW"À¢†V–v‡C¢6÷fW$F–ÖWFW"À¢6†–ÆC¢7F6²€¢f—C¢7F6´f—BæW‡æBÀ¢6†–ÆG&Vã¢°¢6öç7BFV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢6†S¢&÷…6†Ræ6—&6ÆRÀ¢6öÆ÷#¢6öÆ÷'2æ&Æ6²À¢&÷…6†F÷s¢°¢&÷…6†F÷r†6öÆ÷#¢6öÆ÷'2æ&Æ6³3‚Â&ÇW%&F—W3¢b’À¢ÒÀ¢’À¢’À¢6Æ—÷fÂ€¢6†–ÆC¢6öÆ÷&VD&÷‚€¢6öÆ÷#¢ÆWGFRç7FvRÀ¢6†–ÆC¢6÷fW%F‚ÓÒçVÆÀ¢ò–6öâ€¢–6öç2ç7÷'G5öW7÷'G5÷&÷VæFVBÀ¢6öÆ÷#¢f—7VÅF†VÖRæ66VçBÀ¢6—¦S¢#BÀ¢¢¢–ÖvRæ76WB€¢6÷fW%F‚À¢f—C¢&÷„f—Bæ6÷fW"À¢W'&÷$'V–ÆFW#¢…òÂõòÂõõò’Óâ–6öâ€¢–6öç2ç7÷'G5öW7÷'G5÷&÷VæFVBÀ¢6öÆ÷#¢f—7VÅF†VÖRæ66VçBÀ¢6—¦S¢#BÀ¢’À¢’À¢’À¢’À¢–væ÷&Uö–çFW"€¢6†–ÆC¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢6†S¢&÷…6†Ræ6—&6ÆRÀ¢&÷&FW#¢&÷&FW"æÆÂ†6öÆ÷#¢ÆWGFRæÆ–æRÂv–GFƒ¢2’À¢’À¢’À¢’À¢ÒÀ¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ã#2À¢v–GFƒ¢v–GF‚¢ãS’À¢F÷¢†V–v‡B¢ãCrÀ¢†V–v‡C¢†V–v‡B¢ãcRÀ¢6†–ÆC¢f—GFVD&÷‚€¢Æ–væÖVçC¢Æ–væÖVçBæ6VçFW$ÆVgBÀ¢f—C¢&÷„f—Bç66ÆTF÷vâÀ¢6†–ÆC¢õ'G•7&—FW2€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢—4v&òÆWGFRç'G”66VçB¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢’À¢÷6—F–öæVB€¢&–v‡C¢v–GF‚¢ã2À¢F÷¢†V–v‡B¢ãSRÀ¢6†–ÆC¢G&ç6f÷&Òç66ÆR€¢66ÆS¢ãƒ"À¢6†–ÆC¢&WG&ô‡V%V–6´ÖVçR€¢öä7F–öã¢‡fÇVR’Óâö†æFÆTÖVçT7F–öâ†6öçFW‡BÂfÇVR’À¢æ6†÷$6†–ÆC¢–ÖvRæ76WB€¢ÆWGFRæVæW&w”76WBÀ¢v–GFƒ¢3"À¢†V–v‡C¢3"À¢f—C¢&÷„f—Bæ6öçF–âÀ¢f–ÇFW%VÆ—G“¢f–ÇFW%VÆ—G’ææöæRÀ¢’À¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ãSRÀ¢F÷¢6öçG&öÇ5’À¢6†–ÆC¢÷6—G’€¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢ôF—&V7F–öæÄ6öçG&öÂ€¢G—S¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢¶W•6—¦S¢GE6—¦RÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢’À¢’À¢’À¢÷6—F–öæVB€¢&–v‡C¢v–GF‚¢ãSRÀ¢F÷¢6öçG&öÇ5’²GE6—¦R¢ãCRÀ¢6†–ÆC¢÷6—G’€¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢&÷r€¢6†–ÆG&Vã¢°¢ôvÖT&÷”7F–öä'WGFöâ€¢6—¦S¢7F–öå6—¦RÀ¢Æ&VÃ¢÷&VfW&Væ6W2ç7v"òtr¢t"rÀ¢'WGFöä–C¢÷&VfW&Væ6W2ç7v"òö'WGFöä¢ö'WGFöä"À¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢6—¦VD&÷‚‡v–GFƒ¢v–GF‚¢ã#R’À¢ôvÖT&÷”7F–öä'WGFöâ€¢6—¦S¢7F–öå6—¦RÀ¢Æ&VÃ¢÷&VfW&Væ6W2ç7v"òt"r¢trÀ¢'WGFöä–C¢÷&VfW&Væ6W2ç7v"òö'WGFöä"¢ö'WGFöäÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢ÒÀ¢’À¢’À¢’À¢–b†—4v&’ââå°¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ã‚À¢F÷¢†V–v‡B¢ãSÀ¢6†–ÆC¢ôvÖT&÷•6†÷VÆFW$'WGFöâ€¢Æ&VÃ¢tÂrÀ¢'WGFöä–C¢ö'WGFöäÂÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢’À¢÷6—F–öæVB€¢&–v‡C¢v–GF‚¢ã‚À¢F÷¢†V–v‡B¢ãSÀ¢6†–ÆC¢ôvÖT&÷•6†÷VÆFW$'WGFöâ€¢Æ&VÃ¢u"rÀ¢'WGFöä–C¢ö'WGFöå"À¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢’À¢ÒÀ¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ã#À¢&–v‡C¢v–GF‚¢ã#À¢F÷¢†V–v‡B¢†—4v&òãƒ¢ãƒsR’À¢6†–ÆC¢&÷r€¢Ö–ä†—4Æ–væÖVçC¢Ö–ä†—4Æ–væÖVçBç76T&WGvVVâÀ¢6†–ÆG&Vã¢°¢ôvÖT&÷•7—7FVÔ'WGFöâ€¢v–GFƒ¢c‚À¢†V–v‡C¢#rÀ¢Æ&VÃ¢u4TÄT5BrÀ¢'WGFöä–C¢ö'WGFöå6VÆV7BÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢ôvÖT&÷•7—7FVÔ'WGFöâ€¢v–GFƒ¢c‚À¢†V–v‡C¢#rÀ¢Æ&VÃ¢u5D%BrÀ¢'WGFöä–C¢ö'WGFöå7F'BÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢’À¢ÒÀ¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ãSRÀ¢&–v‡C¢v–GF‚¢ãSRÀ¢F÷¢†V–v‡B¢ã"À¢6†–ÆC¢&÷r€¢Ö–ä†—4Æ–væÖVçC¢Ö–ä†—4Æ–væÖVçBç76T&WGvVVâÀ¢6†–ÆG&Vã¢°¢–b„6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’¢ôÆ–æµ7FGW46†—†Æ–æ´ÖævW#¢övÖT6öçG&öÆÆW"æÆ–æ´ÖævW"¢VÇ6P¢6öç7B6—¦VD&÷‚‡v–GFƒ¢“"’À¢6—¦VD&÷‚€¢v–GFƒ¢“"À¢†V–v‡C¢3"À¢6†–ÆC¢7VVD'WGFöâ€¢7VVD×VÇF—Æ–W#¢övÖT6öçG&öÆÆW"ç7VVD×VÇF—Æ–W"À¢öåF¢övÖT6öçG&öÆÆW"æ7–6ÆU7VVBÀ¢’À¢’À¢ÒÀ¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ã#RÀ¢&–v‡C¢v–GF‚¢ã#RÀ¢F÷¢67&VVå&V7Bæ&÷GFöÒ²†V–v‡B¢ã"À¢†V–v‡C¢†V–v‡B¢ãsRÀ¢6†–ÆC¢–væ÷&Uö–çFW"€¢6†–ÆC¢f—GFVD&÷‚€¢f—C¢&÷„f—Bç66ÆTF÷vâÀ¢6†–ÆC¢&WG&ô‡V$6öç6öÆTÆövò†6öç6öÆS¢6öç6öÆTÆövò’À¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢v–GF‚¢ãrÀ¢&–v‡C¢v–GF‚¢ãrÀ¢&÷GFöÓ¢†V–v‡B¢ã‚À¢6†–ÆC¢6öÇVÖâ€¢Ö–ä†—56—¦S¢Ö–ä†—56—¦RæÖ–âÀ¢6†–ÆG&Vã¢°¢6öçF–æW"††V–v‡C¢"Â6öÆ÷#¢ÆWGFRæÆ–æR’À¢6öç7B6—¦VD&÷‚††V–v‡C¢R’À¢FVfVÇEFW‡E7G–ÆR€¢7G–ÆS¢FW‡E7G–ÆR€¢6öÆ÷#¢ÆWGFRæ–æ²À¢föçE6—¦S¢À¢föçEvV–v‡C¢föçEvV–v‡BçsƒÀ¢’À¢6†–ÆC¢6öç7B&÷r€¢Ö–ä†—4Æ–væÖVçC¢Ö–ä†—4Æ–væÖVçBç76T&WGvVVâÀ¢6†–ÆG&Vã¢°¢FW‡B‚vFV&–Æ–FBr’À¢FW‡B‚w&W6—7FVæ6–r’À¢FW‡B‚w&WF—&Fr’À¢ÒÀ¢’À¢’À¢ÒÀ¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢÷fW'&–FP¢v–FvWB'V–ÆB„'V–ÆD6öçFW‡B6öçFW‡B’°¢f–æÂV×VÆF–öä6÷&R6÷&RÒ6÷&TÆöFW"æ6÷&Tf÷%&öÒ†vÖRç&öÕF‚“°¢f–æÂ7G&–æsò6÷&UF‚Ò6÷&TÆöFW"æf–æD6÷&UF‚†vÖRç&öÕF‚“°¢f–æÂ&ööÂ—4v&Ò6÷&TÆöFW"æ—4v&&öÒ†vÖRç&öÕF‚“°¢f–æÂ&ööÂ—56æW2Ò6÷&TÆöFW"æ—56æW5&öÒ†vÖRç&öÕF‚“°¢f–æÂ&ööÂ—4æG2Ò6÷&TÆöFW"æ—4æG5&öÒ†vÖRç&öÕF‚“°¢f–æÂ&ööÂ—4v&2Ğ¢vÖRæ6öç6öÆRçFôÆ÷vW$66R‚’æ6öçF–ç2‚vv&2r’ÇÀ¢vÖRæ6öç6öÆRçFôÆ÷vW$66R‚’æ6öçF–ç2‚vvÖR&÷’6öÆ÷"r“°¢f–æÂ&ööÂvTÆæG66RĞ¢ÖVF–VW'’æ÷&–VçFF–öäöb†6öçFW‡B’ÓÒ÷&–VçFF–öâæÆæG66S°¢f–æÂ&ööÂ÷'G&—D6&D7F—fRĞ¢vTÆæG66Rbb÷6VÆV7FVE÷'G&—Dg&ÖRÒçVÆÃ°¢f–æÂôV×VÆF÷%f—7VÅF†VÖRf—7VÅF†VÖRÒôV×VÆF÷%f—7VÅF†VÖRæf÷$vÖR†vÖR“°¢f–æÂ&ööÂ6æW4gVÆÇ67&VVâÒ—56æW2bb÷&VfW&Væ6W2ç6æW4gVÆÇ67&VVã°¢f–æÂ&ööÂv&gVÆÇ67&VVâÒ—4v&bb÷&VfW&Væ6W2æv&gVÆÇ67&VVã°¢f–æÂ&ööÂvÖT&÷”gVÆÇ67&VVâĞ¢6÷&TÆöFW"æ—4vÖT&÷•&öÒ†vÖRç&öÕF‚’b`¢÷&VfW&Væ6W2ævÖT&÷”gVÆÇ67&VVã°¢f–æÂ&ööÂæG4gVÆÇ67&VVâÒ—4æG2bb÷&VfW&Væ6W2ææG4gVÆÇ67&VVã°¢f–æÂ&ööÂ6öç6öÆTgVÆÇ67&VVâĞ¢6æW4gVÆÇ67&VVâÇÂv&gVÆÇ67&VVâÇÂvÖT&÷”gVÆÇ67&VVâÇÂæG4gVÆÇ67&VVã°¢f–æÂ&ööÂ&÷&FW&ÆW74vÖU7W&f6RĞ¢6öç6öÆTgVÆÇ67&VVâÇÂ÷'G&—D6&D7F—fS°¢övÖT6öçG&öÆÆW"æ†F–74Væ&ÆVBÒ—56æW2b`¢†—4æG0¢ò÷&VfW&Væ6W2ææG5f–'&F–öäVæ&ÆV@¢¢÷&VfW&Væ6W2çf–'&F–öäVæ&ÆVB“° ¢&WGW&â÷66÷R€¢6å÷¢öÆÆ÷u÷À¢öå÷–çfö¶VEv—F…&W7VÇC¢†F–E÷Â&W7VÇB’°¢–b‚F–E÷’Væv—FVB…÷&WVW7DW†—B†6öçFW‡B’“°¢ÒÀ¢6†–ÆC¢66fföÆB€¢&6¶w&÷VæD6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢&#¢6öç6öÆTgVÆÇ67&VVâÇÂ÷'G&—D6&D7F—fRòçVÆÂ¢&"€¢FööÆ&$†V–v‡C¢S‚À¢&6¶w&÷VæD6öÆ÷#¢f—7VÅF†VÖRæ&"À¢f÷&Vw&÷VæD6öÆ÷#¢6öÆ÷'2çv†—FRÀ¢F—FÆU76–æs¢BÀ¢F—FÆS¢ôV×VÆF÷$†VFW"€¢vÖS¢vÖRÀ¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢'G•7V6–W4–G3¢÷'G•7V6–W4–G2À¢’À¢’À¢&öG“¢7F6²€¢6†–ÆG&Vã¢°¢FV6÷&FVD&÷‚€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ†w&F–VçC¢f—7VÅF†VÖRæw&F–VçB’À¢6†–ÆC¢6fT&V€¢F÷¢÷'G&—D6&D7F—fRÀ¢ÆVgC¢6öç6öÆTgVÆÇ67&VVâÀ¢&–v‡C¢6öç6öÆTgVÆÇ67&VVâÀ¢&÷GFöÓ¢6öç6öÆTgVÆÇ67&VVâÀ¢6†–ÆC¢Æ–÷WD'V–ÆFW"€¢'V–ÆFW#¢„'V–ÆD6öçFW‡B6öçFW‡BÂ&÷„6öç7G&–çG26öç7G&–çG2’°¢f–æÂ&ööÂÆæG66RĞ¢6öç7G&–çG2æÖ…v–GF‚â6öç7G&–çG2æÖ„†V–v‡C°¢f–æÂF÷V&ÆRFF–ærÒÆæG66Rò‚¢C°¢f–æÂF÷V&ÆRæG4Ö–FFÆT6öçG&öÇ4†V–v‡BÒÖF‚æÖ‚€¢3¢÷&VfW&Væ6W2ææG56†÷VÆFW%66ÆRÀ¢#R¢÷&VfW&Væ6W2ææG57—7FVÕ66ÆRÀ¢“°¢6öç7BF÷V&ÆRæG5÷'G&—E67&VVävÒC° ¢f–æÂv–FvWBvÖUf–WrÒ6öçF–æW"€¢FV6÷&F–öã¢&÷„FV6÷&F–öâ€¢6öÆ÷#¢6öÆ÷'2æ&Æ6²À¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"€¢&÷&FW&ÆW74vÖU7W&f6Rò¢‚À¢’À¢&÷&FW#¢&÷&FW&ÆW74vÖU7W&f6RòçVÆÂ¢&÷&FW"æÆÂ€¢6öÆ÷#¢6÷&UF‚ÒçVÆÀ¢òf—7VÅF†VÖRæ66Vç@¢¢F†VÖRæöb†6öçFW‡B’æ6öÆ÷%66†VÖRæW'&÷"À¢v–GFƒ¢2À¢’À¢’À¢6†–ÆC¢6Æ—%&V7B€¢&÷&FW%&F—W3¢&÷&FW%&F—W2æ6—&7VÆ"€¢&÷&FW&ÆW74vÖU7W&f6Rò¢RÀ¢’À¢6†–ÆC¢6÷&UF‚ÒçVÆÀ¢òÆ–'&WG&ôvÖUf–Wr€¢¶W“¢övÖUf–Wt¶W’À¢vÖT–C¢vÖRæ–BÀ¢vÖUF—FÆS¢vÖRçF—FÆRÀ¢6÷&UFƒ¢6÷&UF‚À¢&öÕFƒ¢vÖRç&öÕF‚À¢–æ—F–ÅÆ•F–ÖTÖ–çWFW3 ¢vÖRçÆ•F–ÖU6V6öæG2âòcÀ¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢67&VVäf—C¢÷'G&—D6&D7F—fP¢ò&÷„f—Bæf–ÆÀ¢¢7v—F6‚…÷&VfW&Væ6W2ç67&VVå66ÆR’°¢V×VÆF÷%67&VVå66ÆRæ7V7E&F–òÓà¢&÷„f—Bæ6öçF–âÀ¢V×VÆF÷%67&VVå66ÆRæf—Ev–GF‚Óà¢&÷„f—Bæf—Ev–GF‚À¢V×VÆF÷%67&VVå66ÆRç7G&WF6‚Óà¢&÷„f—Bæf–ÆÂÀ¢ÒÀ¢f–ÇFW%VÆ—G“¢÷&VfW&Væ6W2ç67&VVäf–ÇFW"ÓĞ¢V×VÆF÷%67&VVäf–ÇFW"ç—†VÀ¢òf–ÇFW%VÆ—G’ææöæP¢¢f–ÇFW%VÆ—G’æÖVF—VÒÀ¢WFôÆöE7FFS ¢÷&VfW&Væ6W2æWFôÆöDöå7F'Bbb—56æW2À¢F—7Æ”7V7E&F–ó¢—56æW2òBò2¢çVÆÂÀ¢7Æ—DæG567&VVç3¢—4æG2À¢æG5F÷67&VVå66ÆS¢—4æG0¢òöæG5F÷67&VVå66ÆR…÷&VfW&Væ6W2¢¢À¢æG4&÷GFöÕ67&VVå66ÆS¢—4æG0¢òöæG4&÷GFöÕ67&VVå66ÆR…÷&VfW&Væ6W2¢¢À¢æG57v67&VVç3¢—4æG2bb÷&VfW&Væ6W2ææG57v67&VVç2À¢æG567&VVç566ÆS¢—4æG2bbÆæG66P¢ò†æG4gVÆÇ67&VVà¢ò¢¢÷&VfW&Væ6W2ææG567&VVç566ÆR¢¢À¢æG4†÷&—¦öçFÄÆ–÷WC¢—4æG2bbÆæG66RÀ¢æG567&VVäv¢—4æG2bbÆæG66P¢òæG5÷'G&—E67&VVäv ¢¢BÀ¢¢¢ô6÷&Tæ÷Df÷VæEf–Wr€¢&öÕFƒ¢vÖRç&öÕF‚À¢6÷&S¢6÷&RÀ¢’À¢’À¢“° ¢f–æÂ6VÆV7FVDg&ÖRÒ÷6VÆV7FVDg&ÖS°¢–b†6öç6öÆTgVÆÇ67&VVâb`¢ÆæG66Rb`¢6VÆV7FVDg&ÖRÒçVÆÂ’°¢f–æÂ66ÆRÒÖF‚æÖ–â€¢6öç7G&–çG2æÖ…v–GF‚ò#ƒÀ¢6öç7G&–çG2æÖ„†V–v‡Bòs#À¢“°¢f–æÂg&ÖUv–GF‚Ò#ƒ¢66ÆS°¢f–æÂg&ÖT†V–v‡BÒs#¢66ÆS°¢f–æÂg&ÖTÆVgBÒ†6öç7G&–çG2æÖ…v–GF‚Òg&ÖUv–GF‚’ò#°¢f–æÂg&ÖUF÷Ò†6öç7G&–çG2æÖ„†V–v‡BÒg&ÖT†V–v‡B’ò#°¢f–æÂf–Ww÷'DÆVgBÒg&ÖTÆVgB°¢g&ÖUv–GF‚¢6VÆV7FVDg&ÖRçf–Ww÷'DÆVgC°¢f–æÂf–Ww÷'EF÷Òg&ÖUF÷°¢g&ÖT†V–v‡B¢6VÆV7FVDg&ÖRçf–Ww÷'EF÷°¢f–æÂf–Ww÷'Ev–GF‚Ğ¢g&ÖUv–GF‚¢6VÆV7FVDg&ÖRçf–Ww÷'Ev–GFƒ°¢f–æÂf–Ww÷'D†V–v‡BĞ¢g&ÖT†V–v‡B¢6VÆV7FVDg&ÖRçf–Ww÷'D†V–v‡C°¢f–æÂÆVgD6öçG&öÇ5v–GF‚ÒÖF‚æÖ‚ƒ3"ãÂf–Ww÷'DÆVgB“°¢f–æÂ&–v‡D6öçG&öÇ5v–GF‚ÒÖF‚æÖ‚€¢SãÀ¢6öç7G&–çG2æÖ…v–GF‚Ğ¢‡f–Ww÷'DÆVgB²f–Ww÷'Ev–GF‚’À¢“°¢f–æÂ6†÷u6†÷VÆFW'2Ò—56æW2ÇÂ—4v&°¢f–æÂ6öç6öÆTÆövòÒ—56æW0¢ò&WG&ô‡V$6öç6öÆUG—Rç7WW$æ–çFVæFğ¢¢—4v&¢ò&WG&ô‡V$6öç6öÆUG—RævÖT&÷”Gfæ6P¢¢—4v&0¢ò&WG&ô‡V$6öç6öÆUG—RævÖT&÷”6öÆ÷ ¢¢&WG&ô‡V$6öç6öÆUG—RævÖT&÷“° ¢&WGW&â6öÆ÷&VD&÷‚€¢6öÆ÷#¢6öÆ÷"‡6VÆV7FVDg&ÖRæ&6¶w&÷VæD6öÆ÷%fÇVR’À¢6†–ÆC¢7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVB€¢ÆVgC¢f–Ww÷'DÆVgBÀ¢F÷¢f–Ww÷'EF÷À¢v–GFƒ¢f–Ww÷'Ev–GF‚À¢†V–v‡C¢f–Ww÷'D†V–v‡BÀ¢6†–ÆC¢6öÆ÷&VD&÷‚€¢6öÆ÷#¢6öÆ÷'2æ&Æ6²À¢6†–ÆC¢6VçFW"€¢6†–ÆC¢7V7E&F–ò€¢7V7E&F–ó¢6VÆV7FVDg&ÖRævÖT7V7E&F–òÀ¢6†–ÆC¢vÖUf–WrÀ¢’À¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢g&ÖTÆVgBÀ¢F÷¢g&ÖUF÷À¢v–GFƒ¢g&ÖUv–GF‚À¢†V–v‡C¢g&ÖT†V–v‡BÀ¢6†–ÆC¢–væ÷&Uö–çFW"€¢6†–ÆC¢–ÖvRæ76WB€¢6VÆV7FVDg&ÖRæ76WEF‚À¢f—C¢&÷„f—Bæf–ÆÂÀ¢f–ÇFW%VÆ—G“¢f–ÇFW%VÆ—G’ææöæRÀ¢’À¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢f–Ww÷'DÆVgBÀ¢F÷¢f–Ww÷'EF÷À¢v–GFƒ¢f–Ww÷'Ev–GF‚À¢†V–v‡C¢f–Ww÷'D†V–v‡BÀ¢6†–ÆC¢ôgVÆÇ67&VVå'G”÷fW&Æ’€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢À¢F÷¢À¢&÷GFöÓ¢À¢v–GFƒ¢ÆVgD6öçG&öÇ5v–GF‚À¢6†–ÆC¢÷6—G’€¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ ¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢6†÷u6†÷VÆFW'2À¢6öç6öÆTÆövó¢6öç6öÆTÆövòÀ¢’À¢’À¢’À¢÷6—F–öæVB€¢&–v‡C¢À¢F÷¢À¢&÷GFöÓ¢À¢v–GFƒ¢&–v‡D6öçG&öÇ5v–GF‚À¢6†–ÆC¢÷6—G’€¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä ¢¢ö'WGFöäÀ¢'WGFöä#¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä¢¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢6†÷u6†÷VÆFW'2À¢—56æW3¢—56æW2À¢&÷FFT7F–öç3¢—56æW2À¢'WGFöä6öÆ÷#¢—56æW0¢ò6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä6öÆ÷"¢¢6öç7B6öÆ÷"ƒ„dcTSD#„"’À¢'WGFöä$6öÆ÷#¢—56æW0¢ò6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä$6öÆ÷"¢¢6öç7B6öÆ÷"ƒ„dcƒs4R’À¢'WGFöå„6öÆ÷#¢—56æW0¢ò6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå„6öÆ÷"¢¢6öç7B6öÆ÷"ƒ„dcƒs4R’À¢'WGFöå”6öÆ÷#¢—56æW0¢ò6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå”6öÆ÷"¢¢6öç7B6öÆ÷"ƒ„dcTSD#„"’À¢’À¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢–b‡6æW4gVÆÇ67&VVâbbÆæG66R’°¢f–æÂvÖUv–GF‚Ò†6öç7G&–çG2æÖ„†V–v‡B¢Bò2¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚¢çFôF÷V&ÆR‚“°¢f–æÂ6–FUv–GF‚Ğ¢‚†6öç7G&–çG2æÖ…v–GF‚ÒvÖUv–GF‚’ò"¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚ò"¢çFôF÷V&ÆR‚“°¢&WGW&â6öÆ÷&VD&÷‚€¢6öÆ÷#¢6öç7B6öÆ÷"ƒ„dd3„3t42’À¢6†–ÆC¢&÷r€¢6†–ÆG&Vã¢°¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢G'VRÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ ¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢G'VRÀ¢6öç6öÆTÆövó ¢&WG&ô‡V$6öç6öÆUG—Rç7WW$æ–çFVæFòÀ¢’À¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢vÖUv–GF‚À¢6†–ÆC¢7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ†6†–ÆC¢vÖUf–Wr’À¢÷6—F–öæVBæf–ÆÂ€¢6†–ÆC¢ôgVÆÇ67&VVå'G”÷fW&Æ’€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢ÒÀ¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢fÇ6RÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢ö'WGFöäÀ¢'WGFöä#¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢G'VRÀ¢—56æW3¢G'VRÀ¢'WGFöä6öÆ÷# ¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä6öÆ÷"’À¢'WGFöä$6öÆ÷# ¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä$6öÆ÷"’À¢'WGFöå„6öÆ÷# ¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå„6öÆ÷"’À¢'WGFöå”6öÆ÷# ¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå”6öÆ÷"’À¢’À¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢–b†v&gVÆÇ67&VVâbbÆæG66R’°¢f–æÂvÖUv–GF‚Ò†6öç7G&–çG2æÖ„†V–v‡B¢2ò"¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚¢çFôF÷V&ÆR‚“°¢f–æÂ6–FUv–GF‚Ğ¢‚†6öç7G&–çG2æÖ…v–GF‚ÒvÖUv–GF‚’ò"¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚ò"¢çFôF÷V&ÆR‚“°¢&WGW&â6öÆ÷&VD&÷‚€¢6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢6†–ÆC¢&÷r€¢6†–ÆG&Vã¢°¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢G'VRÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢F÷6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢&÷GFöÔ6öÆ÷#¢f—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÀ¢&÷&FW$6öÆ÷#¢f—7VÅF†VÖRæ66VçBçv—F…fÇVW2€¢Ç†¢ãSRÀ¢’À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ ¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢G'VRÀ¢6öç6öÆTÆövó ¢&WG&ô‡V$6öç6öÆUG—RævÖT&÷”Gfæ6RÀ¢’À¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢vÖUv–GF‚À¢6†–ÆC¢7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ†6†–ÆC¢vÖUf–Wr’À¢÷6—F–öæVBæf–ÆÂ€¢6†–ÆC¢ôgVÆÇ67&VVå'G”÷fW&Æ’€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢ÒÀ¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢fÇ6RÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢F÷6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢&÷GFöÔ6öÆ÷#¢f—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÀ¢&÷&FW$6öÆ÷#¢f—7VÅF†VÖRæ66VçBçv—F…fÇVW2€¢Ç†¢ãSRÀ¢’À¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä ¢¢ö'WGFöäÀ¢'WGFöä#¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä¢¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢G'VRÀ¢—56æW3¢fÇ6RÀ¢&÷FFT7F–öç3¢fÇ6RÀ¢’À¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢–b†vÖT&÷”gVÆÇ67&VVâbbÆæG66R’°¢f–æÂvÖUv–GF‚Ò†6öç7G&–çG2æÖ„†V–v‡B¢ò’¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚¢çFôF÷V&ÆR‚“°¢f–æÂ6–FUv–GF‚Ğ¢‚†6öç7G&–çG2æÖ…v–GF‚ÒvÖUv–GF‚’ò"¢æ6Æ×ƒãÂ6öç7G&–çG2æÖ…v–GF‚ò"¢çFôF÷V&ÆR‚“°¢f–æÂ6öç6öÆTÆövòÒ—4v&0¢ò&WG&ô‡V$6öç6öÆUG—RævÖT&÷”6öÆ÷ ¢¢&WG&ô‡V$6öç6öÆUG—RævÖT&÷“°¢&WGW&â6öÆ÷&VD&÷‚€¢6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢6†–ÆC¢&÷r€¢6†–ÆG&Vã¢°¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢G'VRÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢F÷6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢&÷GFöÔ6öÆ÷#¢f—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÀ¢&÷&FW$6öÆ÷#¢f—7VÅF†VÖRæ66VçBçv—F…fÇVW2€¢Ç†¢ãSRÀ¢’À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ ¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢fÇ6RÀ¢6öç6öÆTÆövó¢6öç6öÆTÆövòÀ¢’À¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢vÖUv–GF‚À¢6†–ÆC¢7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ†6†–ÆC¢vÖUf–Wr’À¢÷6—F–öæVBæf–ÆÂ€¢6†–ÆC¢ôgVÆÇ67&VVå'G”÷fW&Æ’€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢ÒÀ¢’À¢’À¢6—¦VD&÷‚€¢v–GFƒ¢6–FUv–GF‚À¢6†–ÆC¢õ6æW56–FUæVÂ€¢—4ÆVgC¢fÇ6RÀ¢÷6—G“¢÷&VfW&Væ6W2æ6öçG&öÄ÷6—G’À¢F÷6öÆ÷#¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢&÷GFöÔ6öÆ÷#¢f—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÀ¢&÷&FW$6öÆ÷#¢f—7VÅF†VÖRæ66VçBçv—F…fÇVW2€¢Ç†¢ãSRÀ¢’À¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä ¢¢ö'WGFöäÀ¢'WGFöä#¢÷&VfW&Væ6W2ç7v ¢òö'WGFöä¢¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢fÇ6RÀ¢—56æW3¢fÇ6RÀ¢&÷FFT7F–öç3¢fÇ6RÀ¢’À¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢–b†ÆæG66Rbb—4æG2’°¢6öç7BF÷V&ÆRÆVgD6öçG&öÇ5v–GF‚ÒSC°¢6öç7BF÷V&ÆR&–v‡D6öçG&öÇ5v–GF‚ÒsC°¢f–æÂF÷V&ÆRF÷f7F÷"Ğ¢öæG5F÷67&VVå66ÆR…÷&VfW&Væ6W2“°¢f–æÂF÷V&ÆR&÷GFöÔf7F÷"Ğ¢öæG4&÷GFöÕ67&VVå66ÆR…÷&VfW&Væ6W2“°¢f–æÂF÷V&ÆR6öçG&öÄ÷6—G’Ğ¢÷&VfW&Væ6W2ææG46öçG&öÄ÷6—G“° ¢&WGW&âFF–ær€¢FF–æs¢æG4gVÆÇ67&VVà¢òVFvT–ç6WG2ç¦W&ğ¢¢VFvT–ç6WG2ç7–ÖÖWG&–2€¢†÷&—¦öçFÃ¢FF–ærÀ¢fW'F–6Ã¢BÀ¢’À¢6†–ÆC¢7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ€¢6†–ÆC¢Æ–÷WD'V–ÆFW"€¢'V–ÆFW#¢†6öçFW‡BÂ7FvT6öç7G&–çG2’°¢f–æÂFW7F–æF–öç2Ğ¢öæG4†÷&—¦öçFÄFW7F–æF–öç2€¢6—¦R€¢7FvT6öç7G&–çG2æÖ…v–GF‚À¢7FvT6öç7G&–çG2æÖ„†V–v‡BÀ¢’À¢F÷67&VVå66ÆS¢F÷f7F÷"À¢&÷GFöÕ67&VVå66ÆS¢&÷GFöÔf7F÷"À¢67&VVç566ÆS¢æG4gVÆÇ67&VVà¢ò¢¢÷&VfW&Væ6W2ææG567&VVç566ÆRÀ¢“°¢f–æÂF÷V6…&V7BĞ¢÷&VfW&Væ6W2ææG57v67&VVç0¢òFW7F–æF–öç2âC¢¢FW7F–æF–öç2âC#°¢f–æÂ÷fW&Æ•&V7BÒFW7F–æF–öç2âC#°¢&WGW&â7F6²€¢6†–ÆG&Vã¢°¢÷6—F–öæVBæf–ÆÂ†6†–ÆC¢vÖUf–Wr’À¢÷6—F–öæVBæg&öÕ&V7B€¢&V7C¢F÷V6…&V7BÀ¢6†–ÆC¢öæG5F÷V6…7W&f6R€¢v–GFƒ¢F÷V6…&V7Bçv–GF‚À¢†V–v‡C¢F÷V6…&V7Bæ†V–v‡BÀ¢’À¢’À¢–b†æG4gVÆÇ67&VVâ¢÷6—F–öæVBæg&öÕ&V7B€¢&V7C¢÷fW&Æ•&V7BÀ¢6†–ÆC¢ôgVÆÇ67&VVå'G”÷fW&Æ’€¢vÖS¢vÖRÀ¢7V6–W4–G3¢÷'G•7V6–W4–G2À¢66VçC¢f—7VÅF†VÖRæ66VçBÀ¢’À¢’À¢ÒÀ¢“°¢ÒÀ¢’À¢’À¢÷6—F–öæVB€¢ÆVgC¢À¢F÷¢À¢&÷GFöÓ¢À¢v–GFƒ¢ÆVgD6öçG&öÇ5v–GF‚À¢6†–ÆC¢÷6—G’€¢÷6—G“¢6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ ¢÷&VfW&Væ6W2ææG4F—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢G'VRÀ¢6öç6öÆTÆövó ¢&WG&ô‡V$6öç6öÆUG—Rææ–çFVæFôG2À¢’À¢’À¢’À¢÷6—F–öæVB€¢&–v‡C¢À¢F÷¢À¢&÷GFöÓ¢À¢v–GFƒ¢&–v‡D6öçG&öÇ5v–GF‚À¢6†–ÆC¢÷6—G’€¢÷6—G“¢6öçG&öÄ÷6—G’À¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢÷&VfW&Væ6W2ææG57v ¢òö'WGFöä ¢¢ö'WGFöäÀ¢'WGFöä#¢÷&VfW&Væ6W2ææG57v ¢òö'WGFöä¢¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢G'VRÀ¢—56æW3¢G'VRÀ¢'WGFöä6öÆ÷#¢f—7VÅF†VÖRæ66VçBÀ¢'WGFöä$6öÆ÷#¢6öÆ÷"æÆW'€¢f—7VÅF†VÖRæ66VçBÀ¢f—7VÅF†VÖRæ&6¶w&÷VæBÀ¢ã#‚À¢’À¢'WGFöå„6öÆ÷#¢6öÆ÷"æÆW'€¢f—7VÅF†VÖRæ66VçBÀ¢6öÆ÷'2çv†—FRÀ¢ã#"À¢’À¢'WGFöå”6öÆ÷#¢6öÆ÷"æÆW'€¢f—7VÅF†VÖRæ66VçBÀ¢f—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÀ¢ãC‚À¢’À¢’À¢’À¢’À¢ÒÀ¢’À¢“°¢Ğ ¢–b†ÆæG66R’°¢&WGW&âFF–ær€¢FF–æs¢VFvT–ç6WG2ç7–ÖÖWG&–2€¢†÷&—¦öçFÃ¢FF–ærÀ¢fW'F–6Ã¢BÀ¢’À¢6†–ÆC¢&÷r€¢6†–ÆG&Vã¢°¢6—¦VD&÷‚€¢v–GFƒ¢3‚À¢6†–ÆC¢ôÆæG66TÆVgD6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢F—&V7F–öæÄ6öçG&öÃ¢—4æG0¢ò÷&VfW&Væ6W2ææG4F—&V7F–öæÄ6öçG&öÀ¢¢÷&VfW&Væ6W2æF—&V7F–öæÄ6öçG&öÂÀ¢'WGFöåW¢ö'WGFöåWÀ¢'WGFöäF÷vã¢ö'WGFöäF÷vâÀ¢'WGFöäÆVgC¢ö'WGFöäÆVgBÀ¢'WGFöå&–v‡C¢ö'WGFöå&–v‡BÀ¢'WGFöå6VÆV7C¢ö'WGFöå6VÆV7BÀ¢'WGFöäÃ¢ö'WGFöäÂÀ¢6†÷u6†÷VÆFW#¢—4v&ÇÂ—56æW2ÇÂ—4æG2À¢6öç6öÆTÆövó¢—4æG0¢ò&WG&ô‡V$6öç6öÆUG—Rææ–çFVæFôG0¢¢çVÆÂÀ¢’À¢’À¢6öç7B6—¦VD&÷‚‡v–GFƒ¢‚’À¢W‡æFVB€¢6†–ÆC¢6VçFW"€¢6†–ÆC¢7V7E&F–ò€¢7V7E&F–ó¢—56æW0¢òBò0¢¢—4v&¢ò2ò ¢¢—4æG0¢òòã3P¢¢ò’À¢6†–ÆC¢vÖUf–WrÀ¢’À¢’À¢’À¢6öç7B6—¦VD&÷‚‡v–GFƒ¢‚’À¢6—¦VD&÷‚€¢v–GFƒ¢cbÀ¢6†–ÆC¢ôÆæG66U&–v‡D6öçG&öÇ2€¢6öçG&öÆÆW#¢övÖT6öçG&öÆÆW"À¢'WGFöä¢—4æG2bb÷&VfW&Væ6W2ææG57v ¢òö'WGFöä ¢¢ö'WGFöäÀ¢'WGFöä#¢—4æG2bb÷&VfW&Væ6W2ææG57v ¢òö'WGFöä¢¢ö'WGFöä"À¢'WGFöåƒ¢ö'WGFöå‚À¢'WGFöå“¢ö'WGFöå’À¢'WGFöå7F'C¢ö'WGFöå7F'BÀ¢'WGFöå#¢ö'WGFöå"À¢6†÷u6†÷VÆFW#¢—4v&ÇÂ—56æW2ÇÂ—4æG2À¢—56æW3¢—56æW2ÇÂ—4æG2À¢'WGFöä6öÆ÷#¢—4æG0¢òf—7VÅF†VÖRæ66Vç@¢¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä6öÆ÷"’À¢'WGFöä$6öÆ÷#¢—4æG0¢ò6öÆ÷"æÆW'‡f—7VÅF†VÖRæ66VçBÂf—7VÅF†VÖRæ&6¶w&÷VæBÂã#‚’¢¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöä$6öÆ÷"’À¢'WGFöå„6öÆ÷#¢—4æG0¢ò6öÆ÷"æÆW'‡f—7VÅF†VÖRæ66VçBÂ6öÆ÷'2çv†—FRÂã#"’¢¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå„6öÆ÷"’À¢'WGFöå”6öÆ÷#¢—4æG0¢ò6öÆ÷"æÆW'‡f—7VÅF†VÖRæ66VçBÂf—7VÅF†VÖRæw&F–VçBæ6öÆ÷'5³%ÒÂãC‚’¢¢6öÆ÷"…÷&VfW&Væ6W2ç6æW4'WGFöå”6öÆ÷"’À¢’À¢’À¢ÒÀ¢ûÓKh‘éì¶»§q«^t€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€€€€€€€€€€€€€€€€€Ñ½Àè±½½Q½À°(€€€€€€€€€€€€€€€€€€€€€€€€€€€±•™Ğè€À°(€€€€€€€€€€€€€€€€€€€€€€€€€€€É¥¡Ğè€À°(€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±è%¹½É•A½¥¹Ñ•È (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±è•¹Ñ•È (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±è¥ÑÑ•‘	½à (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€™¥Ğè	½á¥Ğ¹Í…±•½İ¸°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èI•ÑÉ½!Õ‰½¹Í½±•1½¼ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹Í½±”èI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹¹¥¹Ñ•¹‘½Ì°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€€€€€™¥¹…°Á½ÉÑÉ…¥ÑÉ…µ”€ô}Í•±•Ñ•‘A½ÉÑÉ…¥ÑÉ…µ”ì(€€€€€€€€€€€€€€€€€€€¥˜€¡Á½ÉÑÉ…¥ÑÉ…µ”€„ô¹Õ±°€˜˜€…¥ÍM¹•Ì¤ì(€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸}‰Õ¥±‘A½ÉÑÉ…¥Ñ…É‘1…å½ÕĞ (€€€€€€€€€€€€€€€€€€€€€€€½¹ÍÑÉ…¥¹ÑÌè½¹ÍÑÉ…¥¹ÑÌ°(€€€€€€€€€€€€€€€€€€€€€€€…µ•Y¥•Üè…µ•Y¥•Ü°(€€€€€€€€€€€€€€€€€€€€€€€™É…µ”èÁ½ÉÑÉ…¥ÑÉ…µ”°(€€€€€€€€€€€€€€€€€€€€€€€¥Í‰„è¥Í‰„°(€€€€€€€€€€€€€€€€€€€€€€€¥Í‰Œè¥Í‰Œ°(€€€€€€€€€€€€€€€€€€€€€€€Ù¥ÍÕ…±Q¡•µ”èÙ¥ÍÕ…±Q¡•µ”°(€€€€€€€€€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€€€€€€€ô((€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸A…‘‘¥¹œ (€€€€€€€€€€€€€€€€€€€€€Á…‘‘¥¹œè‘•%¹Í•ÑÌ¹…±°¡Á…‘‘¥¹œ¤°(€€€€€€€€€€€€€€€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€ …¥ÍM¹•Ì¤€¸¸¹l(€€€€€€€€€€€€€€€€€€€€€€€€€€€M¥é•‘	½à (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡•¥¡Ğè€ÔĞ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èMÑ…¬ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±¥¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•É1•™Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èM¥é•‘	½à (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€İ¥‘Ñ è€äÈ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡•¥¡Ğè€ÌÈ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èMÁ••‘	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÍÁ••‘5Õ±Ñ¥Á±¥•Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}…µ•½¹ÑÉ½±±•È¹ÍÁ••‘5Õ±Ñ¥Á±¥•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹Q…Àè}…µ•½¹ÑÉ½±±•È¹å±•MÁ••°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡½É•1½…‘•È¹¥Í…µ•	½åI½´¡…µ”¹É½µA…Ñ ¤¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±¥¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±è}1¥¹­MÑ…ÑÕÍ¡¥À (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±¥¹­5…¹…•Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}…µ•½¹ÑÉ½±±•È¹±¥¹­5…¹…•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±¥¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•ÉI¥¡Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èI•ÑÉ½!Õ‰EÕ¥­5•¹Ô (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹Ñ¥½¸è€¡MÑÉ¥¹œÙ…±Õ”¤€ôø(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}¡…¹‘±•5•¹ÕÑ¥½¸¡½¹Ñ•áĞ°Ù…±Õ”¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€Ø¤°(€€€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€€€€±•á¥‰±” (€€€€€€€€€€€€€€€€€€€€€€€€€€€™¥Ğè±•á¥Ğ¹±½½Í”°(€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±èÍÁ•ÑI…Ñ¥¼ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…ÍÁ•ÑI…Ñ¥¼è¥ÍM¹•Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü€Ğ€¼€Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è¥Í‰„(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü€Ì€¼€È(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è¥Í9‘Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü€Ä€¼€Ä¸ÌÀÔ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è€ÄÀ€¼€ä°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±è…µ•Y¥•Ü°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€à¤°((€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€ …¥ÍM¹•Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Í‰„€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹±…å½ÕĞ€ôô(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…µ•	½å½¹ÑÉ½±1…å½ÕĞ¹±…ÍÍ¥Œ¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€I½Ü (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€µ…¥¹á¥Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹ÍÁ…•	•Ñİ••¸°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±…‰•°è€0œ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è}‰ÕÑÑ½¹0°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè}…µ•½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜€¡}ÁÉ•™•É•¹•Ì¹Í¡½İ½¹Í½±•%‘•¹Ñ¥Ñä¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞI•ÑÉ½!Õ‰½¹Í½±•1½¼ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹Í½±”èI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹…µ•	½å‘Ù…¹”°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€•±Í”(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞMÁ…•È ¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€±…‰•°è€Hœ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è}‰ÕÑÑ½¹H°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè}…µ•½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤(€€€€€€€€€€€€€€€€€€€€€€€€€•±Í”¥˜€ …¥Í9‘Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥ÍM¹•Ìñğ}ÁÉ•™•É•¹•Ì¹Í¡½İ½¹Í½±•%‘•¹Ñ¥Ñä¤¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€I•ÑÉ½!Õ‰½¹Í½±•1½¼ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹Í½±”è¥ÍM¹•Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹ÍÕÁ•É9¥¹Ñ•¹‘¼(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è¥Í9‘Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹¹¥¹Ñ•¹‘½Ì(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è¥Í‰„(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹…µ•	½å‘Ù…¹”(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è¥Í‰Œ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€üI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹…µ•	½å½±½È(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€èI•ÑÉ½!Õ‰½¹Í½±•QåÁ”¹…µ•	½ä°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€M¥é•‘	½à (€€€€€€€€€€€€€€€€€€€€€€€€€€€¡•¥¡Ğè¥Í9‘Ìñğ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ …¥ÍM¹•Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…¥Í‰„€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…}ÁÉ•™•É•¹•Ì¹Í¡½İ½¹Í½±•%‘•¹Ñ¥Ñä¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü€È(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è€ÄÀ°(€€€€€€€€€€€€€€€€€€€€€€€€€€¤°((€€€€€€€€€€€€€€€€€€€€€€€€€}…µ•	½å½¹ÑÉ½±Ì (€€€€€€€€€€€€€€€€€€€€€€€€€€€½µÁ…Ğè™…±Í”°(€€€€€€€€€€€€€€€€€€€€€€€€€€€±…ÍÍ¥1…å½ÕĞè€…¥ÍM¹•Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹±…å½ÕĞ€ôô(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…µ•	½å½¹ÑÉ½±1…å½ÕĞ¹±…ÍÍ¥Œ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€Í¥é•M…±”è¥ÍM¹•Ì€ü€Ä€è}ÁÉ•™•É•¹•Ì¹Í¥é•M…±”°(€€€€€€€€€€€€€€€€€€€€€€€€€€€½Á…¥Ñäè}ÁÉ•™•É•¹•Ì¹½¹ÑÉ½±=Á…¥Ñä°(€€€€€€€€€€€€€€€€€€€€€€€€€€€Íİ…Á1…‰•±Ìè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…¥ÍM¹•Ì€˜˜€…¥Í9‘Ì€˜˜}ÁÉ•™•É•¹•Ì¹Íİ…Á°(€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè}…µ•½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‘¥É•Ñ¥½¹…±½¹ÑÉ½°è(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹‘¥É•Ñ¥½¹…±½¹ÑÉ½°°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹UÀè}‰ÕÑÑ½¹UÀ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹½İ¸è}‰ÕÑÑ½¹½İ¸°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹1•™Ğè}‰ÕÑÑ½¹1•™Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹I¥¡Ğè}‰ÕÑÑ½¹I¥¡Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹è€…¥ÍM¹•Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…¥Í9‘Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹Íİ…Á(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü}‰ÕÑÑ½¹(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è}‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹è€…¥ÍM¹•Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…¥Í9‘Ì€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹Íİ…Á(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ü}‰ÕÑÑ½¹(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€è}‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹`è}‰ÕÑÑ½¹`°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹dè}‰ÕÑÑ½¹d°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹M•±•Ğè}‰ÕÑÑ½¹M•±•Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹MÑ…ÉĞè}‰ÕÑÑ½¹MÑ…ÉĞ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹0è}‰ÕÑÑ½¹0°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹Hè}‰ÕÑÑ½¹H°(€€€€€€€€€€€€€€€€€€€€€€€€€€€Í¡½İM¡½Õ±‘•Èè¥ÍM¹•Ìñğ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥Í9‘Ìñğ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¡¥Í‰„€˜˜(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}ÁÉ•™•É•¹•Ì¹±…å½ÕĞ€„ô(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€…µ•	½å½¹ÑÉ½±1…å½ÕĞ¹±…ÍÍ¥Œ¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€¥ÍM¹•Ìè¥ÍM¹•Ìñğ¥Í9‘Ì°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹½±½Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½±½È¡}ÁÉ•™•É•¹•Ì¹Í¹•Í	ÕÑÑ½¹½±½È¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹	½±½Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½±½È¡}ÁÉ•™•É•¹•Ì¹Í¹•Í	ÕÑÑ½¹	½±½È¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹a½±½Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½±½È¡}ÁÉ•™•É•¹•Ì¹Í¹•Í	ÕÑÑ½¹a½±½È¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹e½±½Èè(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½±½È¡}ÁÉ•™•É•¹•Ì¹Í¹•Í	ÕÑÑ½¹e½±½È¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€¥˜€¡¥ÍM¹•ÌñğÁ…•1…¹‘Í…Á”¤(€€€€€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€€€€€Ñ½Àè€à°(€€€€€€€€€€€€€€€É¥¡Ğè€ÄĞ°(€€€€€€€€€€€€€€€¡¥±èI•ÑÉ½!Õ‰EÕ¥­5•¹Ô (€€€€€€€€€€€€€€€€€½¹Ñ¥½¸è€¡MÑÉ¥¹œÙ…±Õ”¤€ôø(€€€€€€€€€€€€€€€€€€€€€}¡…¹‘±•5•¹ÕÑ¥½¸¡½¹Ñ•áĞ°Ù…±Õ”¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€¥˜€¡¥ÍM¹•ÌñğÁ…•1…¹‘Í…Á”¤(€€€€€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€€€€€Ñ½Àè€ØÈ°(€€€€€€€€€€€€€€€É¥¡Ğè€ÄĞ°(€€€€€€€€€€€€€€€¡¥±èMÁ••‘	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€ÍÁ••‘5Õ±Ñ¥Á±¥•Èè}…µ•½¹ÑÉ½±±•È¹ÍÁ••‘5Õ±Ñ¥Á±¥•È°(€€€€€€€€€€€€€€€€€½¹Q…Àè}…µ•½¹ÑÉ½±±•È¹å±•MÁ••°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€¥˜€ ¡¥ÍM¹•ÌñğÁ…•1…¹‘Í…Á”¤€˜˜(€€€€€€€€€€€€€€€½É•1½…‘•È¹¥Í…µ•	½åI½´¡…µ”¹É½µA…Ñ ¤¤(€€€€€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€€€€€Ñ½Àè€ÄÀÀ°(€€€€€€€€€€€€€€€É¥¡Ğè€ÄĞ°(€€€€€€€€€€€€€€€¡¥±è}1¥¹­MÑ…ÑÕÍ¡¥À (€€€€€€€€€€€€€€€€€±¥¹­5…¹…•Èè}…µ•½¹ÑÉ½±±•È¹±¥¹­5…¹…•È°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€¥˜€¡}¥Í±½Í¥¹œ¤(€€€€€€€€€€€€€A½Í¥Ñ¥½¹•¹™¥±° (€€€€€€€€€€€€€€€¡¥±è½±½É•‘	½à (€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ÜÈ¤°(€€€€€€€€€€€€€€€€€¡¥±è•¹Ñ•È (€€€€€€€€€€€€€€€€€€€¡¥±è…É (€€€€€€€€€€€€€€€€€€€€€µ…É¥¸è½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡¡½É¥é½¹Ñ…°è€Ìà¤°(€€€€€€€€€€€€€€€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€€€€€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ (€€€€€€€€€€€€€€€€€€€€€€€€€¡½É¥é½¹Ñ…°è€ÌÀ°(€€€€€€€€€€€€€€€€€€€€€€€€€Ù•ÉÑ¥…°è€ÈĞ°(€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€€€€€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞ¥ÉÕ±…ÉAÉ½É•ÍÍ%¹‘¥…Ñ½È ¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€Äà¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€}±½Í¥¹MÑ…ÑÕÌ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄÜ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜàÀÀ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€à¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€9¼¥•ÉÉ•ÌI•ÑÉ½!Õˆµ¥•¹ÑÉ…ÌÑ•Éµ¥¹„•°É•ÍÁ…±‘¼¸œ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€½±½ÈèQ¡•µ”¹½˜¡½¹Ñ•áĞ¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¹½±½ÉM¡•µ”(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¹½¹MÕÉ™…•Y…É¥…¹Ğ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}µÕ±…Ñ½É!•…‘•È•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°…µ”…µ”ì(€™¥¹…°½±½È…•¹Ğì(€™¥¹…°1¥ÍĞñ¥¹ĞøÁ…ÉÑåMÁ•¥•Í%‘Ìì((€½¹ÍĞ}µÕ±…Ñ½É!•…‘•È¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…µ”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Á…ÉÑåMÁ•¥•Í%‘Ì°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°½Ù•ÉA…Ñ €ô½Ù•É!•±Á•È¹•Ñ½Ù•È¡…µ”¹Ñ¥Ñ±”°…µ”¹½¹Í½±”¤ì((€€€™¥¹…°‰½½°¥Í1…¹‘Í…Á”€ô(€€€€€€€5•‘¥…EÕ•Éä¹½É¥•¹Ñ…Ñ¥½¹=˜¡½¹Ñ•áĞ¤€ôô=É¥•¹Ñ…Ñ¥½¸¹±…¹‘Í…Á”ì((€€€É•ÑÕÉ¸I½Ü (€€€€€¡¥±‘É•¸èl(€€€€€€€}…µ•ÉÑİ½É¬ (€€€€€€€€€½Ù•ÉA…Ñ è½Ù•ÉA…Ñ °(€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€İ¥‘Ñ è€ÌØ°(€€€€€€€€€¡•¥¡Ğè€ĞĞ°(€€€€€€€€€¥½¹M¥é”è€ÈÀ°(€€€€€€€€¤°(€€€€€€€½¹ÍĞM¥é•‘	½à¡İ¥‘Ñ è€ä¤°(€€€€€€€¥˜€¡¥Í1…¹‘Í…Á”¤(€€€€€€€€€áÁ…¹‘• (€€€€€€€€€€€¡¥±èQ•áĞ (€€€€€€€€€€€€€}±•…¹…µ•Q¥Ñ±”¡…µ”¹Ñ¥Ñ±”¤°(€€€€€€€€€€€€€µ…á1¥¹•Ìè€Ä°(€€€€€€€€€€€€€½Ù•É™±½ÜèQ•áÑ=Ù•É™±½Ü¹•±±¥ÁÍ¥Ì°(€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±”¡™½¹ÑM¥é”è€ÄØ°™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜÜÀÀ¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤(€€€€€€€•±Í”(€€€€€€€€€½¹ÍĞMÁ…•È ¤°(€€€€€€€¥˜€¡Á…ÉÑåMÁ•¥•Í%‘Ì¹¥Í9½ÑµÁÑä¤€¸¸¹l(€€€€€€€€€¥˜€¡¥Í1…¹‘Í…Á”¤½¹ÍĞM¥é•‘	½à¡İ¥‘Ñ è€à¤°(€€€€€€€€€}A…ÉÑåMÁÉ¥Ñ•Ì (€€€€€€€€€€€…µ”è…µ”°(€€€€€€€€€€€ÍÁ•¥•Í%‘ÌèÁ…ÉÑåMÁ•¥•Í%‘Ì°(€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€¤°(€€€€€€€t°(€€€€€t°(€€€€¤ì(€ô)ô()±…ÍÌ}Õ±±ÍÉ••¹A…ÉÑå=Ù•É±…ä•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°…µ”…µ”ì(€™¥¹…°1¥ÍĞñ¥¹ĞøÍÁ•¥•Í%‘Ìì(€™¥¹…°½±½È…•¹Ğì((€½¹ÍĞ}Õ±±ÍÉ••¹A…ÉÑå=Ù•É±…ä¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…µ”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹ÍÁ•¥•Í%‘Ì°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€¥˜€¡ÍÁ•¥•Í%‘Ì¹¥ÍµÁÑä¤É•ÑÕÉ¸½¹ÍĞM¥é•‘	½à¹Í¡É¥¹¬ ¤ì(€€€É•ÑÕÉ¸%¹½É•A½¥¹Ñ•È (€€€€€¡¥±è±¥¸ (€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹Ñ½ÁI¥¡Ğ°(€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹…±° à¤°(€€€€€€€€€¡¥±è•½É…Ñ•‘	½à (€€€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ĞÈ¤°(€€€€€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È Äà¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡¡½É¥é½¹Ñ…°è€Ô°Ù•ÉÑ¥…°è€Ì¤°(€€€€€€€€€€€€€¡¥±è}A…ÉÑåMÁÉ¥Ñ•Ì (€€€€€€€€€€€€€€€…µ”è…µ”°(€€€€€€€€€€€€€€€ÍÁ•¥•Í%‘ÌèÍÁ•¥•Í%‘Ì°(€€€€€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}A…ÉÑåMÁÉ¥Ñ•Ì•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°…µ”…µ”ì(€™¥¹…°1¥ÍĞñ¥¹ĞøÍÁ•¥•Í%‘Ìì(€™¥¹…°½±½È…•¹Ğì((€½¹ÍĞ}A…ÉÑåMÁÉ¥Ñ•Ì¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…µ”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹ÍÁ•¥•Í%‘Ì°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°Ù¥Í¥‰±•%‘Ì€ôÍÁ•¥•Í%‘Ì¹Ñ…­” Ø¤¹Ñ½1¥ÍĞ¡É½İ…‰±”è™…±Í”¤ì(€€€É•ÑÕÉ¸I½Ü (€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€¡¥±‘É•¸èÙ¥Í¥‰±•%‘Ì(€€€€€€€€€€¹µ…À ¡ÍÁ•¥•Í%¤ì(€€€€€€€€€€€É•ÑÕÉ¸A…‘‘¥¹œ (€€€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹½¹±ä¡±•™Ğè€È¤°(€€€€€€€€€€€€€¡¥±è}A½­•µ½¹Ù…Ñ…È (€€€€€€€€€€€€€€€ÍÁÉ¥Ñ•A…Ñ è}Á½­•µ½¹MÁÉ¥Ñ•A…Ñ ¡…µ”°ÍÁ•¥•Í%¤°(€€€€€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€€€€€€Í¥é”è€ÌÀ°(€€€€€€€€€€€€€€€™…±±‰…¬è½¹ÍĞ%½¸ (€€€€€€€€€€€€€€€€€%½¹Ì¹…Ñ¡¥¹}Á½­•µ½¸°(€€€€€€€€€€€€€€€€€Í¥é”è€Äà°(€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤ì(€€€€€€€€€ô¤(€€€€€€€€€€¹Ñ½1¥ÍĞ¡É½İ…‰±”è™…±Í”¤°(€€€€¤ì(€ô)ô()±…ÍÌ}A½­•µ½¹Ù…Ñ…È•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°MÑÉ¥¹œÍÁÉ¥Ñ•A…Ñ ì(€™¥¹…°½±½È…•¹Ğì(€™¥¹…°‘½Õ‰±”Í¥é”ì(€™¥¹…°‘½Õ‰±”Á…‘‘¥¹œì(€™¥¹…°]¥‘•Ğ™…±±‰…¬ì((€½¹ÍĞ}A½­•µ½¹Ù…Ñ…È¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹ÍÁÉ¥Ñ•A…Ñ °(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹™…±±‰…¬°(€€€Ñ¡¥Ì¹Á…‘‘¥¹œ€ô€È°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸½¹Ñ…¥¹•È (€€€€€İ¥‘Ñ èÍ¥é”°(€€€€€¡•¥¡ĞèÍ¥é”°(€€€€€Á…‘‘¥¹œè‘•%¹Í•ÑÌ¹…±°¡Á…‘‘¥¹œ¤°(€€€€€±¥Á	•¡…Ù¥½Èè±¥À¹…¹Ñ¥±¥…Ì°(€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€Í¡…Á”è	½áM¡…Á”¹¥É±”°(€€€€€€€É…‘¥•¹ĞèI…‘¥…±É…‘¥•¹Ğ (€€€€€€€€€•¹Ñ•Èè½¹ÍĞ±¥¹µ•¹Ğ ´À¸ÈÔ°€´À¸Ì¤°(€€€€€€€€€É…‘¥ÕÌè€À¸ä°(€€€€€€€€€½±½ÉÌè€ñ½±½Èùl(€€€€€€€€€€€…•¹Ğ¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÈÈ¤°(€€€€€€€€€€€½±½È¹±•ÉÀ¡…•¹Ğ°½±½ÉÌ¹‰±…¬°€À¸Üà¤„°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€€‰½É‘•Èè	½É‘•È¹…±° (€€€€€€€€€½±½Èè…•¹Ğ¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Ôà¤°(€€€€€€€€€İ¥‘Ñ èÍ¥é”€øô€ØÀ€ü€È€è€Ä°(€€€€€€€€¤°(€€€€€€€‰½áM¡…‘½Üè€ñ	½áM¡…‘½Üùl(€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Èà¤°(€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌèÍ¥é”€øô€ØÀ€ü€ÄÀ€è€Ğ°(€€€€€€€€€€€½™™Í•Ğè=™™Í•Ğ À°Í¥é”€øô€ØÀ€ü€Ğ€è€È¤°(€€€€€€€€€€¤°(€€€€€€€t°(€€€€€€¤°(€€€€€¡¥±è±¥Á=Ù…° (€€€€€€€¡¥±è%µ…”¹…ÍÍ•Ğ (€€€€€€€€€ÍÁÉ¥Ñ•A…Ñ °(€€€€€€€€€™¥Ğè	½á¥Ğ¹½¹Ñ…¥¸°(€€€€€€€€€™¥±Ñ•ÉEÕ…±¥Ñäè¥±Ñ•ÉEÕ…±¥Ñä¹¹½¹”°(€€€€€€€€€•ÉÉ½É	Õ¥±‘•Èè€¡|°}|°}}|¤€ôø•¹Ñ•È¡¡¥±è™…±±‰…¬¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()•¹Õ´}á¥Ñ…µ•Ñ¥½¸ì­••ÁA±…å¥¹œ°±½…±=¹±ä°±½Õ‘	…­ÕÀô()±…ÍÌ}á¥Ñ…µ•¥…±½œ•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°…µ”…µ”ì(€™¥¹…°½±½È…•¹Ğì(€™¥¹…°1¥ÍĞñ¥¹ĞøÁ…ÉÑåMÁ•¥•Í%‘Ìì(€™¥¹…°‰½½°±½Õ‘Ù…¥±…‰±”ì((€½¹ÍĞ}á¥Ñ…µ•¥…±½œ¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…µ”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Á…ÉÑåMÁ•¥•Í%‘Ì°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹±½Õ‘Ù…¥±…‰±”°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°½Ù•ÉA…Ñ €ô½Ù•É!•±Á•È¹•Ñ½Ù•È¡…µ”¹Ñ¥Ñ±”°…µ”¹½¹Í½±”¤ì(€€€™¥¹…°™¥ÉÍÑA½­•µ½¸€ôÁ…ÉÑåMÁ•¥•Í%‘Ì¹¥ÍµÁÑä€ü¹Õ±°€èÁ…ÉÑåMÁ•¥•Í%‘Ì¹™¥ÉÍĞì((€€€É•ÑÕÉ¸±•ÉÑ¥…±½œ (€€€€€‰…­É½Õ¹‘½±½Èè½±½È¹±•ÉÀ¡…•¹Ğ°½±½ÉÌ¹‰±…¬°€À¸àÈ¤°(€€€€€Í¡…Á”èI½Õ¹‘•‘I•Ñ…¹±•	½É‘•È (€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÈÈ¤°(€€€€€€€Í¥‘”è	½É‘•ÉM¥‘”¡½±½Èè…•¹Ğ°İ¥‘Ñ è€È¤°(€€€€€€¤°(€€€€€¥½¸èM¥é•‘	½à (€€€€€€€İ¥‘Ñ è€äÈ°(€€€€€€€¡•¥¡Ğè€äÈ°(€€€€€€€¡¥±è™¥ÉÍÑA½­•µ½¸€ôô¹Õ±°(€€€€€€€€€€€€ü}…µ•ÉÑİ½É¬ (€€€€€€€€€€€€€€€½Ù•ÉA…Ñ è½Ù•ÉA…Ñ °(€€€€€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€€€€€€İ¥‘Ñ è€äÈ°(€€€€€€€€€€€€€€€¡•¥¡Ğè€äÈ°(€€€€€€€€€€€€€€€¥½¹M¥é”è€ĞØ°(€€€€€€€€€€€€€€¤(€€€€€€€€€€€€è}A½­•µ½¹Ù…Ñ…È (€€€€€€€€€€€€€€€ÍÁÉ¥Ñ•A…Ñ è}Á½­•µ½¹MÁÉ¥Ñ•A…Ñ ¡…µ”°™¥ÉÍÑA½­•µ½¸¤°(€€€€€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€€€€€€Í¥é”è€äÈ°(€€€€€€€€€€€€€€€Á…‘‘¥¹œè€Ô°(€€€€€€€€€€€€€€€™…±±‰…¬è}…µ•ÉÑİ½É¬ (€€€€€€€€€€€€€€€€€½Ù•ÉA…Ñ è½Ù•ÉA…Ñ °(€€€€€€€€€€€€€€€€€…•¹Ğè…•¹Ğ°(€€€€€€€€€€€€€€€€€İ¥‘Ñ è€äÈ°(€€€€€€€€€€€€€€€€€¡•¥¡Ğè€äÈ°(€€€€€€€€€€€€€€€€€¥½¹M¥é”è€ĞØ°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€¤°(€€€€€Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€Ÿ
+ıM…±¥È‘•°©Õ•¼üœ°(€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”°™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜàÀÀ¤°(€€€€€€¤°(€€€€€½¹Ñ•¹ĞèQ•áĞ (€€€€€€€±½Õ‘Ù…¥±…‰±”(€€€€€€€€€€€€ü€°ÁÉ½É•Í¼‘”€‘í}±•…¹…µ•Q¥Ñ±”¡…µ”¹Ñ¥Ñ±”¥ôÍ¥•µÁÉ”Í”Õ…É‘…Ë„±½…±µ•¹Ñ”¸±¥”Í¤Ñ…µ‰§¥¸ÅÕ¥•É•ÌÉ••µÁ±…é…ÈÍÔÉ•ÍÁ…±‘¼•¸±„¹Õ‰”¸œ(€€€€€€€€€€€€è€°ÁÉ½É•Í¼‘”€‘í}±•…¹…µ•Q¥Ñ±”¡…µ”¹Ñ¥Ñ±”¥ôÍ”Õ…É‘…Ë„±½…±µ•¹Ñ”…¹Ñ•Ì‘”Í…±¥È¸%¹¥¥„Í•Í§Í¸½¸½½±”Á…É„É•ÍÁ…±‘…É±¼•¸±„¹Õ‰”¸œ°(€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ¤°(€€€€€€¤°(€€€€€…Ñ¥½¹Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹ÍÁ…•Ù•¹±ä°(€€€€€…Ñ¥½¹Ìèl(€€€€€€€Q•áÑ	ÕÑÑ½¸ (€€€€€€€€€½¹AÉ•ÍÍ•è€ ¤€ôø(€€€€€€€€€€€€€9…Ù¥…Ñ½È¹½˜¡½¹Ñ•áĞ¤¹Á½À¡}á¥Ñ…µ•Ñ¥½¸¹­••ÁA±…å¥¹œ¤°(€€€€€€€€€¡¥±è½¹ÍĞQ•áĞ M•Õ¥È©Õ…¹‘¼œ¤°(€€€€€€€€¤°(€€€€€€€¥˜€¡±½Õ‘Ù…¥±…‰±”¤(€€€€€€€€€¥±±•‘	ÕÑÑ½¸ (€€€€€€€€€€€ÍÑå±”è¥±±•‘	ÕÑÑ½¸¹ÍÑå±•É½´ (€€€€€€€€€€€€€‰…­É½Õ¹‘½±½Èè…•¹Ğ°(€€€€€€€€€€€€€™½É•É½Õ¹‘½±½Èè½±½ÉÌ¹‰±…¬°(€€€€€€€€€€€€¤°(€€€€€€€€€€€½¹AÉ•ÍÍ•è€ ¤€ôø(€€€€€€€€€€€€€€€9…Ù¥…Ñ½È¹½˜¡½¹Ñ•áĞ¤¹Á½À¡}á¥Ñ…µ•Ñ¥½¸¹±½Õ‘	…­ÕÀ¤°(€€€€€€€€€€€¡¥±è½¹ÍĞQ•áĞ I•ÍÁ…±‘…ÈäÍ…±¥Èœ¤°(€€€€€€€€€€¤°(€€€€€€€=ÕÑ±¥¹•‘	ÕÑÑ½¸ (€€€€€€€€€ÍÑå±”è=ÕÑ±¥¹•‘	ÕÑÑ½¸¹ÍÑå±•É½´ (€€€€€€€€€€€™½É•É½Õ¹‘½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€Í¥‘”è½¹ÍĞ	½É‘•ÉM¥‘”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÔĞ¤°(€€€€€€€€€€¤°(€€€€€€€€€½¹AÉ•ÍÍ•è€ ¤€ôø(€€€€€€€€€€€€€9…Ù¥…Ñ½È¹½˜¡½¹Ñ•áĞ¤¹Á½À¡}á¥Ñ…µ•Ñ¥½¸¹±½…±=¹±ä¤°(€€€€€€€€€¡¥±è½¹ÍĞQ•áĞ M…±¥ÈÍ¥¸É•ÍÁ…±‘…Èœ¤°(€€€€€€€€¤°(€€€€€t°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•ÉÑİ½É¬•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°MÑÉ¥¹œü½Ù•ÉA…Ñ ì(€™¥¹…°½±½È…•¹Ğì(€™¥¹…°‘½Õ‰±”İ¥‘Ñ ì(€™¥¹…°‘½Õ‰±”¡•¥¡Ğì(€™¥¹…°‘½Õ‰±”¥½¹M¥é”ì((€½¹ÍĞ}…µ•ÉÑİ½É¬¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½Ù•ÉA…Ñ °(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹İ¥‘Ñ °(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¡•¥¡Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥½¹M¥é”°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸½¹Ñ…¥¹•È (€€€€€İ¥‘Ñ èİ¥‘Ñ °(€€€€€¡•¥¡Ğè¡•¥¡Ğ°(€€€€€±¥Á	•¡…Ù¥½Èè±¥À¹…¹Ñ¥±¥…Ì°(€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬ÈØ°(€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È à¤°(€€€€€€€‰½É‘•Èè	½É‘•È¹…±°¡½±½Èè…•¹Ğ¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ØÔ¤¤°(€€€€€€¤°(€€€€€¡¥±è½Ù•ÉA…Ñ €ôô¹Õ±°(€€€€€€€€€€ü%½¸¡%½¹Ì¹ÍÁ½ÉÑÍ}•ÍÁ½ÉÑÍ}É½Õ¹‘•°½±½Èè…•¹Ğ°Í¥é”è¥½¹M¥é”¤(€€€€€€€€€€è%µ…”¹…ÍÍ•Ğ (€€€€€€€€€€€€€½Ù•ÉA…Ñ „°(€€€€€€€€€€€€€™¥Ğè	½á¥Ğ¹½Ù•È°(€€€€€€€€€€€€€•ÉÉ½É	Õ¥±‘•Èè€¡|°}|°}}|¤€ôø%½¸ (€€€€€€€€€€€€€€€%½¹Ì¹ÍÁ½ÉÑÍ}•ÍÁ½ÉÑÍ}É½Õ¹‘•°(€€€€€€€€€€€€€€€½±½Èè…•¹Ğ°(€€€€€€€€€€€€€€€Í¥é”è¥½¹M¥é”°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€¤ì(€ô)ô()MÑÉ¥¹œ}±•…¹…µ•Q¥Ñ±”¡MÑÉ¥¹œÑ¥Ñ±”¤ì(€™¥¹…°±•…¹•€ôÑ¥Ñ±”(€€€€€€¹É•Á±…•±° |œ°€œ€œ¤(€€€€€€¹É•Á±…•±°¡I•áÀ¡ÈqÌ¬œ¤°€œ€œ¤(€€€€€€¹ÑÉ¥´ ¤ì(€¥˜€¡±•…¹•¹¥ÍµÁÑä¤É•ÑÕÉ¸€)Õ•¼œì((€É•ÑÕÉ¸±•…¹•(€€€€€€¹ÍÁ±¥Ğ œ€œ¤(€€€€€€¹µ…À (€€€€€€€€¡İ½É¤€ôøİ½É¹¥ÍµÁÑä(€€€€€€€€€€€€üİ½É(€€€€€€€€€€€€è€œ‘íİ½É‘lÁt¹Ñ½UÁÁ•É…Í” ¥ô‘íİ½É¹ÍÕ‰ÍÑÉ¥¹œ Ä¥ôœ°(€€€€€€¤(€€€€€€¹©½¥¸ œ€œ¤(€€€€€€¹É•Á±…•±°¡I•áÀ¡ÈyA½­•µ½¹qˆœ°…Í•M•¹Í¥Ñ¥Ù”è™…±Í”¤°€A½¯¥µ½¸œ¤ì)ô()‘½Õ‰±”}¹‘ÍQ½ÁMÉ••¹M…±”¡µÕ±…Ñ½ÉAÉ•™•É•¹•ÌÁÉ•™•É•¹•Ì¤ì(€™¥¹…°•µÁ¡…Í¥Ì€ôÁÉ•™•É•¹•Ì¹¹‘ÍMÉ••¹µÁ¡…Í¥Ìì(€™¥¹…°É•±…Ñ¥Ù”€ô•µÁ¡…Í¥Ì€ôô9‘ÍMÉ••¹µÁ¡…Í¥Ì¹‰½ÑÑ½´€ü€¸àÈ€è€Ä¸Àì(€É•ÑÕÉ¸É•±…Ñ¥Ù”ì)ô()‘½Õ‰±”}¹‘Í	½ÑÑ½µMÉ••¹M…±”¡µÕ±…Ñ½ÉAÉ•™•É•¹•ÌÁÉ•™•É•¹•Ì¤ì(€™¥¹…°•µÁ¡…Í¥Ì€ôÁÉ•™•É•¹•Ì¹¹‘ÍMÉ••¹µÁ¡…Í¥Ìì(€™¥¹…°É•±…Ñ¥Ù”€ô•µÁ¡…Í¥Ì€ôô9‘ÍMÉ••¹µÁ¡…Í¥Ì¹Ñ½À€ü€¸àÈ€è€Ä¸Àì(€É•ÑÕÉ¸É•±…Ñ¥Ù”ì)ô((¡I•Ğ°I•Ğ¤}¹‘Í!½É¥é½¹Ñ…±•ÍÑ¥¹…Ñ¥½¹Ì (€M¥é”Í¥é”°ì(€É•ÅÕ¥É•‘½Õ‰±”Ñ½ÁMÉ••¹M…±”°(€É•ÅÕ¥É•‘½Õ‰±”‰½ÑÑ½µMÉ••¹M…±”°(€É•ÅÕ¥É•‘½Õ‰±”ÍÉ••¹ÍM…±”°)ô¤ì(€½¹ÍĞ…À€ô€Ğ¸Àì(€½¹ÍĞ…ÍÁ•ÑI…Ñ¥¼€ô€Ğ€¼€Ìì(€™¥¹…°İ¥‘Ñ¡	…Í”€ô(€€€€€€¡Í¥é”¹İ¥‘Ñ €´…À¤€¼€¡Ñ½ÁMÉ••¹M…±”€¬‰½ÑÑ½µMÉ••¹M…±”¤ì(€™¥¹…°¡•¥¡Ñ	…Í”€ôÍ¥é”¹¡•¥¡Ğ€¨…ÍÁ•ÑI…Ñ¥¼€¼(€€€€€µ…Ñ ¹µ…à¡Ñ½ÁMÉ••¹M…±”°‰½ÑÑ½µMÉ••¹M…±”¤ì(€™¥¹…°±…å½ÕÑ]¥‘Ñ €ôµ…Ñ ¹µ¥¸¡İ¥‘Ñ¡	…Í”°¡•¥¡Ñ	…Í”¤€¨ÍÉ••¹ÍM…±”ì(€™¥¹…°Ñ½Á]¥‘Ñ €ô±…å½ÕÑ]¥‘Ñ €¨Ñ½ÁMÉ••¹M…±”ì(€™¥¹…°‰½ÑÑ½µ]¥‘Ñ €ô±…å½ÕÑ]¥‘Ñ €¨‰½ÑÑ½µMÉ••¹M…±”ì(€™¥¹…°Ñ½Á!•¥¡Ğ€ôÑ½Á]¥‘Ñ €¼…ÍÁ•ÑI…Ñ¥¼ì(€™¥¹…°‰½ÑÑ½µ!•¥¡Ğ€ô‰½ÑÑ½µ]¥‘Ñ €¼…ÍÁ•ÑI…Ñ¥¼ì(€™¥¹…°½¹Ñ•¹Ñ]¥‘Ñ €ôÑ½Á]¥‘Ñ €¬…À€¬‰½ÑÑ½µ]¥‘Ñ ì(€™¥¹…°±•™Ğ€ô€¡Í¥é”¹İ¥‘Ñ €´½¹Ñ•¹Ñ]¥‘Ñ ¤€¼€Èì(€É•ÑÕÉ¸€ (€€€I•Ğ¹™É½µ1Q]  (€€€€€±•™Ğ°(€€€€€€¡Í¥é”¹¡•¥¡Ğ€´Ñ½Á!•¥¡Ğ¤€¼€È°(€€€€€Ñ½Á]¥‘Ñ °(€€€€€Ñ½Á!•¥¡Ğ°(€€€€¤°(€€€I•Ğ¹™É½µ1Q]  (€€€€€±•™Ğ€¬Ñ½Á]¥‘Ñ €¬…À°(€€€€€€¡Í¥é”¹¡•¥¡Ğ€´‰½ÑÑ½µ!•¥¡Ğ¤€¼€È°(€€€€€‰½ÑÑ½µ]¥‘Ñ °(€€€€€‰½ÑÑ½µ!•¥¡Ğ°(€€€€¤°(€€¤ì)ô()MÑÉ¥¹œ}Á½­•µ½¹MÁÉ¥Ñ•A…Ñ ¡…µ”…µ”°¥¹ĞÍÁ•¥•Í%¤ì(€™¥¹…°ÁÉ½™¥±”€ô…µ•ÍÍ•ÑAÉ½™¥±”¹™É½µ…µ”¡…µ”¤ì((€¥˜€¡ÍÁ•¥•Í%€ôô€À¤ì(€€€É•ÑÕÉ¸MÁÉ¥Ñ•I•Í½±Ù•È¹•½É…µ”¡ÁÉ½™¥±”èÁÉ½™¥±”¤ì(€ô((€É•ÑÕÉ¸MÁÉ¥Ñ•I•Í½±Ù•È¹Á½­•µ½¹½É…µ”¡ÁÉ½™¥±”èÁÉ½™¥±”°Á½­•µ½¹%èÍÁ•¥•Í%¤ì)ô()±…ÍÌ}A½ÉÑÉ…¥Ñ…É‘A…±•ÑÑ”ì(€™¥¹…°½±½ÈÑ½Àì(€™¥¹…°½±½Èµ¥‘‘±”ì(€™¥¹…°½±½È‰½ÑÑ½´ì(€™¥¹…°½±½È¡•…‘•Èì(€™¥¹…°½±½ÈÍÑ…”ì(€™¥¹…°½±½È±¥¹”ì(€™¥¹…°½±½È‰½É‘•Èì(€™¥¹…°½±½È¥¹¬ì(€™¥¹…°½±½ÈÁ…ÉÑå•¹Ğì(€™¥¹…°MÑÉ¥¹œ•¹•ÉåÍÍ•Ğì((€½¹ÍĞ}A½ÉÑÉ…¥Ñ…É‘A…±•ÑÑ”¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Ñ½À°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹µ¥‘‘±”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰½ÑÑ½´°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¡•…‘•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹ÍÑ…”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹±¥¹”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰½É‘•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥¹¬°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Á…ÉÑå•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹•¹•ÉåÍÍ•Ğ°(€ô¤ì((€™…Ñ½Éä}A½ÉÑÉ…¥Ñ…É‘A…±•ÑÑ”¹™½ÉÉ…µ”¡MÑÉ¥¹œ™É…µ•%¤ì(€€€™¥¹…°ÑåÁ”€ô™É…µ•%¹É•Á±…•¥ÉÍĞ Á½ÉÑÉ…¥Ñ|œ°€œœ¤ì(€€€™¥¹…°½±½ÉÌ€ôÍİ¥Ñ €¡ÑåÁ”¤ì(€€€€€€…Õ„œ€ôø½¹ÍĞm½±½È Áá		¤°½±½È ÁáØá	Ü¤°½±½È ÁáÈÜİ	¥t°(€€€€€€•±•ÑÉ¥¼œ€ôø½¹ÍĞm½±½È ÁáÍÀ¤°½±½È ÁáàÌà¤°½±½È ÁááàÄÜ¥t°(€€€€€€™Õ•¼œ€ôø½¹ÍĞm½±½È ÁáÀå¤°½±½È ÁáĞÜÜĞÈ¤°½±½È ÁáÜÉÉ¥t°(€€€€€€¡½©„œ€ôø½¹ÍĞm½±½È ÁáÁĞ¤°½±½È ÁáÜÁ	Õ¤°½±½È ÁáÈĞÜÔĞà¥t°(€€€€€€±Õ¡„œ€ôø½¹ÍĞm½±½È ÁáÔá¤°½±½È ÁáÄàĞÑ¤°½±½È ÁáÜÔĞÄÈà¥t°(€€€€€€µ•Ñ…°œ€ôø½¹ÍĞm½±½È ÁáåÀ¤°½±½È ÁáÙ	¤°½±½È ÁáØĞÜÌİ¥t°(€€€€€€½ÍÕÉ¥‘…œ€ôø½¹ÍĞm½±½È ÁáİàÄäÀ¤°½±½È ÁáÍÍĞä¤°½±½È ÁáÄÜÄäÅ¥t°(€€€€€€ÁÍ¤œ€ôø½¹ÍĞm½±½È ÁáÅÉ¤°½±½È ÁáÔÙà¤°½±½È ÁáØÌÍàØ¥t°(€€€€€€‘É…½¸œ€ôø½¹ÍĞl(€€€€€€€€€½±½È ÁáİÈ¤°(€€€€€€€€€½±½È ÁáàÔàÌÔà¤°(€€€€€€€€€½±½È ÁáÑĞäÌÀ¤°(€€€€€€€t°(€€€€€€¡…‘„œ€ôø½¹ÍĞm½±½È Ááá¤°½±½È ÁáàåĞ¤°½±½È ÁáàÕäĞ¥t°(€€€€€|€ôø½¹ÍĞm½±½È ÁáÕáä¤°½±½È ÁáİĞå¤°½±½È ÁáåàÜØĞ¥t°(€€€ôì(€€€™¥¹…°¥½¸€ôÍİ¥Ñ €¡ÑåÁ”¤ì(€€€€€€‘É…½¸œ€ôø€‘É…½¸œ°(€€€€€€¡…‘„œ€ôø€¡…‘„œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€•±•ÑÉ¥¼œ€ôø€•±•ÑÉ¥¼œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€¡½©„œ€ôø€¡½©„œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€ÁÍ¤œ€ôø€ÁÍ¤œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€½ÍÕÉ¥‘…œ€ôø€½ÍÕÉ¥‘…œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€µ•Ñ…°œ€ôø€µ•Ñ…°œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€±Õ¡„œ€ôø€±Õ¡„œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€™Õ•¼œ€ôø€™Õ•¼œ°(€€€€€MÑÉ¥¹œÙ…±Õ”İ¡•¸Ù…±Õ”€ôô€…Õ„œ€ôø€…Õ„œ°(€€€€€|€ôø€¹½Éµ…°œ°(€€€ôì(€€€™¥¹…°‘…É¬€ôÑåÁ”€ôô€½ÍÕÉ¥‘…œì(€€€™¥¹…°Á…ÉÑå•¹Ğ€ôÍİ¥Ñ €¡ÑåÁ”¤ì(€€€€€€…Õ„œ€ôø½¹ÍĞ½±½È ÁáÉäÅÜ¤°(€€€€€€•±•ÑÉ¥¼œ€ôø½¹ÍĞ½±½È ÁáÁäÀÀ¤°(€€€€€€™Õ•¼œ€ôø½¹ÍĞ½±½È ÁáÜĞĞÌÈ¤°(€€€€€€¡½©„œ€ôø½¹ÍĞ½±½È ÁáÍáĞÜ¤°(€€€€€€±Õ¡„œ€ôø½¹ÍĞ½±½È ÁáåØÌÌà¤°(€€€€€€µ•Ñ…°œ€ôø½¹ÍĞ½±½È ÁáÜÌàÌá¤°(€€€€€€½ÍÕÉ¥‘…œ€ôø½¹ÍĞ½±½È ÁáÔÌÔØØÌ¤°(€€€€€€ÁÍ¤œ€ôø½¹ÍĞ½±½È ÁááÑÀ¤°(€€€€€€‘É…½¸œ€ôø½¹ÍĞ½±½È ÁáÜÜÜÈÔÌ¤°(€€€€€€¡…‘„œ€ôø½¹ÍĞ½±½È ÁáÌÙå¤°(€€€€€|€ôø½¹ÍĞ½±½È ÁáåàØØÔ¤°(€€€ôì(€€€É•ÑÕÉ¸}A½ÉÑÉ…¥Ñ…É‘A…±•ÑÑ” (€€€€€Ñ½Àè½±½ÉÍlÁt°(€€€€€µ¥‘‘±”è½±½ÉÍlÅt°(€€€€€‰½ÑÑ½´è½±½ÉÍlÉt°(€€€€€¡•…‘•ÈèÑåÁ”€ôô€‘É…½¸œ€ü½¹ÍĞ½±½È ÁáÕİÈ¤€è½±½ÉÍlÁt°(€€€€€ÍÑ…”èÑåÁ”€ôô€‘É…½¸œ€ü½¹ÍĞ½±½È ÁáÉ¤€è½±½ÉÍlÅt°(€€€€€±¥¹”èÑåÁ”€ôô€‘É…½¸œ(€€€€€€€€€€ü½¹ÍĞ½±½È ÁáÜÜÜàÙ¤(€€€€€€€€€€è‘…É¬(€€€€€€€€€€€€€€ü½¹ÍĞ½±½È ÁááàÕ¤(€€€€€€€€€€€€€€è½¹ÍĞ½±½È ÁáàáÄà¤°(€€€€€‰½É‘•Èè½¹ÍĞ½±½È ÁáÈÅ¤°(€€€€€¥¹¬è‘…É¬€ü½±½ÉÌ¹İ¡¥Ñ”€è½¹ÍĞ½±½È ÁáÈĞÅÄÌ¤°(€€€€€Á…ÉÑå•¹ĞèÁ…ÉÑå•¹Ğ°(€€€€€•¹•ÉåÍÍ•Ğè€…ÍÍ•ÑÌ½™É…µ•Ì½Á½ÉÑÉ…¥Ğ½•¹•Éä¼‘¥½¸¹Á¹œœ°(€€€€¤ì(€ô)ô()±…ÍÌ}µÕ±…Ñ½ÉY¥ÍÕ…±Q¡•µ”ì(€™¥¹…°½±½È‰…­É½Õ¹ì(€™¥¹…°½±½È…ÁÁ	…Èì(€™¥¹…°½±½È…•¹Ğì(€™¥¹…°1¥¹•…ÉÉ…‘¥•¹ĞÉ…‘¥•¹Ğì((€½¹ÍĞ}µÕ±…Ñ½ÉY¥ÍÕ…±Q¡•µ”¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰…­É½Õ¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…ÁÁ	…È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹…•¹Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹É…‘¥•¹Ğ°(€ô¤ì((€™…Ñ½Éä}µÕ±…Ñ½ÉY¥ÍÕ…±Q¡•µ”¹™½É…µ”¡…µ”…µ”¤ì(€€€™¥¹…°MÑÉ¥¹œ¥‘•¹Ñ¥Ñä€ô€œ‘í…µ”¹Ñ¥Ñ±•ô€‘í…µ”¹½¹Í½±•ôœ¹Ñ½1½İ•É…Í” ¤ì(€€€™¥¹…°A½­•µ½¹…µ•Y•ÉÍ¥½¸Á½­•µ½¹Y•ÉÍ¥½¸€ô(€€€€€€€A½­•µ½¹…µ•AÉ½™¥±”¹™É½µ…µ•%‘•¹Ñ¥Ñä (€€€€€€€€€…µ•Q¥Ñ±”è…µ”¹Ñ¥Ñ±”°(€€€€€€€€€É½µA…Ñ è…µ”¹É½µA…Ñ °(€€€€€€€€¤¹Ù•ÉÍ¥½¸ì((€€€½±½ÈÁÉ¥µ…Éäì(€€€½±½ÈÍ•½¹‘…Éäì(€€€½±½È…•¹Ğì((€€€¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Á±…Ñ¥¹Õ´œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Á±…Ñ¥¹¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈĞÅÈĞ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÑÈÜÌÀ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÁàÕ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‘¥…µ½¹œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‘¥…µ…¹Ñ”œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÀÉĞØ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÄÜÙàà¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È Ááİá¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Á•…É°œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Á•É±„œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÍÄàÌä¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáİÍÜÄ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáİÌ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¡•…ÉÑ½±œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¡•…ÉĞ½±œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÍÉÄÀ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÜÜÔÔÅ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáàÙ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Í½Õ±Í¥±Ù•Èœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Í½Õ°Í¥±Ù•Èœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÜÈàÍ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáĞäØĞİ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È Áá	¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¬€Èœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹•É¼€Èœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹•É„€Èœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÄÄÌÄà¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÈØÍÔĞ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáØÑÕØ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì İ¡¥Ñ”€Èœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¹¼€Èœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¹„€Èœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÌÌÑØÌ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáàÌÈĞÌ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È Ááİ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¬œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹•É„œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹•É¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÔÔÕØÌ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáäĞÌĞÌ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÍ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì İ¡¥Ñ”œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¹„œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±…¹¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÀÜÁÄÀ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÄàÌĞÔÄ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáĞÍİà¤ì(€€€ô•±Í”¥˜€¡Á½­•µ½¹Y•ÉÍ¥½¸€ôôA½­•µ½¹…µ•Y•ÉÍ¥½¸¹™¥É•I•¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÀÕÈĞ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáİÈØÁ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáĞÑ¤ì(€€€ô•±Í”¥˜€¡Á½­•µ½¹Y•ÉÍ¥½¸€ôôA½­•µ½¹…µ•Y•ÉÍ¥½¸¹±•…™É••¸¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáØÉäĞÜ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÈàÙÈÈ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÁÔá¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì •µ•É…±œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì •Íµ•É…±‘„œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÁÌàÉ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÄÜÙÑ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáØÙÙĞ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Í…ÁÁ¡¥É”œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì é…™¥É¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÀÉÑ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÄÜÕàà¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÙÑ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ÉÕ‰äœ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ÉÕ‰¤œ¤ñğ(€€€€€€€¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ÉÕ‹´œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáĞÈÄÌÅ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáİÈÄÌÔ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÙàØ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ÉåÍÑ…°œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì É¥ÍÑ…°œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÀÉĞÌ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÌäÈØÕ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáİÍ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ½±œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ½É¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÍÉÄÀ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÙÑÄØ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÔÙ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Í¥±Ù•Èœ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Á±…Ñ„œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈÀÈäÌà¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáĞØÔÈØĞ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáİÑÈ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì å•±±½Üœ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì …µ…É¥±±¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÍÌÈÄÀ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÙÑÄà¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáØÙ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì É•œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì É½©¼œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÍÄÔÅ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáØÔÅÉ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÜÄàà¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰±Õ”œ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì …éÕ°œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÄÀÉÑ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÄÜÑÜÀ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÜÉÕ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì Í¹•Ìœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈØÈĞÍ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÔÄÑÜÈ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáåÉÈ¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹‘Ìœ¤ñğ¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ¹¥¹Ñ•¹‘¼‘Ìœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈĞÈàÉ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÑÔÄÕ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁáÙ	À¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰„œ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈÀÈàĞÈ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÌÔÌÀÕ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È Ááİá¤ì(€€€ô•±Í”¥˜€¡¥‘•¹Ñ¥Ñä¹½¹Ñ…¥¹Ì ‰Œœ¤¤ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈĞÅÍ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÍÉÕ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È Ááåİ¤ì(€€€ô•±Í”ì(€€€€€ÁÉ¥µ…Éä€ô½¹ÍĞ½±½È ÁáÈÔÉÈÀ¤ì(€€€€€Í•½¹‘…Éä€ô½¹ÍĞ½±½È ÁáÍĞäÌĞ¤ì(€€€€€…•¹Ğ€ô½¹ÍĞ½±½È ÁááĞİ¤ì(€€€ô((€€€É•ÑÕÉ¸}µÕ±…Ñ½ÉY¥ÍÕ…±Q¡•µ” (€€€€€‰…­É½Õ¹èÁÉ¥µ…Éä°(€€€€€…ÁÁ	…Èè½±½È¹±•ÉÀ¡ÁÉ¥µ…Éä°½±½ÉÌ¹‰±…¬°€À¸Èà¤„°(€€€€€…•¹Ğè…•¹Ğ°(€€€€€É…‘¥•¹Ğè1¥¹•…ÉÉ…‘¥•¹Ğ (€€€€€€€‰•¥¸è±¥¹µ•¹Ğ¹Ñ½Á1•™Ğ°(€€€€€€€•¹è±¥¹µ•¹Ğ¹‰½ÑÑ½µI¥¡Ğ°(€€€€€€€½±½ÉÌè€ñ½±½Èùl(€€€€€€€€€½±½È¹±•ÉÀ¡ÁÉ¥µ…Éä°½±½ÉÌ¹‰±…¬°€À¸Äà¤„°(€€€€€€€€€ÁÉ¥µ…Éä°(€€€€€€€€€Í•½¹‘…Éä°(€€€€€€€€€½±½È¹±•ÉÀ¡Í•½¹‘…Éä°½±½ÉÌ¹‰±…¬°€À¸ÌĞ¤„°(€€€€€€€t°(€€€€€€€ÍÑ½ÁÌè½¹ÍĞ€ñ‘½Õ‰±”ùlÀ°€À¸ÌÔ°€À¸ÜÈ°€Åt°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}½É•9½Ñ½Õ¹‘Y¥•Ü•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°MÑÉ¥¹œÉ½µA…Ñ ì(€™¥¹…°µÕ±…Ñ¥½¹½É”½É”ì((€½¹ÍĞ}½É•9½Ñ½Õ¹‘Y¥•Ü¡íÉ•ÅÕ¥É•Ñ¡¥Ì¹É½µA…Ñ °É•ÅÕ¥É•Ñ¡¥Ì¹½É•ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸½¹Ñ…¥¹•È (€€€€€½±½Èè½±½ÉÌ¹‰±…¬°(€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹…±° ÈĞ¤°(€€€€€¡¥±èM¥¹±•¡¥±‘MÉ½±±Y¥•Ü (€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€½¹ÍĞ%½¸ (€€€€€€€€€€€€€%½¹Ì¹•ÉÉ½É}½ÕÑ±¥¹•}É½Õ¹‘•°(€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹É•‘•¹Ğ°(€€€€€€€€€€€€€Í¥é”è€ÔÈ°(€€€€€€€€€€€€¤°(€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄØ¤°(€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€9¼Í”•¹½¹ÑËÌ€‘í½É”¹‘¥ÍÁ±…å9…µ•ôœ°(€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€€€€€™½¹ÑM¥é”è€Ää°(€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹‰½±°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÈ¤°(€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€9¼Í”•¹½¹ÑËÌ•°½É”¹••Í…É¥¼Á…É„•ÍÑ„I=4¸œ°(€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÜÔ¤°(€€€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄĞ°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄØ¤°(€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€IÕÑ…ÌÉ•Ù¥Í…‘…Ìéq¸‘í½É•1½…‘•È¹‘•‰Õ½É•M•…É¡A…Ñ¡Í½ÉI½´¡É½µA…Ñ ¥ôœ°(€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÔÔ¤°(€€€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄÈ°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄØ¤°(€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€I=4éq¸‘É½µA…Ñ œ°(€€€€€€€€€€€€€µ…á1¥¹•Ìè€Ğ°(€€€€€€€€€€€€€½Ù•É™±½ÜèQ•áÑ=Ù•É™±½Ü¹•±±¥ÁÍ¥Ì°(€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÔÔ¤°(€€€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄÈ°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}M¹•ÍM¥‘•A…¹•°•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‰½½°¥Í1•™Ğì(€™¥¹…°‘½Õ‰±”½Á…¥Ñäì(€™¥¹…°]¥‘•Ğ¡¥±ì(€™¥¹…°½±½ÈÑ½Á½±½Èì(€™¥¹…°½±½È‰½ÑÑ½µ½±½Èì(€™¥¹…°½±½È‰½É‘•É½±½Èì((€½¹ÍĞ}M¹•ÍM¥‘•A…¹•°¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥Í1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½Á…¥Ñä°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¡¥±°(€€€Ñ¡¥Ì¹Ñ½Á½±½È€ô½¹ÍĞ½±½È Ááåá¤°(€€€Ñ¡¥Ì¹‰½ÑÑ½µ½±½È€ô½¹ÍĞ½±½È Áááİ	¤°(€€€Ñ¡¥Ì¹‰½É‘•É½±½È€ô½¹ÍĞ½±½È ÁáÜÜÜĞİ¤°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸•½É…Ñ•‘	½à (€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€É…‘¥•¹Ğè1¥¹•…ÉÉ…‘¥•¹Ğ (€€€€€€€€€‰•¥¸è±¥¹µ•¹Ğ¹Ñ½Á•¹Ñ•È°(€€€€€€€€€•¹è±¥¹µ•¹Ğ¹‰½ÑÑ½µ•¹Ñ•È°(€€€€€€€€€½±½ÉÌè€ñ½±½ÈùmÑ½Á½±½È°‰½ÑÑ½µ½±½Ét°(€€€€€€€€¤°(€€€€€€€‰½É‘•Èè	½É‘•È (€€€€€€€€€±•™Ğè¥Í1•™Ğ(€€€€€€€€€€€€€€ü	½É‘•ÉM¥‘”¹¹½¹”(€€€€€€€€€€€€€€è	½É‘•ÉM¥‘”¡½±½Èè‰½É‘•É½±½È°İ¥‘Ñ è€È¤°(€€€€€€€€€É¥¡Ğè¥Í1•™Ğ(€€€€€€€€€€€€€€ü	½É‘•ÉM¥‘”¡½±½Èè‰½É‘•É½±½È°İ¥‘Ñ è€È¤(€€€€€€€€€€€€€€è	½É‘•ÉM¥‘”¹¹½¹”°(€€€€€€€€¤°(€€€€€€¤°(€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡¡½É¥é½¹Ñ…°è€à°Ù•ÉÑ¥…°è€ÄÀ¤°(€€€€€€€¡¥±è=Á…¥Ñä¡½Á…¥Ñäè½Á…¥Ñä°¡¥±è¡¥±¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}1…¹‘Í…Á•1•™Ñ½¹ÑÉ½±Ì•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥É•Ñ¥½¹…±½¹ÑÉ½±QåÁ”‘¥É•Ñ¥½¹…±½¹ÑÉ½°ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹UÀì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹½İ¸ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹1•™Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹I¥¡Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹M•±•Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹0ì(€™¥¹…°‰½½°Í¡½İM¡½Õ±‘•Èì(€™¥¹…°I•ÑÉ½!Õ‰½¹Í½±•QåÁ”ü½¹Í½±•1½¼ì((€½¹ÍĞ}1…¹‘Í…Á•1•™Ñ½¹ÑÉ½±Ì¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‘¥É•Ñ¥½¹…±½¹ÑÉ½°°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹UÀ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½İ¸°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹I¥¡Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹M•±•Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹0°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¡½İM¡½Õ±‘•È°(€€€Ñ¡¥Ì¹½¹Í½±•1½¼°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸½±Õµ¸ (€€€€€µ…¥¹á¥Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€¡¥±‘É•¸èl(€€€€€€€¥˜€¡Í¡½İM¡½Õ±‘•È¤€¸¸¹l(€€€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€€€±…‰•°è€0œ°(€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹0°(€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€¤°(€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÀ¤°(€€€€€€€t°(€€€€€€€}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸ (€€€€€€€€€İ¥‘Ñ è€ÜØ°(€€€€€€€€€¡•¥¡Ğè€ÈØ°(€€€€€€€€€±…‰•°è€M1Pœ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹M•±•Ğ°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÈÈ¤°(€€€€€€€}¥É•Ñ¥½¹…±½¹ÑÉ½° (€€€€€€€€€ÑåÁ”è‘¥É•Ñ¥½¹…±½¹ÑÉ½°°(€€€€€€€€€­•åM¥é”è€Ìà°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€‰ÕÑÑ½¹UÀè‰ÕÑÑ½¹UÀ°(€€€€€€€€€‰ÕÑÑ½¹½İ¸è‰ÕÑÑ½¹½İ¸°(€€€€€€€€€‰ÕÑÑ½¹1•™Ğè‰ÕÑÑ½¹1•™Ğ°(€€€€€€€€€‰ÕÑÑ½¹I¥¡Ğè‰ÕÑÑ½¹I¥¡Ğ°(€€€€€€€€¤°(€€€€€€€¥˜€¡½¹Í½±•1½¼€„ô¹Õ±°¤€¸¸¹l(€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄĞ¤°(€€€€€€€€€¥ÑÑ•‘	½à (€€€€€€€€€€€™¥Ğè	½á¥Ğ¹Í…±•½İ¸°(€€€€€€€€€€€¡¥±èI•ÑÉ½!Õ‰½¹Í½±•1½¼¡½¹Í½±”è½¹Í½±•1½¼„¤°(€€€€€€€€€€¤°(€€€€€€€t°(€€€€€t°(€€€€¤ì(€ô)ô()±…ÍÌ}1…¹‘Í…Á•I¥¡Ñ½¹ÑÉ½±Ì•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹`ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹dì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹MÑ…ÉĞì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹Hì(€™¥¹…°‰½½°Í¡½İM¡½Õ±‘•Èì(€™¥¹…°‰½½°¥ÍM¹•Ìì(€™¥¹…°‰½½°É½Ñ…Ñ•Ñ¥½¹Ìì(€™¥¹…°½±½È‰ÕÑÑ½¹½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹	½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹a½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹e½±½Èì((€½¹ÍĞ}1…¹‘Í…Á•I¥¡Ñ½¹ÑÉ½±Ì¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹`°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹d°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹MÑ…ÉĞ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹H°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¡½İM¡½Õ±‘•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥ÍM¹•Ì°(€€€Ñ¡¥Ì¹É½Ñ…Ñ•Ñ¥½¹Ì€ôÑÉÕ”°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹½±½È€ô½¹ÍĞ½±½È ÁáÕÑá¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹	½±½È€ô½¹ÍĞ½±½È ÁáàÄÜÍ¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹a½±½È€ô½¹ÍĞ½±½È ÁáàÄÜÍ¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹e½±½È€ô½¹ÍĞ½±½È ÁáÕÑá¤°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸½±Õµ¸ (€€€€€µ…¥¹á¥Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€¡¥±‘É•¸èl(€€€€€€€¥˜€¡Í¡½İM¡½Õ±‘•È¤€¸¸¹l(€€€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€€€±…‰•°è€Hœ°(€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹H°(€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€¤°(€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÀ¤°(€€€€€€€t°(€€€€€€€}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸ (€€€€€€€€€İ¥‘Ñ è€ÜØ°(€€€€€€€€€¡•¥¡Ğè€ÈØ°(€€€€€€€€€±…‰•°è€MQIPœ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹MÑ…ÉĞ°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÈÈ¤°(€€€€€€€¥˜€¡¥ÍM¹•Ì¤(€€€€€€€€€}M¹•ÍÑ¥½¹A… (€€€€€€€€€€€Í¥é”è€ĞÈ°(€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€‰ÕÑÑ½¹è‰ÕÑÑ½¹°(€€€€€€€€€€€‰ÕÑÑ½¹è‰ÕÑÑ½¹°(€€€€€€€€€€€‰ÕÑÑ½¹`è‰ÕÑÑ½¹`°(€€€€€€€€€€€‰ÕÑÑ½¹dè‰ÕÑÑ½¹d°(€€€€€€€€€€€‰ÕÑÑ½¹½±½Èè‰ÕÑÑ½¹½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹	½±½Èè‰ÕÑÑ½¹	½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹a½±½Èè‰ÕÑÑ½¹a½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹e½±½Èè‰ÕÑÑ½¹e½±½È°(€€€€€€€€€€¤(€€€€€€€•±Í”(€€€€€€€€€¥ÑÑ•‘	½à (€€€€€€€€€€€™¥Ğè	½á¥Ğ¹Í…±•½İ¸°(€€€€€€€€€€€¡¥±èQÉ…¹Í™½É´¹É½Ñ…Ñ” (€€€€€€€€€€€€€…¹±”èÉ½Ñ…Ñ•Ñ¥½¹Ì€ü€´À¸ÈÀ€è€À°(€€€€€€€€€€€€€¡¥±èI½Ü (€€€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€}…µ•	½åÑ¥½¹	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€€€Í¥é”è€Ôà°(€€€€€€€€€€€€€€€€€€€±…‰•°è€œ°(€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡İ¥‘Ñ è€ÄĞ¤°(€€€€€€€€€€€€€€€€€}…µ•	½åÑ¥½¹	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€€€Í¥é”è€Ôà°(€€€€€€€€€€€€€€€€€€€±…‰•°è€œ°(€€€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€t°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½å½¹ÑÉ½±Ì•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‰½½°½µÁ…Ğì(€™¥¹…°‰½½°±…ÍÍ¥1…å½ÕĞì(€™¥¹…°‘½Õ‰±”Í¥é•M…±”ì(€™¥¹…°‘½Õ‰±”½Á…¥Ñäì(€™¥¹…°‰½½°Íİ…Á1…‰•±Ìì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥É•Ñ¥½¹…±½¹ÑÉ½±QåÁ”‘¥É•Ñ¥½¹…±½¹ÑÉ½°ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹UÀì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹½İ¸ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹1•™Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹I¥¡Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹`ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹dì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹M•±•Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹MÑ…ÉĞì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹0ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹Hì(€™¥¹…°‰½½°Í¡½İM¡½Õ±‘•Èì(€™¥¹…°‰½½°¥ÍM¹•Ìì(€™¥¹…°½±½È‰ÕÑÑ½¹½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹	½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹a½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹e½±½Èì((€½¹ÍĞ}…µ•	½å½¹ÑÉ½±Ì¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½µÁ…Ğ°(€€€Ñ¡¥Ì¹±…ÍÍ¥1…å½ÕĞ€ô™…±Í”°(€€€Ñ¡¥Ì¹Í¥é•M…±”€ô€Ä°(€€€Ñ¡¥Ì¹½Á…¥Ñä€ô€Ä°(€€€Ñ¡¥Ì¹Íİ…Á1…‰•±Ì€ô™…±Í”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‘¥É•Ñ¥½¹…±½¹ÑÉ½°°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹UÀ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½İ¸°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹I¥¡Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹`°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹d°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹M•±•Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹MÑ…ÉĞ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹0°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹H°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¡½İM¡½Õ±‘•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥ÍM¹•Ì°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹½±½È€ô½¹ÍĞ½±½È ÁáÕÑá¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹	½±½È€ô½¹ÍĞ½±½È ÁáàÄÜÍ¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹a½±½È€ô½¹ÍĞ½±½È ÁáàÄÜÍ¤°(€€€Ñ¡¥Ì¹‰ÕÑÑ½¹e½±½È€ô½¹ÍĞ½±½È ÁáÕÑá¤°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°‘½Õ‰±”‘A…‘-•åM¥é”€ô€¡½µÁ…Ğ€ü€ÌÀ€è€ĞÈ¤€¨Í¥é•M…±”ì(€€€™¥¹…°‘½Õ‰±”…Ñ¥½¹M¥é”€ô€¡½µÁ…Ğ€ü€ÔĞ€è€ØØ¤€¨Í¥é•M…±”ì(€€€™¥¹…°‘½Õ‰±”ÍåÍÑ•µ]¥‘Ñ €ô€¡½µÁ…Ğ€ü€Øà€è€àÈ¤€¨Í¥é•M…±”ì(€€€™¥¹…°‘½Õ‰±”ÍåÍÑ•µ!•¥¡Ğ€ô€¡½µÁ…Ğ€ü€ÈĞ€è€Èà¤€¨Í¥é•M…±”ì((€€€™¥¹…°]¥‘•Ğ‘A…€ô}¥É•Ñ¥½¹…±½¹ÑÉ½° (€€€€€ÑåÁ”è‘¥É•Ñ¥½¹…±½¹ÑÉ½°°(€€€€€­•åM¥é”è‘A…‘-•åM¥é”°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰ÕÑÑ½¹UÀè‰ÕÑÑ½¹UÀ°(€€€€€‰ÕÑÑ½¹½İ¸è‰ÕÑÑ½¹½İ¸°(€€€€€‰ÕÑÑ½¹1•™Ğè‰ÕÑÑ½¹1•™Ğ°(€€€€€‰ÕÑÑ½¹I¥¡Ğè‰ÕÑÑ½¹I¥¡Ğ°(€€€€¤ì((€€€™¥¹…°]¥‘•Ğ…Ñ¥½¹Ì€ô¥ÍM¹•Ì(€€€€€€€€ü}M¹•ÍÑ¥½¹A… (€€€€€€€€€€€Í¥é”è½µÁ…Ğ€ü€Ìà€è€ĞÔ°(€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€‰ÕÑÑ½¹è‰ÕÑÑ½¹°(€€€€€€€€€€€‰ÕÑÑ½¹è‰ÕÑÑ½¹°(€€€€€€€€€€€‰ÕÑÑ½¹`è‰ÕÑÑ½¹`°(€€€€€€€€€€€‰ÕÑÑ½¹dè‰ÕÑÑ½¹d°(€€€€€€€€€€€‰ÕÑÑ½¹½±½Èè‰ÕÑÑ½¹½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹	½±½Èè‰ÕÑÑ½¹	½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹a½±½Èè‰ÕÑÑ½¹a½±½È°(€€€€€€€€€€€‰ÕÑÑ½¹e½±½Èè‰ÕÑÑ½¹e½±½È°(€€€€€€€€€€¤(€€€€€€€€èQÉ…¹Í™½É´¹É½Ñ…Ñ” (€€€€€€€€€€€…¹±”è€´À¸ÈÀ°(€€€€€€€€€€€¡¥±èI½Ü (€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€}…µ•	½åÑ¥½¹	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€Í¥é”è…Ñ¥½¹M¥é”°(€€€€€€€€€€€€€€€€€±…‰•°èÍİ…Á1…‰•±Ì€ü€œ€è€œ°(€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€M¥é•‘	½à¡İ¥‘Ñ è½µÁ…Ğ€ü€ÄÈ€è€ÄØ¤°(€€€€€€€€€€€€€€€}…µ•	½åÑ¥½¹	ÕÑÑ½¸ (€€€€€€€€€€€€€€€€€Í¥é”è…Ñ¥½¹M¥é”°(€€€€€€€€€€€€€€€€€±…‰•°èÍİ…Á1…‰•±Ì€ü€œ€è€œ°(€€€€€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹°(€€€€€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€t°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤ì((€€€™¥¹…°]¥‘•ĞÍåÍÑ•µ	ÕÑÑ½¹Ì€ôI½Ü (€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€¡¥±‘É•¸èl(€€€€€€€}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸ (€€€€€€€€€İ¥‘Ñ èÍåÍÑ•µ]¥‘Ñ °(€€€€€€€€€¡•¥¡ĞèÍåÍÑ•µ!•¥¡Ğ°(€€€€€€€€€±…‰•°è€M1Pœ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹M•±•Ğ°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€€€M¥é•‘	½à¡İ¥‘Ñ è½µÁ…Ğ€ü€ÄÀ€è€ÄĞ¤°(€€€€€€€}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸ (€€€€€€€€€İ¥‘Ñ èÍåÍÑ•µ]¥‘Ñ °(€€€€€€€€€¡•¥¡ĞèÍåÍÑ•µ!•¥¡Ğ°(€€€€€€€€€±…‰•°è€MQIPœ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹MÑ…ÉĞ°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€t°(€€€€¤ì((€€€¥˜€¡½µÁ…Ğ¤ì(€€€€€É•ÑÕÉ¸½¹ÍĞM¥é•‘	½à¹Í¡É¥¹¬ ¤ì(€€€ô((€€€™¥¹…°]¥‘•ĞÍ¡½Õ±‘•É	ÕÑÑ½¹Ì€ôI½Ü (€€€€€µ…¥¹á¥Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹ÍÁ…•	•Ñİ••¸°(€€€€€¡¥±‘É•¸èl(€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€±…‰•°è€0œ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹0°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€€€}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸ (€€€€€€€€€±…‰•°è€Hœ°(€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹H°(€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€¤°(€€€€€t°(€€€€¤ì((€€€™¥¹…°½¹ÑÉ½±Ì€ôM¥é•‘	½à (€€€€€¡•¥¡Ğè€¡Í¡½İM¡½Õ±‘•È€ü€ÈÈĞ€è€ÄàĞ¤€¨Í¥é•M…±”°(€€€€€¡¥±è½±Õµ¸ (€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€¥˜€¡Í¡½İM¡½Õ±‘•È¤€¸¸¹mÍ¡½Õ±‘•É	ÕÑÑ½¹Ì°½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÀ¥t°(€€€€€€€€€¥˜€ …±…ÍÍ¥1…å½ÕĞ¤€¸¸¹mÍåÍÑ•µ	ÕÑÑ½¹Ì°½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÀ¥t°(€€€€€€€€€áÁ…¹‘• (€€€€€€€€€€€¡¥±èI½Ü (€€€€€€€€€€€€€µ…¥¹á¥Í±¥¹µ•¹Ğè5…¥¹á¥Í±¥¹µ•¹Ğ¹ÍÁ…•	•Ñİ••¸°(€€€€€€€€€€€€€É½ÍÍá¥Í±¥¹µ•¹ĞèÉ½ÍÍá¥Í±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€€€€€€€¡¥±‘É•¸èm‘A…°…Ñ¥½¹Ít°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€€¥˜€¡±…ÍÍ¥1…å½ÕĞ¤€¸¸¹l(€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡¡•¥¡Ğè€ÄÀ¤°(€€€€€€€€€€€ÍåÍÑ•µ	ÕÑÑ½¹Ì°(€€€€€€€€€t°(€€€€€€€t°(€€€€€€¤°(€€€€¤ì(€€€É•ÑÕÉ¸=Á…¥Ñä¡½Á…¥Ñäè½Á…¥Ñä°¡¥±è½¹ÑÉ½±Ì¤ì(€ô)ô()±…ÍÌ}M¹•ÍÑ¥½¹A…•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‘½Õ‰±”Í¥é”ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹`ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹dì(€™¥¹…°½±½È‰ÕÑÑ½¹½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹	½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹a½±½Èì(€™¥¹…°½±½È‰ÕÑÑ½¹e½±½Èì((€½¹ÍĞ}M¹•ÍÑ¥½¹A…¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹`°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹d°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½±½È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹	½±½È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹a½±½È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹e½±½È°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°‰½½°¥Í¹‘É½¥€ôQ¡•µ”¹½˜¡½¹Ñ•áĞ¤¹Á±…Ñ™½É´€ôôQ…É•ÑA±…Ñ™½É´¹…¹‘É½¥ì(€€€™¥¹…°‘½Õ‰±”‰ÕÑÑ½¹MÑ•À€ôÍ¥é”€¨€¡¥Í¹‘É½¥€ü€¸äĞ€è€¸Üà¤ì((€€€É•ÑÕÉ¸M¥é•‘	½à (€€€€€İ¥‘Ñ è€¡‰ÕÑÑ½¹MÑ•À€¨€È¤€¬Í¥é”°(€€€€€¡•¥¡Ğè€¡‰ÕÑÑ½¹MÑ•À€¨€È¤€¬Í¥é”°(€€€€€¡¥±èMÑ…¬ (€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè‰ÕÑÑ½¹MÑ•À°(€€€€€€€€€€€¡¥±è}…µ•	½åÑ¥½¹	ÕÑÑ½¸¡Í¥é”èÍ¥é”°±…‰•°è€`œ°‰ÕÑÑ½¹%è‰ÕÑÑ½¹`°½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°½±½Èè‰ÕÑÑ½¹a½±½È¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€Ñ½Àè‰ÕÑÑ½¹MÑ•À°(€€€€€€€€€€€¡¥±è}…µ•	½åÑ¥½¹	ÕÑÑ½¸¡Í¥é”èÍ¥é”°±…‰•°è€dœ°‰ÕÑÑ½¹%è‰ÕÑÑ½¹d°½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°½±½Èè‰ÕÑÑ½¹e½±½È¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€Ñ½Àè‰ÕÑÑ½¹MÑ•À°(€€€€€€€€€€€É¥¡Ğè€À°(€€€€€€€€€€€¡¥±è}…µ•	½åÑ¥½¹	ÕÑÑ½¸¡Í¥é”èÍ¥é”°±…‰•°è€œ°‰ÕÑÑ½¹%è‰ÕÑÑ½¹°½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°½±½Èè‰ÕÑÑ½¹½±½È¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè‰ÕÑÑ½¹MÑ•À°(€€€€€€€€€€€‰½ÑÑ½´è€À°(€€€€€€€€€€€¡¥±è}…µ•	½åÑ¥½¹	ÕÑÑ½¸¡Í¥é”èÍ¥é”°±…‰•°è€œ°‰ÕÑÑ½¹%è‰ÕÑÑ½¹°½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°½±½Èè‰ÕÑÑ½¹	½±½È¤°(€€€€€€€€€€¤°(€€€€€€€t°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}¥É•Ñ¥½¹…±½¹ÑÉ½°•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°¥É•Ñ¥½¹…±½¹ÑÉ½±QåÁ”ÑåÁ”ì(€™¥¹…°‘½Õ‰±”­•åM¥é”ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹UÀì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹½İ¸ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹1•™Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹I¥¡Ğì((€½¹ÍĞ}¥É•Ñ¥½¹…±½¹ÑÉ½°¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹ÑåÁ”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹­•åM¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹UÀ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½İ¸°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹I¥¡Ğ°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€¥˜€¡ÑåÁ”€ôô¥É•Ñ¥½¹…±½¹ÑÉ½±QåÁ”¹©½åÍÑ¥¬¤ì(€€€€€É•ÑÕÉ¸}Y¥ÉÑÕ…±)½åÍÑ¥¬ (€€€€€€€Í¥é”è­•åM¥é”€¨€Ì°(€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€‰ÕÑÑ½¹UÀè‰ÕÑÑ½¹UÀ°(€€€€€€€‰ÕÑÑ½¹½İ¸è‰ÕÑÑ½¹½İ¸°(€€€€€€€‰ÕÑÑ½¹1•™Ğè‰ÕÑÑ½¹1•™Ğ°(€€€€€€€‰ÕÑÑ½¹I¥¡Ğè‰ÕÑÑ½¹I¥¡Ğ°(€€€€€€¤ì(€€€ô(€€€É•ÑÕÉ¸}…µ•	½åA… (€€€€€­•åM¥é”è­•åM¥é”°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰ÕÑÑ½¹UÀè‰ÕÑÑ½¹UÀ°(€€€€€‰ÕÑÑ½¹½İ¸è‰ÕÑÑ½¹½İ¸°(€€€€€‰ÕÑÑ½¹1•™Ğè‰ÕÑÑ½¹1•™Ğ°(€€€€€‰ÕÑÑ½¹I¥¡Ğè‰ÕÑÑ½¹I¥¡Ğ°(€€€€¤ì(€ô)ô()±…ÍÌ}Y¥ÉÑÕ…±)½åÍÑ¥¬•áÑ•¹‘ÌMÑ…Ñ•™Õ±]¥‘•Ğì(€™¥¹…°‘½Õ‰±”Í¥é”ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹UÀì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹½İ¸ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹1•™Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹I¥¡Ğì((€½¹ÍĞ}Y¥ÉÑÕ…±)½åÍÑ¥¬¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹UÀ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½İ¸°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹I¥¡Ğ°(€ô¤ì((€½Ù•ÉÉ¥‘”(€MÑ…Ñ”ñ}Y¥ÉÑÕ…±)½åÍÑ¥¬øÉ•…Ñ•MÑ…Ñ” ¤€ôø}Y¥ÉÑÕ…±)½åÍÑ¥­MÑ…Ñ” ¤ì)ô()±…ÍÌ}Y¥ÉÑÕ…±)½åÍÑ¥­MÑ…Ñ”•áÑ•¹‘ÌMÑ…Ñ”ñ}Y¥ÉÑÕ…±)½åÍÑ¥¬øì(€=™™Í•Ğ}­¹½‰=™™Í•Ğ€ô=™™Í•Ğ¹é•É¼ì(€™¥¹…°M•Ğñ¥¹Ğø}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì€ô€ñ¥¹Ğùíôì(€¥¹Ğü}…Ñ¥Ù•A½¥¹Ñ•Èì((€‘½Õ‰±”•Ğ}ÑÉ…Ù•±I…‘¥ÕÌ€ôøİ¥‘•Ğ¹Í¥é”€¨€¸ÈÜì((€Ù½¥}ÕÁ‘…Ñ•A½Í¥Ñ¥½¸¡=™™Í•Ğ±½…±A½Í¥Ñ¥½¸¤ì(€€€™¥¹…°•¹Ñ•È€ô=™™Í•Ğ¡İ¥‘•Ğ¹Í¥é”€¼€È°İ¥‘•Ğ¹Í¥é”€¼€È¤ì(€€€™¥¹…°É…İ=™™Í•Ğ€ô±½…±A½Í¥Ñ¥½¸€´•¹Ñ•Èì(€€€™¥¹…°‘¥ÍÑ…¹”€ôÉ…İ=™™Í•Ğ¹‘¥ÍÑ…¹”ì(€€€™¥¹…°±…µÁ•‘=™™Í•Ğ€ô‘¥ÍÑ…¹”€ğô}ÑÉ…Ù•±I…‘¥ÕÌñğ‘¥ÍÑ…¹”€ôô€À(€€€€€€€€üÉ…İ=™™Í•Ğ(€€€€€€€€èÉ…İ=™™Í•Ğ€¼‘¥ÍÑ…¹”€¨}ÑÉ…Ù•±I…‘¥ÕÌì(€€€™¥¹…°¹½Éµ…±¥é•€ô±…µÁ•‘=™™Í•Ğ€¼}ÑÉ…Ù•±I…‘¥ÕÌì(€€€™¥¹…°‘•Í¥É•‘	ÕÑÑ½¹Ì€ô€ñ¥¹Ğùíôì((€€€€¼¼Q¡”Ñ¡É•Í¡½±É•…Ñ•Ì„•¹ÑÉ…°‘•…é½¹”…¹ÍÑ¥±°…±±½İÌ‘¥…½¹…±Ì¸(€€€¥˜€¡¹½Éµ…±¥é•¹‘à€ğ€´¸ÌÈ¤‘•Í¥É•‘	ÕÑÑ½¹Ì¹…‘¡İ¥‘•Ğ¹‰ÕÑÑ½¹1•™Ğ¤ì(€€€¥˜€¡¹½Éµ…±¥é•¹‘à€ø€¸ÌÈ¤‘•Í¥É•‘	ÕÑÑ½¹Ì¹…‘¡İ¥‘•Ğ¹‰ÕÑÑ½¹I¥¡Ğ¤ì(€€€¥˜€¡¹½Éµ…±¥é•¹‘ä€ğ€´¸ÌÈ¤‘•Í¥É•‘	ÕÑÑ½¹Ì¹…‘¡İ¥‘•Ğ¹‰ÕÑÑ½¹UÀ¤ì(€€€¥˜€¡¹½Éµ…±¥é•¹‘ä€ø€¸ÌÈ¤‘•Í¥É•‘	ÕÑÑ½¹Ì¹…‘¡İ¥‘•Ğ¹‰ÕÑÑ½¹½İ¸¤ì((€€€}Í•ÑAÉ•ÍÍ•‘	ÕÑÑ½¹Ì¡‘•Í¥É•‘	ÕÑÑ½¹Ì¤ì(€€€Í•ÑMÑ…Ñ”  ¤€ôø}­¹½‰=™™Í•Ğ€ô±…µÁ•‘=™™Í•Ğ¤ì(€ô((€Ù½¥}Í•ÑAÉ•ÍÍ•‘	ÕÑÑ½¹Ì¡M•Ğñ¥¹Ğø‘•Í¥É•‘	ÕÑÑ½¹Ì¤ì(€€€™½È€¡™¥¹…°‰ÕÑÑ½¸¥¸}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì¹‘¥™™•É•¹”¡‘•Í¥É•‘	ÕÑÑ½¹Ì¤¤ì(€€€€€İ¥‘•Ğ¹½¹ÑÉ½±±•È¹É•±•…Í•	ÕÑÑ½¸¡‰ÕÑÑ½¸¤ì(€€€ô(€€€™½È€¡™¥¹…°‰ÕÑÑ½¸¥¸‘•Í¥É•‘	ÕÑÑ½¹Ì¹‘¥™™•É•¹”¡}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì¤¤ì(€€€€€İ¥‘•Ğ¹½¹ÑÉ½±±•È¹ÁÉ•ÍÍ	ÕÑÑ½¸¡‰ÕÑÑ½¸¤ì(€€€ô(€€€}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì(€€€€€€¸¹±•…È ¤(€€€€€€¸¹…‘‘±°¡‘•Í¥É•‘	ÕÑÑ½¹Ì¤ì(€ô((€Ù½¥}É•±•…Í” ¤ì(€€€}Í•ÑAÉ•ÍÍ•‘	ÕÑÑ½¹Ì ñ¥¹Ğùíô¤ì(€€€¥˜€¡µ½Õ¹Ñ•¤Í•ÑMÑ…Ñ”  ¤€ôø}­¹½‰=™™Í•Ğ€ô=™™Í•Ğ¹é•É¼¤ì(€ô((€½Ù•ÉÉ¥‘”(€Ù½¥‘¥‘UÁ‘…Ñ•]¥‘•Ğ¡½Ù…É¥…¹Ğ}Y¥ÉÑÕ…±)½åÍÑ¥¬½±‘]¥‘•Ğ¤ì(€€€ÍÕÁ•È¹‘¥‘UÁ‘…Ñ•]¥‘•Ğ¡½±‘]¥‘•Ğ¤ì(€€€¥˜€¡½±‘]¥‘•Ğ¹½¹ÑÉ½±±•È€„ôİ¥‘•Ğ¹½¹ÑÉ½±±•Èñğ(€€€€€€€½±‘]¥‘•Ğ¹‰ÕÑÑ½¹UÀ€„ôİ¥‘•Ğ¹‰ÕÑÑ½¹UÀñğ(€€€€€€€½±‘]¥‘•Ğ¹‰ÕÑÑ½¹½İ¸€„ôİ¥‘•Ğ¹‰ÕÑÑ½¹½İ¸ñğ(€€€€€€€½±‘]¥‘•Ğ¹‰ÕÑÑ½¹1•™Ğ€„ôİ¥‘•Ğ¹‰ÕÑÑ½¹1•™Ğñğ(€€€€€€€½±‘]¥‘•Ğ¹‰ÕÑÑ½¹I¥¡Ğ€„ôİ¥‘•Ğ¹‰ÕÑÑ½¹I¥¡Ğ¤ì(€€€€€™½È€¡™¥¹…°‰ÕÑÑ½¸¥¸}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì¤ì(€€€€€€€½±‘]¥‘•Ğ¹½¹ÑÉ½±±•È¹É•±•…Í•	ÕÑÑ½¸¡‰ÕÑÑ½¸¤ì(€€€€€ô(€€€€€}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì¹±•…È ¤ì(€€€€€}­¹½‰=™™Í•Ğ€ô=™™Í•Ğ¹é•É¼ì(€€€ô(€ô((€½Ù•ÉÉ¥‘”(€Ù½¥‘¥ÍÁ½Í” ¤ì(€€€™½È€¡™¥¹…°‰ÕÑÑ½¸¥¸}ÁÉ•ÍÍ•‘	ÕÑÑ½¹Ì¤ì(€€€€€İ¥‘•Ğ¹½¹ÑÉ½±±•È¹É•±•…Í•	ÕÑÑ½¸¡‰ÕÑÑ½¸¤ì(€€€ô(€€€ÍÕÁ•È¹‘¥ÍÁ½Í” ¤ì(€ô((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°­¹½‰M¥é”€ôİ¥‘•Ğ¹Í¥é”€¨€¸ĞĞì(€€€É•ÑÕÉ¸1¥ÍÑ•¹•È (€€€€€‰•¡…Ù¥½Èè!¥ÑQ•ÍÑ	•¡…Ù¥½È¹½Á…ÅÕ”°(€€€€€½¹A½¥¹Ñ•É½İ¸è€¡•Ù•¹Ğ¤ì(€€€€€€€¥˜€¡}…Ñ¥Ù•A½¥¹Ñ•È€„ô¹Õ±°¤É•ÑÕÉ¸ì(€€€€€€€}…Ñ¥Ù•A½¥¹Ñ•È€ô•Ù•¹Ğ¹Á½¥¹Ñ•Èì(€€€€€€€}ÕÁ‘…Ñ•A½Í¥Ñ¥½¸¡•Ù•¹Ğ¹±½…±A½Í¥Ñ¥½¸¤ì(€€€€€ô°(€€€€€½¹A½¥¹Ñ•É5½Ù”è€¡•Ù•¹Ğ¤ì(€€€€€€€¥˜€¡}…Ñ¥Ù•A½¥¹Ñ•È€ôô•Ù•¹Ğ¹Á½¥¹Ñ•È¤ì(€€€€€€€€€}ÕÁ‘…Ñ•A½Í¥Ñ¥½¸¡•Ù•¹Ğ¹±½…±A½Í¥Ñ¥½¸¤ì(€€€€€€€ô(€€€€€ô°(€€€€€½¹A½¥¹Ñ•ÉUÀè€¡•Ù•¹Ğ¤ì(€€€€€€€¥˜€¡}…Ñ¥Ù•A½¥¹Ñ•È€„ô•Ù•¹Ğ¹Á½¥¹Ñ•È¤É•ÑÕÉ¸ì(€€€€€€€}…Ñ¥Ù•A½¥¹Ñ•È€ô¹Õ±°ì(€€€€€€€}É•±•…Í” ¤ì(€€€€€ô°(€€€€€½¹A½¥¹Ñ•É…¹•°è€¡•Ù•¹Ğ¤ì(€€€€€€€¥˜€¡}…Ñ¥Ù•A½¥¹Ñ•È€„ô•Ù•¹Ğ¹Á½¥¹Ñ•È¤É•ÑÕÉ¸ì(€€€€€€€}…Ñ¥Ù•A½¥¹Ñ•È€ô¹Õ±°ì(€€€€€€€}É•±•…Í” ¤ì(€€€€€ô°(€€€€€¡¥±èM¥é•‘	½à¹ÍÅÕ…É” (€€€€€€€‘¥µ•¹Í¥½¸èİ¥‘•Ğ¹Í¥é”°(€€€€€€€¡¥±è•½É…Ñ•‘	½à (€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€Í¡…Á”è	½áM¡…Á”¹¥É±”°(€€€€€€€€€€€É…‘¥•¹Ğè½¹ÍĞI…‘¥…±É…‘¥•¹Ğ (€€€€€€€€€€€€€½±½ÉÌè€ñ½±½Èùl(€€€€€€€€€€€€€€€½±½È ÁáÌĞÌĞÍ¤°(€€€€€€€€€€€€€€€½±½È ÁáÈÀÈÀÈØ¤°(€€€€€€€€€€€€€€€½±½È ÁáÄÄÄÄÄØ¤°(€€€€€€€€€€€€€t°(€€€€€€€€€€€€€ÍÑ½ÁÌè€ñ‘½Õ‰±”ùlÀ°€¸ÜÈ°€Åt°(€€€€€€€€€€€€¤°(€€€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±° (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ÄĞ¤°(€€€€€€€€€€€€€İ¥‘Ñ è€È°(€€€€€€€€€€€€¤°(€€€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸Ğà¤°(€€€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€ÄÈ°(€€€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ø¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ÀØ¤°(€€€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€Ğ°(€€€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ ´È°€´È¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€t°(€€€€€€€€€€¤°(€€€€€€€€€¡¥±è•¹Ñ•È (€€€€€€€€€€€¡¥±èQÉ…¹Í™½É´¹ÑÉ…¹Í±…Ñ” (€€€€€€€€€€€€€½™™Í•Ğè}­¹½‰=™™Í•Ğ°(€€€€€€€€€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€€€€€€€€€İ¥‘Ñ è­¹½‰M¥é”°(€€€€€€€€€€€€€€€¡•¥¡Ğè­¹½‰M¥é”°(€€€€€€€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€€€€€€€Í¡…Á”è	½áM¡…Á”¹¥É±”°(€€€€€€€€€€€€€€€€€É…‘¥•¹Ğè½¹ÍĞ1¥¹•…ÉÉ…‘¥•¹Ğ (€€€€€€€€€€€€€€€€€€€‰•¥¸è±¥¹µ•¹Ğ¹Ñ½Á1•™Ğ°(€€€€€€€€€€€€€€€€€€€•¹è±¥¹µ•¹Ğ¹‰½ÑÑ½µI¥¡Ğ°(€€€€€€€€€€€€€€€€€€€½±½ÉÌè€ñ½±½Èùm½±½È ÁáÜÜÜÜİ¤°½±½È ÁáÍÍĞĞ¥t°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±° (€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ÈÈ¤°(€€€€€€€€€€€€€€€€€€€İ¥‘Ñ è€È°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€¸ÔÔ¤°(€€€€€€€€€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€à°(€€€€€€€€€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ô¤°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½åA…•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‘½Õ‰±”­•åM¥é”ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹UÀì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹½İ¸ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹1•™Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹I¥¡Ğì((€½¹ÍĞ}…µ•	½åA…¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹­•åM¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹UÀ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹½İ¸°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹1•™Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹I¥¡Ğ°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸M¥é•‘	½à (€€€€€İ¥‘Ñ è­•åM¥é”€¨€Ì°(€€€€€¡•¥¡Ğè­•åM¥é”€¨€Ì°(€€€€€¡¥±èMÑ…¬ (€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè­•åM¥é”°(€€€€€€€€€€€Ñ½Àè€À°(€€€€€€€€€€€¡¥±è}…µ•	½åA…‘-•ä (€€€€€€€€€€€€€Í¥é”è­•åM¥é”°(€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹UÀ°(€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€¥½¸è%½¹Ì¹­•å‰½…É‘}…ÉÉ½İ}ÕÁ}É½Õ¹‘•°(€€€€€€€€€€€€€Ñ½Á1•™ĞèÑÉÕ”°(€€€€€€€€€€€€€Ñ½ÁI¥¡ĞèÑÉÕ”°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè­•åM¥é”°(€€€€€€€€€€€Ñ½Àè­•åM¥é”€¨€È°(€€€€€€€€€€€¡¥±è}…µ•	½åA…‘-•ä (€€€€€€€€€€€€€Í¥é”è­•åM¥é”°(€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹½İ¸°(€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€¥½¸è%½¹Ì¹­•å‰½…É‘}…ÉÉ½İ}‘½İ¹}É½Õ¹‘•°(€€€€€€€€€€€€€‰½ÑÑ½µ1•™ĞèÑÉÕ”°(€€€€€€€€€€€€€‰½ÑÑ½µI¥¡ĞèÑÉÕ”°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè€À°(€€€€€€€€€€€Ñ½Àè­•åM¥é”°(€€€€€€€€€€€¡¥±è}…µ•	½åA…‘-•ä (€€€€€€€€€€€€€Í¥é”è­•åM¥é”°(€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹1•™Ğ°(€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€¥½¸è%½¹Ì¹­•å‰½…É‘}…ÉÉ½İ}±•™Ñ}É½Õ¹‘•°(€€€€€€€€€€€€€Ñ½Á1•™ĞèÑÉÕ”°(€€€€€€€€€€€€€‰½ÑÑ½µ1•™ĞèÑÉÕ”°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè­•åM¥é”€¨€È°(€€€€€€€€€€€Ñ½Àè­•åM¥é”°(€€€€€€€€€€€¡¥±è}…µ•	½åA…‘-•ä (€€€€€€€€€€€€€Í¥é”è­•åM¥é”°(€€€€€€€€€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹I¥¡Ğ°(€€€€€€€€€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€€€€€€€€€¥½¸è%½¹Ì¹­•å‰½…É‘}…ÉÉ½İ}É¥¡Ñ}É½Õ¹‘•°(€€€€€€€€€€€€€Ñ½ÁI¥¡ĞèÑÉÕ”°(€€€€€€€€€€€€€‰½ÑÑ½µI¥¡ĞèÑÉÕ”°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€€A½Í¥Ñ¥½¹• (€€€€€€€€€€€±•™Ğè­•åM¥é”°(€€€€€€€€€€€Ñ½Àè­•åM¥é”°(€€€€€€€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€€€€€€€İ¥‘Ñ è­•åM¥é”°(€€€€€€€€€€€€€¡•¥¡Ğè­•åM¥é”°(€€€€€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€€€€€½±½Èè½¹ÍĞ½±½È ÁáÈĞÈÌÈà¤°(€€€€€€€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Ìà¤°(€€€€€€€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€à°(€€€€€€€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ğ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€¡¥±è•¹Ñ•È (€€€€€€€€€€€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€€€€€€€€€€€İ¥‘Ñ è€ÄÜ°(€€€€€€€€€€€€€€€€€¡•¥¡Ğè€ÄÜ°(€€€€€€€€€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€€€€€€€€€Í¡…Á”è	½áM¡…Á”¹¥É±”°(€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÌÔ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€t°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½åA…‘-•ä•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‘½Õ‰±”Í¥é”ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹%ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°%½¹…Ñ„¥½¸ì(€™¥¹…°‰½½°Ñ½Á1•™Ğì(€™¥¹…°‰½½°Ñ½ÁI¥¡Ğì(€™¥¹…°‰½½°‰½ÑÑ½µ1•™Ğì(€™¥¹…°‰½½°‰½ÑÑ½µI¥¡Ğì((€½¹ÍĞ}…µ•	½åA…‘-•ä¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹%°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¥½¸°(€€€Ñ¡¥Ì¹Ñ½Á1•™Ğ€ô™…±Í”°(€€€Ñ¡¥Ì¹Ñ½ÁI¥¡Ğ€ô™…±Í”°(€€€Ñ¡¥Ì¹‰½ÑÑ½µ1•™Ğ€ô™…±Í”°(€€€Ñ¡¥Ì¹‰½ÑÑ½µI¥¡Ğ€ô™…±Í”°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸}AÉ•ÍÍ…‰±•½¹ÑÉ½° (€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹%°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹½¹±ä (€€€€€€€Ñ½Á1•™ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡Ñ½Á1•™Ğ€ü€ÄÀ€è€À¤°(€€€€€€€Ñ½ÁI¥¡ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡Ñ½ÁI¥¡Ğ€ü€ÄÀ€è€À¤°(€€€€€€€‰½ÑÑ½µ1•™ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡‰½ÑÑ½µ1•™Ğ€ü€ÄÀ€è€À¤°(€€€€€€€‰½ÑÑ½µI¥¡ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡‰½ÑÑ½µI¥¡Ğ€ü€ÄÀ€è€À¤°(€€€€€€¤°(€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€İ¥‘Ñ èÍ¥é”°(€€€€€€€¡•¥¡ĞèÍ¥é”°(€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€½±½Èè½¹ÍĞ½±½È ÁáÉÉÌÀ¤°(€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹½¹±ä (€€€€€€€€€€€Ñ½Á1•™ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡Ñ½Á1•™Ğ€ü€ÄÀ€è€À¤°(€€€€€€€€€€€Ñ½ÁI¥¡ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡Ñ½ÁI¥¡Ğ€ü€ÄÀ€è€À¤°(€€€€€€€€€€€‰½ÑÑ½µ1•™ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡‰½ÑÑ½µ1•™Ğ€ü€ÄÀ€è€À¤°(€€€€€€€€€€€‰½ÑÑ½µI¥¡ĞèI…‘¥ÕÌ¹¥ÉÕ±…È¡‰½ÑÑ½µI¥¡Ğ€ü€ÄÀ€è€À¤°(€€€€€€€€€€¤°(€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±°¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÀÜ¤¤°(€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Ìà¤°(€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€à°(€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ğ¤°(€€€€€€€€€€€€¤°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€€¡¥±è%½¸ (€€€€€€€€€¥½¸°(€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ä¤°(€€€€€€€€€Í¥é”èÍ¥é”€¨€À¸ØÀ°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½åÑ¥½¹	ÕÑÑ½¸•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‘½Õ‰±”Í¥é”ì(€™¥¹…°MÑÉ¥¹œ±…‰•°ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹%ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°½±½È½±½Èì((€½¹ÍĞ}…µ•	½åÑ¥½¹	ÕÑÑ½¸¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹Í¥é”°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹±…‰•°°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹%°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€Ñ¡¥Ì¹½±½È€ô½¹ÍĞ½±½È ÁááÍØÜ¤°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸}AÉ•ÍÍ…‰±•½¹ÑÉ½° (€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹%°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ĞÀ¤°(€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€İ¥‘Ñ èÍ¥é”°(€€€€€€€¡•¥¡ĞèÍ¥é”°(€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€Í¡…Á”è	½áM¡…Á”¹¥É±”°(€€€€€€€€€½±½Èè½±½È°(€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±° (€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÌÈ¤°(€€€€€€€€€€€İ¥‘Ñ è€È°(€€€€€€€€€€¤°(€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ĞÈ¤°(€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€ÄÀ°(€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ô¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Àä¤°(€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€Ì°(€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ ´È°€´È¤°(€€€€€€€€€€€€¤°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€€¡¥±èQ•áĞ (€€€€€€€€€±…‰•°°(€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€™½¹ÑM¥é”èÍ¥é”€¨€À¸ÌĞ°(€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜäÀÀ°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°MÑÉ¥¹œ±…‰•°ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹%ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì((€½¹ÍĞ}…µ•	½åM¡½Õ±‘•É	ÕÑÑ½¸¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹±…‰•°°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹%°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸}AÉ•ÍÍ…‰±•½¹ÑÉ½° (€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹%°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÄĞ¤°(€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€İ¥‘Ñ è€ØĞ°(€€€€€€€¡•¥¡Ğè€ÌÀ°(€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€½±½Èè½¹ÍĞ½±½È ÁáĞÜĞØÑ¤°(€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÄĞ¤°(€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±°¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÄĞ¤¤°(€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÌÔ¤°(€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€Ü°(€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ğ¤°(€€€€€€€€€€€€¤°(€€€€€€€€€t°(€€€€€€€€¤°(€€€€€€€¡¥±èQ•áĞ (€€€€€€€€€±…‰•°°(€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±” (€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€™½¹ÑM¥é”è€ÄÌ°(€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜäÀÀ°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€™¥¹…°‘½Õ‰±”İ¥‘Ñ ì(€™¥¹…°‘½Õ‰±”¡•¥¡Ğì(€™¥¹…°MÑÉ¥¹œ±…‰•°ì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹%ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì((€½¹ÍĞ}…µ•	½åMåÍÑ•µ	ÕÑÑ½¸¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹İ¥‘Ñ °(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¡•¥¡Ğ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹±…‰•°°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹%°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€ô¤ì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸}AÉ•ÍÍ…‰±•½¹ÑÉ½° (€€€€€‰ÕÑÑ½¹%è‰ÕÑÑ½¹%°(€€€€€½¹ÑÉ½±±•Èè½¹ÑÉ½±±•È°(€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÌÀ¤°(€€€€€¡¥±èQÉ…¹Í™½É´¹É½Ñ…Ñ” (€€€€€€€…¹±”è€´À¸ÄÈ°(€€€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€€€İ¥‘Ñ èİ¥‘Ñ °(€€€€€€€€€¡•¥¡Ğè¡•¥¡Ğ°(€€€€€€€€€…±¥¹µ•¹Ğè±¥¹µ•¹Ğ¹•¹Ñ•È°(€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€½±½Èè½¹ÍĞ½±½È ÁáØØØÌÙ¤°(€€€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÌÀ¤°(€€€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±°¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÄÈ¤¤°(€€€€€€€€€€€‰½áM¡…‘½Üèl(€€€€€€€€€€€€€	½áM¡…‘½Ü (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ÌØ¤°(€€€€€€€€€€€€€€€‰±ÕÉI…‘¥ÕÌè€Ü°(€€€€€€€€€€€€€€€½™™Í•Ğè½¹ÍĞ=™™Í•Ğ À°€Ğ¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€t°(€€€€€€€€€€¤°(€€€€€€€€€¡¥±èQ•áĞ (€€€€€€€€€€€±…‰•°°(€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±” (€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄÀ°(€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜàÀÀ°(€€€€€€€€€€€€€±•ÑÑ•ÉMÁ…¥¹œè€À¸à°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô()±…ÍÌ}AÉ•ÍÍ…‰±•½¹ÑÉ½°•áÑ•¹‘ÌMÑ…Ñ•™Õ±]¥‘•Ğì(€™¥¹…°¥¹Ğ‰ÕÑÑ½¹%ì(€™¥¹…°1¥‰É•ÑÉ½…µ•½¹ÑÉ½±±•È½¹ÑÉ½±±•Èì(€™¥¹…°	½É‘•ÉI…‘¥ÕÌ‰½É‘•ÉI…‘¥ÕÌì(€™¥¹…°]¥‘•Ğ¡¥±ì((€½¹ÍĞ}AÉ•ÍÍ…‰±•½¹ÑÉ½°¡ì(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰ÕÑÑ½¹%°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹½¹ÑÉ½±±•È°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹‰½É‘•ÉI…‘¥ÕÌ°(€€€É•ÅÕ¥É•Ñ¡¥Ì¹¡¥±°(€ô¤ì((€½Ù•ÉÉ¥‘”(€MÑ…Ñ”ñ}AÉ•ÍÍ…‰±•½¹ÑÉ½°øÉ•…Ñ•MÑ…Ñ” ¤€ôø}AÉ•ÍÍ…‰±•½¹ÑÉ½±MÑ…Ñ” ¤ì)ô()±…ÍÌ}AÉ•ÍÍ…‰±•½¹ÑÉ½±MÑ…Ñ”•áÑ•¹‘ÌMÑ…Ñ”ñ}AÉ•ÍÍ…‰±•½¹ÑÉ½°øì(€‰½½°}ÁÉ•ÍÍ•€ô™…±Í”ì((€Ù½¥}ÁÉ•ÍÌ ¤ì(€€€¥˜€ …µ½Õ¹Ñ•ñğ}ÁÉ•ÍÍ•¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€Í•ÑMÑ…Ñ”  ¤ì(€€€€€}ÁÉ•ÍÍ•€ôÑÉÕ”ì(€€€ô¤ì((€€€İ¥‘•Ğ¹½¹ÑÉ½±±•È¹ÁÉ•ÍÍ	ÕÑÑ½¸¡İ¥‘•Ğ¹‰ÕÑÑ½¹%¤ì(€ô((€Ù½¥}É•±•…Í” ¤ì(€€€¥˜€ …µ½Õ¹Ñ•ñğ€…}ÁÉ•ÍÍ•¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€Í•ÑMÑ…Ñ”  ¤ì(€€€€€}ÁÉ•ÍÍ•€ô™…±Í”ì(€€€ô¤ì((€€€İ¥‘•Ğ¹½¹ÑÉ½±±•È¹É•±•…Í•	ÕÑÑ½¸¡İ¥‘•Ğ¹‰ÕÑÑ½¹%¤ì(€ô((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€É•ÑÕÉ¸1¥ÍÑ•¹•È (€€€€€‰•¡…Ù¥½Èè!¥ÑQ•ÍÑ	•¡…Ù¥½È¹½Á…ÅÕ”°(€€€€€½¹A½¥¹Ñ•É½İ¸è€¡|¤€ôø}ÁÉ•ÍÌ ¤°(€€€€€½¹A½¥¹Ñ•ÉUÀè€¡|¤€ôø}É•±•…Í” ¤°(€€€€€½¹A½¥¹Ñ•É…¹•°è€¡|¤€ôø}É•±•…Í” ¤°(€€€€€¡¥±è¹¥µ…Ñ•‘M…±” (€€€€€€€Í…±”è}ÁÉ•ÍÍ•€ü€À¸äÀ€è€Ä°(€€€€€€€‘ÕÉ…Ñ¥½¸è½¹ÍĞÕÉ…Ñ¥½¸¡µ¥±±¥Í•½¹‘Ìè€ØÔ¤°(€€€€€€€¡¥±è¹¥µ…Ñ•‘=Á…¥Ñä (€€€€€€€€€½Á…¥Ñäè}ÁÉ•ÍÍ•€ü€À¸ÜØ€è€Ä°(€€€€€€€€€‘ÕÉ…Ñ¥½¸è½¹ÍĞÕÉ…Ñ¥½¸¡µ¥±±¥Í•½¹‘Ìè€ØÔ¤°(€€€€€€€€€¡¥±è±¥ÁII•Ğ (€€€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌèİ¥‘•Ğ¹‰½É‘•ÉI…‘¥ÕÌ°(€€€€€€€€€€€¡¥±èİ¥‘•Ğ¹¡¥±°(€€€€€€€€€€¤°(€€€€€€€€¤°(€€€€€€¤°(€€€€¤ì(€ô)ô((¼¼¼½¹ÑÉ½°‘•°…‰±”1¥¹¬	±Õ•Ñ½½Ñ ¸(¼¼¼(¼¼¼5Õ•ÍÑÉ„•°•ÍÑ…‘¼…ÑÕ…°äÁ•Éµ¥Ñ”É•…È°‰ÕÍ…È¼•ÉÉ…È(¼¼¼Õ¹„Í•Í§Í¸1¥¹¬‘¥É•Ñ…µ•¹Ñ”‘•Í‘”•°•µÕ±…‘½È¸)±…ÍÌ}1¥¹­MÑ…ÑÕÍ¡¥À•áÑ•¹‘ÌMÑ…Ñ•±•ÍÍ]¥‘•Ğì(€½¹ÍĞ}1¥¹­MÑ…ÑÕÍ¡¥À¡íÉ•ÅÕ¥É•Ñ¡¥Ì¹±¥¹­5…¹…•Éô¤ì((€™¥¹…°1¥¹­5…¹…•Èü±¥¹­5…¹…•Èì((€½Ù•ÉÉ¥‘”(€]¥‘•Ğ‰Õ¥±¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ¤ì(€€€™¥¹…°1¥¹­5…¹…•Èüµ…¹…•È€ô±¥¹­5…¹…•Èì((€€€¥˜€¡µ…¹…•È€ôô¹Õ±°¤ì(€€€€€É•ÑÕÉ¸½¹ÍĞM¥é•‘	½à¹Í¡É¥¹¬ ¤ì(€€€ô((€€€É•ÑÕÉ¸MÑÉ•…µ	Õ¥±‘•Èñ1¥¹­MÑ…Ñ”ø (€€€€€ÍÑÉ•…´èµ…¹…•È¹½¹MÑ…Ñ•¡…¹•°(€€€€€¥¹¥Ñ¥…±…Ñ„èµ…¹…•È¹ÍÑ…Ñ”°(€€€€€‰Õ¥±‘•Èè€¡½¹Ñ•áĞ°Í¹…ÁÍ¡½Ğ¤ì(€€€€€€€™¥¹…°1¥¹­MÑ…Ñ”ÍÑ…Ñ”€ôÍ¹…ÁÍ¡½Ğ¹‘…Ñ„€üü1¥¹­MÑ…Ñ”¹‘¥Í½¹¹•Ñ•ì((€€€€€€€É•ÑÕÉ¸5…Ñ•É¥…° (€€€€€€€€€½±½Èè½±½ÉÌ¹ÑÉ…¹ÍÁ…É•¹Ğ°(€€€€€€€€€¡¥±è%¹­]•±° (€€€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÈÀ¤°(€€€€€€€€€€€½¹Q…Àè€ ¤€ôø}¡…¹‘±•Q…À¡½¹Ñ•áĞ°µ…¹…•È°ÍÑ…Ñ”¤°(€€€€€€€€€€€¡¥±è½¹Ñ…¥¹•È (€€€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡¡½É¥é½¹Ñ…°è€ÄÀ°Ù•ÉÑ¥…°è€Ô¤°(€€€€€€€€€€€€€‘•½É…Ñ¥½¸è	½á•½É…Ñ¥½¸ (€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹‰±…¬¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸ØÀ¤°(€€€€€€€€€€€€€€€‰½É‘•ÉI…‘¥ÕÌè	½É‘•ÉI…‘¥ÕÌ¹¥ÉÕ±…È ÈÀ¤°(€€€€€€€€€€€€€€€‰½É‘•Èè	½É‘•È¹…±°¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¹İ¥Ñ¡Y…±Õ•Ì¡…±Á¡„è€À¸Äà¤¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€¡¥±èI½Ü (€€€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€€€½¹ÍĞ%½¸¡%½¹Ì¹…‰±”°Í¥é”è€ÄÌ°½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ¤°(€€€€€€€€€€€€€€€€€½¹ÍĞM¥é•‘	½à¡İ¥‘Ñ è€Ğ¤°(€€€€€€€€€€€€€€€€€Q•áĞ (€€€€€€€€€€€€€€€€€€€}±…‰•±½È¡ÍÑ…Ñ”¤°(€€€€€€€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ°(€€€€€€€€€€€€€€€€€€€€€™½¹ÑM¥é”è€ÄÀ°(€€€€€€€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹ÜÜÀÀ°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€t°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤ì(€€€€€ô°(€€€€¤ì(€ô((€ÕÑÕÉ”ñÙ½¥ø}¡…¹‘±•Q…À (€€€	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ°(€€€1¥¹­5…¹…•Èµ…¹…•È°(€€€1¥¹­MÑ…Ñ”ÍÑ…Ñ”°(€€¤…Íå¹Œì(€€€Íİ¥Ñ €¡ÍÑ…Ñ”¤ì(€€€€€…Í”1¥¹­MÑ…Ñ”¹½¹¹•Ñ•è(€€€€€…Í”1¥¹­MÑ…Ñ”¹Íå¹¥¹œè(€€€€€…Í”1¥¹­MÑ…Ñ”¹¡½ÍÑ¥¹œè(€€€€€…Í”1¥¹­MÑ…Ñ”¹½¹¹•Ñ¥¹œè(€€€€€…Í”1¥¹­MÑ…Ñ”¹Í•…É¡¥¹œè(€€€€€€€…İ…¥Ğ}Í¡½İÑ¥Ù•M•ÍÍ¥½¹¥…±½œ¡½¹Ñ•áĞ°µ…¹…•È¤ì(€€€€€€€É•ÑÕÉ¸ì((€€€€€…Í”1¥¹­MÑ…Ñ”¹‘¥Í½¹¹•Ñ•è(€€€€€…Í”1¥¹­MÑ…Ñ”¹•ÉÉ½Èè(€€€€€€€…İ…¥Ğ}Í¡½İ½¹¹•Ñ¥½¹¥…±½œ¡½¹Ñ•áĞ°µ…¹…•È¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€ô(€ô((€ÕÑÕÉ”ñÙ½¥ø}Í¡½İ½¹¹•Ñ¥½¹¥…±½œ (€€€	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ°(€€€1¥¹­5…¹…•Èµ…¹…•È°(€€¤…Íå¹Œì(€€€™¥¹…°MÑÉ¥¹œü…Ñ¥½¸€ô…İ…¥ĞÍ¡½İ5½‘…±	½ÑÑ½µM¡••ĞñMÑÉ¥¹œø (€€€€€½¹Ñ•áĞè½¹Ñ•áĞ°(€€€€€‰…­É½Õ¹‘½±½Èè½¹ÍĞ½±½È ÁáÄàÄàÄà¤°(€€€€€‰Õ¥±‘•Èè€¡Í¡••Ñ½¹Ñ•áĞ¤ì(€€€€€€€É•ÑÕÉ¸M…™•É•„ (€€€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡Ù•ÉÑ¥…°è€ÄÈ¤°(€€€€€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€½¹ÍĞ1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè%½¸¡%½¹Ì¹…‰±”°½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€…‰±”1¥¹¬œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹‰½±°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€½¹•Ñ„‘½Ì‘¥ÍÁ½Í¥Ñ¥Ù½ÌÁ½È	±Õ•Ñ½½Ñ œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ØÀ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€½¹ÍĞ¥Ù¥‘•È¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÄÈ¤°(€€€€€€€€€€€€€€€1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè½¹ÍĞ%½¸ (€€€€€€€€€€€€€€€€€€€%½¹Ì¹İ¥™¥}Ñ•Ñ¡•É¥¹œ°(€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€É•…ÈÍ•Í§Í¸œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€ÍÑ”‘¥ÍÁ½Í¥Ñ¥Ù¼•ÍÁ•É…Ë„…°½ÑÉ¼©Õ…‘½Èœ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÔĞ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€½¹Q…Àè€ ¤ì(€€€€€€€€€€€€€€€€€€€9…Ù¥…Ñ½È¹Á½À¡Í¡••Ñ½¹Ñ•áĞ°€¡½ÍĞœ¤ì(€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè½¹ÍĞ%½¸¡%½¹Ì¹Í•…É °½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€	ÕÍ…ÈÍ•Í§Í¸œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€	ÕÍ„½ÑÉ¼‘¥ÍÁ½Í¥Ñ¥Ù¼I•ÑÉ½!Õˆœ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÔĞ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€½¹Q…Àè€ ¤ì(€€€€€€€€€€€€€€€€€€€9…Ù¥…Ñ½È¹Á½À¡Í¡••Ñ½¹Ñ•áĞ°€©½¥¸œ¤ì(€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€t°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤ì(€€€€€ô°(€€€€¤ì((€€€¥˜€ …½¹Ñ•áĞ¹µ½Õ¹Ñ•ñğ…Ñ¥½¸€ôô¹Õ±°¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€¥˜€¡…Ñ¥½¸€ôô€¡½ÍĞœ¤ì(€€€€€…İ…¥Ğ}É•…Ñ•M•ÍÍ¥½¸¡½¹Ñ•áĞ°µ…¹…•È¤ì(€€€ô•±Í”¥˜€¡…Ñ¥½¸€ôô€©½¥¸œ¤ì(€€€€€…İ…¥Ğ}Í•…É¡M•ÍÍ¥½¸¡½¹Ñ•áĞ°µ…¹…•È¤ì(€€€ô(€ô((€ÕÑÕÉ”ñÙ½¥ø}É•…Ñ•M•ÍÍ¥½¸¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ°1¥¹­5…¹…•Èµ…¹…•È¤…Íå¹Œì(€€€½¹ÍĞ	±Õ•Ñ½½Ñ¡¥Í½Ù•Éä‘¥Í½Ù•Éä€ô	±Õ•Ñ½½Ñ¡¥Í½Ù•Éä ¤ì((€€€ÑÉäì(€€€€€¥˜€ ……İ…¥Ğ‘¥Í½Ù•Éä¹¥Í¹…‰±• ¤¤ì(€€€€€€€™¥¹…°‰½½°•¹…‰±•€ô…İ…¥Ğ‘¥Í½Ù•Éä¹É•ÅÕ•ÍÑ¹…‰±” ¤ì((€€€€€€€¥˜€ …•¹…‰±•¤ì(€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€ô((€€€€€€¼¼Ù¥Ñ…µ½ÌÉ•ÅÕ•ÍÑ¥Í½Ù•É…‰±” ¤è•°Á±Õ¥¸ÁÕ•‘”ÁÉ½Ù½…ÈÕ¸É…Í (€€€€€€¼¼…°É•É•Í…È‘”±„Ñ¥Ù¥Ñä‘”¹‘É½¥•¸…±Õ¹½Ì‘¥ÍÁ½Í¥Ñ¥Ù½Ì¸(€€€€€…İ…¥Ğµ…¹…•È¹¡½ÍĞ¡±½…±9…µ”è€I•ÑÉ½!Õˆœ¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€¥˜€ …½¹Ñ•áĞ¹µ½Õ¹Ñ•¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô((€€€€€M…™™½±‘5•ÍÍ•¹•È¹½˜¡½¹Ñ•áĞ¤¹Í¡½İM¹…­	…È (€€€€€€€M¹…­	…È¡½¹Ñ•¹ĞèQ•áĞ 9¼Í”ÁÕ‘¼É•…È±„Í•Í§Í¸è€‘•ÉÉ½Èœ¤¤°(€€€€€€¤ì(€€€ô(€ô((€ÕÑÕÉ”ñÙ½¥ø}Í•…É¡M•ÍÍ¥½¸¡	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ°1¥¹­5…¹…•Èµ…¹…•È¤…Íå¹Œì(€€€½¹ÍĞ	±Õ•Ñ½½Ñ¡¥Í½Ù•Éä‘¥Í½Ù•Éä€ô	±Õ•Ñ½½Ñ¡¥Í½Ù•Éä ¤ì((€€€ÑÉäì(€€€€€¥˜€ ……İ…¥Ğ‘¥Í½Ù•Éä¹¥Í¹…‰±• ¤¤ì(€€€€€€€™¥¹…°‰½½°•¹…‰±•€ô…İ…¥Ğ‘¥Í½Ù•Éä¹É•ÅÕ•ÍÑ¹…‰±” ¤ì((€€€€€€€¥˜€ …•¹…‰±•ñğ€…½¹Ñ•áĞ¹µ½Õ¹Ñ•¤ì(€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€ô((€€€€€™¥¹…°1¥ÍĞñ	±Õ•Ñ½½Ñ¡•Ù¥”ø‰½¹‘•€ô…İ…¥Ğ‘¥Í½Ù•Éä(€€€€€€€€€€¹‰½¹‘•‘I•ÑÉ½!Õ‰•Ù¥•Ì ¤ì((€€€€€¥˜€ …½¹Ñ•áĞ¹µ½Õ¹Ñ•¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô((€€€€€™¥¹…°	±Õ•Ñ½½Ñ¡•Ù¥”ü(€€€€€Í•±•Ñ•€ô…İ…¥ĞÍ¡½İ5½‘…±	½ÑÑ½µM¡••Ğñ	±Õ•Ñ½½Ñ¡•Ù¥”ø (€€€€€€€½¹Ñ•áĞè½¹Ñ•áĞ°(€€€€€€€‰…­É½Õ¹‘½±½Èè½¹ÍĞ½±½È ÁáÄàÄàÄà¤°(€€€€€€€‰Õ¥±‘•Èè€¡Í¡••Ñ½¹Ñ•áĞ¤ì(€€€€€€€€€¥˜€¡‰½¹‘•¹¥ÍµÁÑä¤ì(€€€€€€€€€€€É•ÑÕÉ¸½¹ÍĞM…™•É•„ (€€€€€€€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€€€€€€€Á…‘‘¥¹œè‘•%¹Í•ÑÌ¹…±° ÈĞ¤°(€€€€€€€€€€€€€€€¡¥±èQ•áĞ (€€€€€€€€€€€€€€€€€€9¼¡…ä‘¥ÍÁ½Í¥Ñ¥Ù½Ì	±Õ•Ñ½½Ñ •µÁ…É•©…‘½Ì¸œ°(€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€Ñ•áÑ±¥¸èQ•áÑ±¥¸¹•¹Ñ•È°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€¤ì(€€€€€€€€€ô((€€€€€€€€€É•ÑÕÉ¸M…™•É•„ (€€€€€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€½¹ÍĞ1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè%½¸¡%½¹Ì¹‰±Õ•Ñ½½Ñ¡}Í•…É¡¥¹œ°½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€	ÕÍ…ÈÍ•Í§Í¸œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹‰½±°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€M•±•¥½¹„•°Ñ•³¥™½¹¼ÅÕ”É—Ì±„Í•Í§Í¸œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ØÀ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€½¹ÍĞ¥Ù¥‘•È¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÄÈ¤°(€€€€€€€€€€€€€€€±•á¥‰±” (€€€€€€€€€€€€€€€€€¡¥±è1¥ÍÑY¥•Ü¹‰Õ¥±‘•È (€€€€€€€€€€€€€€€€€€€Í¡É¥¹­]É…ÀèÑÉÕ”°(€€€€€€€€€€€€€€€€€€€¥Ñ•µ½Õ¹Ğè‰½¹‘•¹±•¹Ñ °(€€€€€€€€€€€€€€€€€€€¥Ñ•µ	Õ¥±‘•Èè€¡½¹Ñ•áĞ°¥¹‘•à¤ì(€€€€€€€€€€€€€€€€€€€€€™¥¹…°	±Õ•Ñ½½Ñ¡•Ù¥”‘•Ù¥”€ô‰½¹‘•‘m¥¹‘•átì((€€€€€€€€€€€€€€€€€€€€€™¥¹…°MÑÉ¥¹œ¹…µ”€ô‘•Ù¥”¹¹…µ”ü¹ÑÉ¥´ ¤¹¥Í9½ÑµÁÑä€ôôÑÉÕ”(€€€€€€€€€€€€€€€€€€€€€€€€€€ü‘•Ù¥”¹¹…µ”„(€€€€€€€€€€€€€€€€€€€€€€€€€€è€¥ÍÁ½Í¥Ñ¥Ù¼	±Õ•Ñ½½Ñ œì((€€€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€€€€€€€±•…‘¥¹œè½¹ÍĞ%½¸ (€€€€€€€€€€€€€€€€€€€€€€€€€%½¹Ì¹Á¡½¹•}…¹‘É½¥°(€€€€€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÜÀ°(€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€€€€€€¹…µ”°(€€€€€€€€€€€€€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€€€€€€€‘•Ù¥”¹…‘‘É•ÍÌ°(€€€€€€€€€€€€€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÔĞ¤°(€€€€€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€€€€€€½¹Q…Àè€ ¤ì(€€€€€€€€€€€€€€€€€€€€€€€€€9…Ù¥…Ñ½È¹Á½À¡Í¡••Ñ½¹Ñ•áĞ°‘•Ù¥”¤ì(€€€€€€€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€t°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤ì(€€€€€€€ô°(€€€€€€¤ì((€€€€€¥˜€¡Í•±•Ñ•€ôô¹Õ±°¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô((€€€€€…İ…¥Ğµ…¹…•È¹©½¥¸¡±½…±9…µ”è€I•ÑÉ½!Õˆœ°Ñ…É•ĞèÍ•±•Ñ•¹…‘‘É•ÍÌ¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€¥˜€ …½¹Ñ•áĞ¹µ½Õ¹Ñ•¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô((€€€€€M…™™½±‘5•ÍÍ•¹•È¹½˜ (€€€€€€€½¹Ñ•áĞ°(€€€€€€¤¹Í¡½İM¹…­	…È¡M¹…­	…È¡½¹Ñ•¹ĞèQ•áĞ 9¼Í”ÁÕ‘¼½¹•Ñ…Èè€‘•ÉÉ½Èœ¤¤¤ì(€€€ô(€ô((€ÕÑÕÉ”ñÙ½¥ø}Í¡½İÑ¥Ù•M•ÍÍ¥½¹¥…±½œ (€€€	Õ¥±‘½¹Ñ•áĞ½¹Ñ•áĞ°(€€€1¥¹­5…¹…•Èµ…¹…•È°(€€¤…Íå¹Œì(€€€™¥¹…°‰½½°ü‘¥Í½¹¹•Ğ€ô…İ…¥ĞÍ¡½İ5½‘…±	½ÑÑ½µM¡••Ğñ‰½½°ø (€€€€€½¹Ñ•áĞè½¹Ñ•áĞ°(€€€€€‰…­É½Õ¹‘½±½Èè½¹ÍĞ½±½È ÁáÄàÄàÄà¤°(€€€€€‰Õ¥±‘•Èè€¡Í¡••Ñ½¹Ñ•áĞ¤ì(€€€€€€€É•ÑÕÉ¸M…™•É•„ (€€€€€€€€€¡¥±èA…‘‘¥¹œ (€€€€€€€€€€€Á…‘‘¥¹œè½¹ÍĞ‘•%¹Í•ÑÌ¹Íåµµ•ÑÉ¥Œ¡Ù•ÉÑ¥…°è€ÄÈ¤°(€€€€€€€€€€€¡¥±è½±Õµ¸ (€€€€€€€€€€€€€µ…¥¹á¥ÍM¥é”è5…¥¹á¥ÍM¥é”¹µ¥¸°(€€€€€€€€€€€€€¡¥±‘É•¸èl(€€€€€€€€€€€€€€€1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè½¹ÍĞ%½¸¡%½¹Ì¹…‰±”°½±½Èè½±½ÉÌ¹É••¹•¹Ğ¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”èQ•áĞ (€€€€€€€€€€€€€€€€€€€}±…‰•±½È¡µ…¹…•È¹ÍÑ…Ñ”¤°(€€€€€€€€€€€€€€€€€€€ÍÑå±”è½¹ÍĞQ•áÑMÑå±” (€€€€€€€€€€€€€€€€€€€€€½±½Èè½±½ÉÌ¹İ¡¥Ñ”°(€€€€€€€€€€€€€€€€€€€€€™½¹Ñ]•¥¡Ğè½¹Ñ]•¥¡Ğ¹‰½±°(€€€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€ÍÕ‰Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€…‰±”1¥¹¬	±Õ•Ñ½½Ñ œ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ØÀ¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€½¹ÍĞ¥Ù¥‘•È¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”ÄÈ¤°(€€€€€€€€€€€€€€€1¥ÍÑQ¥±” (€€€€€€€€€€€€€€€€€±•…‘¥¹œè½¹ÍĞ%½¸¡%½¹Ì¹±¥¹­}½™˜°½±½Èè½±½ÉÌ¹É•‘•¹Ğ¤°(€€€€€€€€€€€€€€€€€Ñ¥Ñ±”è½¹ÍĞQ•áĞ (€€€€€€€€€€€€€€€€€€€€•Í½¹•Ñ…Èœ°(€€€€€€€€€€€€€€€€€€€ÍÑå±”èQ•áÑMÑå±”¡½±½Èè½±½ÉÌ¹İ¡¥Ñ”¤°(€€€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€€€€€½¹Q…Àè€ ¤ì(€€€€€€€€€€€€€€€€€€€9…Ù¥…Ñ½È¹Á½À¡Í¡••Ñ½¹Ñ•áĞ°ÑÉÕ”¤ì(€€€€€€€€€€€€€€€€€ô°(€€€€€€€€€€€€€€€€¤°(€€€€€€€€€€€€€t°(€€€€€€€€€€€€¤°(€€€€€€€€€€¤°(€€€€€€€€¤ì(€€€€€ô°(€€€€¤ì((€€€¥˜€¡‘¥Í½¹¹•Ğ€ôôÑÉÕ”¤ì(€€€€€…İ…¥Ğµ…¹…•È¹±½Í” ¤ì(€€€ô(€ô((€MÑÉ¥¹œ}±…‰•±½È¡1¥¹­MÑ…Ñ”ÍÑ…Ñ”¤ì(€€€Íİ¥Ñ €¡ÍÑ…Ñ”¤ì(€€€€€…Í”1¥¹­MÑ…Ñ”¹‘¥Í½¹¹•Ñ•è(€€€€€€€É•ÑÕÉ¸€…‰±”1¥¹¬œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹Í•…É¡¥¹œè(€€€€€€€É•ÑÕÉ¸€	ÕÍ…¹‘¼œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹¡½ÍÑ¥¹œè(€€€€€€€É•ÑÕÉ¸€ÍÁ•É…¹‘¼œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹½¹¹•Ñ¥¹œè(€€€€€€€É•ÑÕÉ¸€½¹•Ñ…¹‘¼œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹½¹¹•Ñ•è(€€€€€€€É•ÑÕÉ¸€½¹•Ñ…‘¼œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹Íå¹¥¹œè(€€€€€€€É•ÑÕÉ¸€M¥¹É½¹¥é…¹‘¼œì(€€€€€…Í”1¥¹­MÑ…Ñ”¹•ÉÉ½Èè(€€€€€€€É•ÑÕÉ¸€M¥¸½¹•á§Í¸œì(€€€ô(€ô)ô

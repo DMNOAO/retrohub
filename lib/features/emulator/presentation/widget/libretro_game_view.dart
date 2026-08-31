@@ -12,6 +12,8 @@ import '../../../../core/emulation/core_loader.dart';
 import '../../data/libretro_bridge.dart';
 import '../../data/save_state_service.dart';
 import '../../special_events/crystal_gs_ball_service.dart';
+import '../../special_events/gen2_red_reward.dart';
+import '../../special_events/gen2_red_reward_service.dart';
 import '../../special_events/gen3_special_event_service.dart';
 import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
@@ -33,6 +35,8 @@ class LibretroGameController {
   Future<bool> Function()? _saveSram;
   Future<CrystalGsBallStatus> Function()? _inspectGsBall;
   Future<CrystalGsBallActivationResult> Function()? _activateGsBall;
+  Future<Gen2RedRewardStatus> Function()? _inspectGen2RedReward;
+  Future<Gen2RedRewardResult> Function(Gen2RedReward)? _claimGen2RedReward;
   Future<Gen3SpecialEventStatus> Function(Gen3SpecialEvent)?
       _inspectGen3Event;
   Future<Gen3SpecialEventActivationResult> Function(Gen3SpecialEvent)?
@@ -115,6 +119,13 @@ class LibretroGameController {
         );
   }
 
+  Future<Gen2RedRewardStatus> inspectGen2RedReward() async =>
+      await _inspectGen2RedReward?.call() ?? Gen2RedRewardStatus.noSave;
+
+  Future<Gen2RedRewardResult> claimGen2RedReward(Gen2RedReward reward) async =>
+      await _claimGen2RedReward?.call(reward) ??
+      const Gen2RedRewardResult(status: Gen2RedRewardStatus.noSave);
+
   Future<Gen3SpecialEventStatus> inspectGen3Event(
     Gen3SpecialEvent event,
   ) async {
@@ -174,6 +185,9 @@ class LibretroGameController {
     required Future<bool> Function() saveSram,
     required Future<CrystalGsBallStatus> Function() inspectGsBall,
     required Future<CrystalGsBallActivationResult> Function() activateGsBall,
+    required Future<Gen2RedRewardStatus> Function() inspectGen2RedReward,
+    required Future<Gen2RedRewardResult> Function(Gen2RedReward)
+        claimGen2RedReward,
     required Future<Gen3SpecialEventStatus> Function(Gen3SpecialEvent)
         inspectGen3Event,
     required Future<Gen3SpecialEventActivationResult> Function(
@@ -202,6 +216,8 @@ class LibretroGameController {
     _saveSram = saveSram;
     _inspectGsBall = inspectGsBall;
     _activateGsBall = activateGsBall;
+    _inspectGen2RedReward = inspectGen2RedReward;
+    _claimGen2RedReward = claimGen2RedReward;
     _inspectGen3Event = inspectGen3Event;
     _activateGen3Event = activateGen3Event;
     _restart = restart;
@@ -226,6 +242,8 @@ class LibretroGameController {
     _saveSram = null;
     _inspectGsBall = null;
     _activateGsBall = null;
+    _inspectGen2RedReward = null;
+    _claimGen2RedReward = null;
     _inspectGen3Event = null;
     _activateGen3Event = null;
     _restart = null;
@@ -341,6 +359,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
 
   final CrystalGsBallService _crystalGsBallService =
       const CrystalGsBallService();
+  final Gen2RedRewardService _gen2RedRewardService =
+      const Gen2RedRewardService();
   final Gen3SpecialEventService _gen3SpecialEventService =
       const Gen3SpecialEventService();
 
@@ -396,6 +416,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       saveSram: _saveSram,
       inspectGsBall: _inspectGsBall,
       activateGsBall: _activateGsBall,
+      inspectGen2RedReward: _inspectGen2RedReward,
+      claimGen2RedReward: _claimGen2RedReward,
       inspectGen3Event: _inspectGen3Event,
       activateGen3Event: _activateGen3Event,
       restart: _restartEmulator,
@@ -833,6 +855,48 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       final result = await _crystalGsBallService.activate(paths.sramFile);
       if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
         throw StateError('El evento se activó, pero no se pudo recargar la SRAM.');
+      }
+      return result;
+    } finally {
+      _persistenceOperationInProgress = false;
+      _paused = wasPaused;
+    }
+  }
+
+  Future<Gen2RedRewardStatus> _inspectGen2RedReward() async {
+    final paths = _persistencePaths;
+    if (paths == null) return Gen2RedRewardStatus.noSave;
+    if (!_persistenceOperationInProgress) await _saveSram();
+    return _gen2RedRewardService.inspect(
+      savePath: paths.sramFile,
+      version: _pokemonVersion,
+    );
+  }
+
+  Future<Gen2RedRewardResult> _claimGen2RedReward(
+    Gen2RedReward reward,
+  ) async {
+    final bridge = _bridge;
+    final paths = _persistencePaths;
+    if (_disposed || !_isRunning || bridge == null || paths == null ||
+        _persistenceOperationInProgress) {
+      return const Gen2RedRewardResult(status: Gen2RedRewardStatus.noSave);
+    }
+    final wasPaused = _paused;
+    _paused = true;
+    _persistenceOperationInProgress = true;
+    try {
+      Directory(paths.sramDirectory).createSync(recursive: true);
+      if (!bridge.saveSram(paths.sramFile)) {
+        throw StateError('No se pudo guardar la SRAM antes de entregar el premio.');
+      }
+      final result = await _gen2RedRewardService.deliver(
+        savePath: paths.sramFile,
+        version: _pokemonVersion,
+        reward: reward,
+      );
+      if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
+        throw StateError('El premio se entregó, pero no se pudo recargar la SRAM.');
       }
       return result;
     } finally {
