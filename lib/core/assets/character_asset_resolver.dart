@@ -3,7 +3,12 @@ import 'game_asset_profile.dart';
 class CharacterAssetResolver {
   const CharacterAssetResolver._();
 
-  static String? protagonist(GameAssetProfile profile) => profile.protagonistAsset;
+  static String? protagonist(
+    GameAssetProfile profile, {
+    bool isFemale = false,
+  }) => isFemale
+      ? profile.femaleProtagonistAsset ?? profile.protagonistAsset
+      : profile.protagonistAsset;
   static String? rival(GameAssetProfile profile) => profile.rivalAsset;
   static String? champion(GameAssetProfile profile) => profile.championAsset;
 
