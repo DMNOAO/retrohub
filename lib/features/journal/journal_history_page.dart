@@ -39,6 +39,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   Set<int> _seenPokemonIds = const <int>{};
   Set<int> _caughtPokemonIds = const <int>{};
   bool _nationalDexUnlocked = false;
+  bool _isFemale = false;
 
   @override
   void initState() {
@@ -52,10 +53,12 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
     final results = await Future.wait([
       database.getProgressEventsByGame(widget.game.id),
       database.getJournalEntriesByGame(widget.game.id),
+      database.getLatestProgressSnapshot(widget.game.id),
     ]);
 
     final events = results[0] as List<GameProgressEvent>;
     final entries = results[1] as List<JournalEntry>;
+    final snapshot = results[2] as GameProgressSnapshot?;
     final items = <_TimelineItem>[
       ...events.map(_TimelineItem.fromEvent),
       ...entries.map(_TimelineItem.fromEntry),
@@ -87,12 +90,31 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
     }
     seenIds.addAll(caughtIds);
 
+    final snapshotBadges = snapshot == null
+        ? const <dynamic>[]
+        : _TimelineItem._decodeList(snapshot.badgesJson);
+    final snapshotGender = snapshotBadges.isNotEmpty &&
+            snapshotBadges.first is Map
+        ? (snapshotBadges.first as Map)['playerGender']?.toString()
+        : null;
+    String? eventGender;
+    for (final event in events) {
+      final gender = _TimelineItem._decodeMetadata(
+        event.metadataJson,
+      )['playerGender']?.toString();
+      if (gender == 'female' || gender == 'male') {
+        eventGender = gender;
+        break;
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       _items = items;
       _seenPokemonIds = seenIds;
       _caughtPokemonIds = caughtIds;
       _nationalDexUnlocked = nationalDexUnlocked;
+      _isFemale = (snapshotGender ?? eventGender) == 'female';
       _loading = false;
     });
   }
@@ -110,6 +132,10 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final profile = GameAssetProfile.fromGame(widget.game);
+    final protagonistPath = CharacterAssetResolver.protagonist(
+      profile,
+      isFemale: _isFemale,
+    );
     final locationProfile = PokemonGameProfile.fromGameIdentity(
       gameTitle: widget.game.title,
       romPath: widget.game.romPath,
@@ -142,7 +168,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                 SliverToBoxAdapter(
                   child: _HistoryHeader(
                     game: widget.game,
-                    profile: profile,
+                    protagonistPath: protagonistPath,
                     itemCount: _items.length,
                   ),
                 ),
@@ -171,6 +197,7 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
                         return _TimelineCard(
                           item: item,
                           profile: profile,
+                          protagonistPath: protagonistPath,
                           locationProfile: locationProfile,
                           isLast: index == filtered.length - 1,
                         );
@@ -185,10 +212,14 @@ class _JournalHistoryPageState extends ConsumerState<JournalHistoryPage> {
 
 class _HistoryHeader extends StatelessWidget {
   final Game game;
-  final GameAssetProfile profile;
   final int itemCount;
+  final String? protagonistPath;
 
-  const _HistoryHeader({required this.game, required this.profile, required this.itemCount});
+  const _HistoryHeader({
+    required this.game,
+    required this.itemCount,
+    required this.protagonistPath,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +235,7 @@ class _HistoryHeader extends StatelessWidget {
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: SpriteImage(path: profile.protagonistAsset, size: 54, fallbackIcon: Icons.person_outline),
+            child: SpriteImage(path: protagonistPath, size: 54, fallbackIcon: Icons.person_outline),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -239,17 +270,19 @@ class _TimelineCard extends StatelessWidget {
   final GameAssetProfile profile;
   final PokemonGameProfile locationProfile;
   final bool isLast;
+  final String? protagonistPath;
 
   const _TimelineCard({
     required this.item,
     required this.profile,
     required this.locationProfile,
     required this.isLast,
+    required this.protagonistPath,
   });
 
   @override
   Widget build(BuildContext context) {
-    final visual = _resolveVisual(item, profile);
+    final visual = _resolveVisual(item, profile, protagonistPath);
     final scheme = Theme.of(context).colorScheme;
 
     return IntrinsicHeight(
@@ -388,7 +421,11 @@ class _TimelineCard extends StatelessWidget {
     return _resolvedMapName(item, profile) ?? description;
   }
 
-  _Visual _resolveVisual(_TimelineItem item, GameAssetProfile profile) {
+  _Visual _resolveVisual(
+    _TimelineItem item,
+    GameAssetProfile profile,
+    String? protagonistPath,
+  ) {
     switch (item.type) {
       case 'badge_obtained':
         final index = _toInt(item.metadata['badgeIndex']) ?? _firstBadgeIndex(_toInt(item.metadata['newBadgesMask']) ?? 0);
@@ -418,7 +455,7 @@ class _TimelineCard extends StatelessWidget {
         return const _Visual(null, Icons.groups_outlined);
       case 'location_changed':
       case 'pokemon_progress_detected':
-        return _Visual(profile.protagonistAsset, Icons.place_outlined);
+        return _Visual(protagonistPath, Icons.place_outlined);
       case 'gym_leader_defeated':
         final spritePath = item.metadata['spritePath']?.toString();
         return _Visual(spritePath, Icons.shield_outlined);
@@ -461,7 +498,7 @@ class _TimelineCard extends StatelessWidget {
       case 'load_state':
         return const _Visual(null, Icons.history);
       case 'game_started':
-        return _Visual(profile.protagonistAsset, Icons.play_arrow);
+        return _Visual(protagonistPath, Icons.play_arrow);
       case 'game_closed':
         return const _Visual(null, Icons.stop_circle_outlined);
       case 'manual_entry':
@@ -594,6 +631,15 @@ class _TimelineItem {
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
     } catch (_) {}
     return <String, dynamic>{};
+  }
+
+  static List<dynamic> _decodeList(String? value) {
+    if (value == null || value.trim().isEmpty) return const <dynamic>[];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is List) return decoded;
+    } catch (_) {}
+    return const <dynamic>[];
   }
 
   static int _readInt(dynamic value) {
