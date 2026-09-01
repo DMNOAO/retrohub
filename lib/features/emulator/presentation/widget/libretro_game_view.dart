@@ -17,6 +17,7 @@ import '../../special_events/gen2_red_reward.dart';
 import '../../special_events/gen2_red_reward_service.dart';
 import '../../special_events/gen3_special_event_service.dart';
 import '../../special_events/gen4_mystery_gift_service.dart';
+import '../../special_events/gen5_mystery_gift_service.dart';
 import '../../audio/libretro_audio_player.dart';
 import '../../../game_engine/game_engine_status.dart';
 import '../../../pokemon/decoder/pokemon_decoder.dart';
@@ -47,6 +48,8 @@ class LibretroGameController {
       _activateGen3Event;
   Future<Gen4MysteryGiftStatus> Function(Gen4MysteryGift)? _inspectGen4Gift;
   Future<Gen4MysteryGiftResult> Function(Gen4MysteryGift)? _activateGen4Gift;
+  Future<Gen5MysteryGiftStatus> Function(Gen5MysteryGift)? _inspectGen5Gift;
+  Future<Gen5MysteryGiftResult> Function(Gen5MysteryGift)? _activateGen5Gift;
   Future<void> Function()? _restart;
   void Function(bool paused)? _setPaused;
   int Function()? _currentPlayTimeMinutes;
@@ -162,6 +165,13 @@ class LibretroGameController {
       await _activateGen4Gift?.call(gift) ??
       const Gen4MysteryGiftResult(status: Gen4MysteryGiftStatus.noSave);
 
+  Future<Gen5MysteryGiftStatus> inspectGen5Gift(Gen5MysteryGift gift) async =>
+      await _inspectGen5Gift?.call(gift) ?? Gen5MysteryGiftStatus.noSave;
+
+  Future<Gen5MysteryGiftResult> activateGen5Gift(Gen5MysteryGift gift) async =>
+      await _activateGen5Gift?.call(gift) ??
+      const Gen5MysteryGiftResult(status: Gen5MysteryGiftStatus.noSave);
+
   Future<void> restart() async => _restart?.call();
 
   void setPaused(bool paused) => _setPaused?.call(paused);
@@ -220,6 +230,10 @@ class LibretroGameController {
         inspectGen4Gift,
     required Future<Gen4MysteryGiftResult> Function(Gen4MysteryGift)
         activateGen4Gift,
+    required Future<Gen5MysteryGiftStatus> Function(Gen5MysteryGift)
+        inspectGen5Gift,
+    required Future<Gen5MysteryGiftResult> Function(Gen5MysteryGift)
+        activateGen5Gift,
     required Future<void> Function() restart,
     required void Function(bool paused) setPaused,
     required int Function() currentPlayTimeMinutes,
@@ -250,6 +264,8 @@ class LibretroGameController {
     _activateGen3Event = activateGen3Event;
     _inspectGen4Gift = inspectGen4Gift;
     _activateGen4Gift = activateGen4Gift;
+    _inspectGen5Gift = inspectGen5Gift;
+    _activateGen5Gift = activateGen5Gift;
     _restart = restart;
     _setPaused = setPaused;
     _currentPlayTimeMinutes = currentPlayTimeMinutes;
@@ -280,6 +296,8 @@ class LibretroGameController {
     _activateGen3Event = null;
     _inspectGen4Gift = null;
     _activateGen4Gift = null;
+    _inspectGen5Gift = null;
+    _activateGen5Gift = null;
     _restart = null;
     _setPaused = null;
     _currentPlayTimeMinutes = null;
@@ -401,6 +419,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       const Gen3SpecialEventService();
   final Gen4MysteryGiftService _gen4MysteryGiftService =
       Gen4MysteryGiftService();
+  final Gen5MysteryGiftService _gen5MysteryGiftService =
+      Gen5MysteryGiftService();
 
   PokemonEngine? _pokemonEngine;
   GameEngineStatus<PokemonMemorySnapshot>? _pokemonStatus;
@@ -462,6 +482,8 @@ class _LibretroGameViewState extends State<LibretroGameView> {
       activateGen3Event: _activateGen3Event,
       inspectGen4Gift: _inspectGen4Gift,
       activateGen4Gift: _activateGen4Gift,
+      inspectGen5Gift: _inspectGen5Gift,
+      activateGen5Gift: _activateGen5Gift,
       restart: _restartEmulator,
       setPaused: _setPaused,
       currentPlayTimeMinutes: _currentPlayTimeMinutes,
@@ -1084,6 +1106,53 @@ class _LibretroGameViewState extends State<LibretroGameView> {
         throw StateError('No se pudo guardar la SRAM antes del regalo.');
       }
       final result = await _gen4MysteryGiftService.activate(
+        savePath: paths.sramFile,
+        version: _pokemonVersion,
+        event: gift,
+      );
+      if (result.succeeded && !bridge.loadSram(paths.sramFile)) {
+        throw StateError('El regalo se activó, pero no se pudo recargar.');
+      }
+      return result;
+    } finally {
+      _persistenceOperationInProgress = false;
+      _paused = wasPaused;
+    }
+  }
+
+  Future<Gen5MysteryGiftStatus> _inspectGen5Gift(
+    Gen5MysteryGift gift,
+  ) async {
+    final paths = _persistencePaths;
+    if (paths == null) return Gen5MysteryGiftStatus.noSave;
+    if (!_persistenceOperationInProgress) await _saveSram();
+    return _gen5MysteryGiftService.inspect(
+      savePath: paths.sramFile,
+      version: _pokemonVersion,
+      event: gift,
+    );
+  }
+
+  Future<Gen5MysteryGiftResult> _activateGen5Gift(
+    Gen5MysteryGift gift,
+  ) async {
+    final bridge = _bridge;
+    final paths = _persistencePaths;
+    if (_disposed || !_isRunning || bridge == null || paths == null ||
+        _persistenceOperationInProgress) {
+      return const Gen5MysteryGiftResult(
+        status: Gen5MysteryGiftStatus.noSave,
+      );
+    }
+    final wasPaused = _paused;
+    _paused = true;
+    _persistenceOperationInProgress = true;
+    try {
+      Directory(paths.sramDirectory).createSync(recursive: true);
+      if (!bridge.saveSram(paths.sramFile)) {
+        throw StateError('No se pudo guardar la SRAM antes del regalo.');
+      }
+      final result = await _gen5MysteryGiftService.activate(
         savePath: paths.sramFile,
         version: _pokemonVersion,
         event: gift,

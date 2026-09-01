@@ -420,6 +420,12 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
               'Manaphy, Darkrai, Shaymin y Arceus',
             PokemonGameVersion.platinum =>
               'Manaphy, Tarjeta Socio, Carta de Oak y Arceus',
+            PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver =>
+              'Piedra Enigma, Pichu, Celebi, Mew, Arceus y variocolor',
+            PokemonGameVersion.black || PokemonGameVersion.white =>
+              'Victini, Keldeo, Meloetta y legendarios variocolor',
+            PokemonGameVersion.black2 || PokemonGameVersion.white2 =>
+              'Keldeo, Meloetta, Genesect y legendarios variocolor',
             _ => 'Eventos oficiales',
           },
           onOpenSpecialEvents:
@@ -438,6 +444,8 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         activateGen3Event: _gameController.activateGen3Event,
                         inspectGen4Gift: _gameController.inspectGen4Gift,
                         activateGen4Gift: _gameController.activateGen4Gift,
+                        inspectGen5Gift: _gameController.inspectGen5Gift,
+                        activateGen5Gift: _gameController.activateGen5Gift,
                         leagueWinsAfterRed: redState.$1,
                         claimedRedRewards: redState.$2,
                         redChallengeUnlocked: redState.$3 && redState.$4,
@@ -500,7 +508,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
         version == PokemonGameVersion.leafGreen ||
         version == PokemonGameVersion.diamond ||
         version == PokemonGameVersion.pearl ||
-        version == PokemonGameVersion.platinum;
+        version == PokemonGameVersion.platinum ||
+        version == PokemonGameVersion.heartGold ||
+        version == PokemonGameVersion.soulSilver ||
+        version == PokemonGameVersion.black ||
+        version == PokemonGameVersion.white ||
+        version == PokemonGameVersion.black2 ||
+        version == PokemonGameVersion.white2;
   }
 
   Future<bool> _isGen1MewClaimed() async {
