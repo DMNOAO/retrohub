@@ -2,6 +2,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retrohub/features/pokemon/models/trainer_class.dart';
 
 void main() {
+  group('TrainerClassResolver Alto Mando de Johto', () {
+    test('resuelve los cuatro miembros con sus sprites de Gen II', () {
+      const expected = <int, String>{
+        0x0B: 'will_johto.png',
+        0x0D: 'bruno_johto.png',
+        0x0E: 'karen_johto.png',
+        0x0F: 'koga_johto.png',
+      };
+
+      for (final entry in expected.entries) {
+        expect(
+          TrainerClassResolver.forClassId(entry.key)?.spritePath,
+          'assets/sprites/characters/elite_four/gbc/${entry.value}',
+        );
+      }
+    });
+  });
+
   group('TrainerClassResolver Team Rocket de Gen II', () {
     test('resuelve el Científico con su sprite de Johto', () {
       final trainer = TrainerClassResolver.forClassId(0x14);

@@ -464,8 +464,12 @@ class _TimelineCard extends StatelessWidget {
       case 'champion_defeated':
         return _Visual(CharacterAssetResolver.champion(profile), Icons.emoji_events_outlined);
       case 'elite_four_defeated':
+        final trainerClassId = _toInt(item.metadata['trainerClassId']);
+        final gen2Trainer = trainerClassId == null
+            ? null
+            : TrainerClassResolver.forClassId(trainerClassId);
         return _Visual(
-          item.metadata['spritePath']?.toString(),
+          item.metadata['spritePath']?.toString() ?? gen2Trainer?.spritePath,
           Icons.military_tech_outlined,
         );
       case 'trainer_defeated':

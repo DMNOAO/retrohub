@@ -29,7 +29,10 @@ class TrainerClassResolver {
     0x08: TrainerClassInfo('Clair'),
     0x09: TrainerClassInfo('Rival (encuentro 1)'),
     0x0A: TrainerClassInfo('Profesor Pokémon'),
-    0x0B: TrainerClassInfo('Will'),
+    0x0B: TrainerClassInfo(
+      'Will',
+      'assets/sprites/characters/elite_four/gbc/will_johto.png',
+    ),
     0x0C: TrainerClassInfo('Cal'),
     0x0D: TrainerClassInfo(
       'Bruno',
