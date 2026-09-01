@@ -110,7 +110,7 @@ class Gen2RedRewardService {
     bytes.setRange(
       otOffset + count * _nameLength,
       otOffset + (count + 1) * _nameLength,
-      _encodeName('PCNY${String.fromCharCode(97 + (reward.requiredVictories - 1) % 4)}'),
+      _encodeName('PCNY${String.fromCharCode(97 + (reward.requiredLeagueWins - 1) % 4)}'),
     );
     bytes.setRange(
       nicknameOffset + count * _nameLength,
@@ -138,7 +138,7 @@ class Gen2RedRewardService {
     data[0] = reward.speciesId;
     data[1] = 0;
     data.setRange(2, 6, moves.map((move) => move.$1));
-    _write16(data, 6, 2002 + reward.requiredVictories);
+    _write16(data, 6, 2002 + reward.requiredLeagueWins);
     _write24(data, 8, experience);
     // Stat experience remains zero. AA/AA is a legal shiny DV spread.
     data[21] = 0xAA;
