@@ -50,6 +50,8 @@ flutter:
 
   assets:
     - assets/events/gen4/
+    - assets/events/gen4_hgss/
+    - assets/events/gen5/
     - assets/covers/gb/
     - assets/covers/gbc/
     - assets/covers/gba/

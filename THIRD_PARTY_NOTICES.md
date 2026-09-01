@@ -19,11 +19,11 @@ Its source code and license are available from:
 The included SNES binaries were obtained from the official Libretro buildbot.
 RetroHub does not include commercial games, ROMs or BIOS files.
 
-## Generation IV Mystery Gift preservation files
+## Generation IV and V Mystery Gift preservation files
 
-The Wonder Card (`.wc4`) and Pokémon Gift (`.pgt`) files under
-`assets/events/gen4/` are preserved event-distribution data sourced from the
-[EventsGallery](https://github.com/Xieons-Gaming-Corner/EventsGallery)
+The Wonder Card (`.wc4`), Pokémon Gift (`.pgt`) and Gen V PGF files under
+`assets/events/` are preserved event-distribution data sourced from the
+[Project Pokémon EventsGallery](https://github.com/projectpokemon/EventsGallery)
 collection. Save-layout behavior was cross-checked against
 [PKHeX](https://github.com/kwsch/PKHeX). Pokémon and associated event data are
 property of Nintendo, Creatures Inc. and GAME FREAK inc.

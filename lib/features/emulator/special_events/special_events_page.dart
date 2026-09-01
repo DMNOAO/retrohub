@@ -8,6 +8,7 @@ import 'gen2_red_reward.dart';
 import 'gen2_red_reward_service.dart';
 import 'gen3_special_event_service.dart';
 import 'gen4_mystery_gift_service.dart';
+import 'gen5_mystery_gift_service.dart';
 
 class SpecialEventsPage extends StatefulWidget {
   final PokemonGameVersion version;
@@ -32,6 +33,10 @@ class SpecialEventsPage extends StatefulWidget {
       inspectGen4Gift;
   final Future<Gen4MysteryGiftResult> Function(Gen4MysteryGift)
       activateGen4Gift;
+  final Future<Gen5MysteryGiftStatus> Function(Gen5MysteryGift)
+      inspectGen5Gift;
+  final Future<Gen5MysteryGiftResult> Function(Gen5MysteryGift)
+      activateGen5Gift;
 
   const SpecialEventsPage({
     super.key,
@@ -50,6 +55,8 @@ class SpecialEventsPage extends StatefulWidget {
     required this.claimGen1MewEvent,
     required this.inspectGen4Gift,
     required this.activateGen4Gift,
+    required this.inspectGen5Gift,
+    required this.activateGen5Gift,
   });
 
   @override
@@ -71,6 +78,10 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   bool _workingMew = false;
   final Map<Gen4MysteryGift, Gen4MysteryGiftStatus> _gen4Statuses = {};
   Gen4MysteryGift? _workingGen4;
+  final Gen4MysteryGiftService _gen4Service = Gen4MysteryGiftService();
+  final Gen5MysteryGiftService _gen5Service = Gen5MysteryGiftService();
+  final Map<Gen5MysteryGift, Gen5MysteryGiftStatus> _gen5Statuses = {};
+  Gen5MysteryGift? _workingGen5;
 
   @override
   void initState() {
@@ -101,10 +112,18 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     }
     if (_isGen4) {
       final statuses = <Gen4MysteryGift, Gen4MysteryGiftStatus>{};
-      for (final gift in Gen4MysteryGift.values) {
+      for (final gift in _gen4Service.eventsFor(widget.version)) {
         statuses[gift] = await widget.inspectGen4Gift(gift);
       }
       if (mounted) setState(() => _gen4Statuses.addAll(statuses));
+      return;
+    }
+    if (_isGen5) {
+      final statuses = <Gen5MysteryGift, Gen5MysteryGiftStatus>{};
+      for (final gift in _gen5Service.eventsFor(widget.version)) {
+        statuses[gift] = await widget.inspectGen5Gift(gift);
+      }
+      if (mounted) setState(() => _gen5Statuses.addAll(statuses));
       return;
     }
     final events = _gen3Service.eventsFor(widget.version);
@@ -124,7 +143,14 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
   bool get _isGen4 => widget.version == PokemonGameVersion.diamond ||
       widget.version == PokemonGameVersion.pearl ||
-      widget.version == PokemonGameVersion.platinum;
+      widget.version == PokemonGameVersion.platinum ||
+      widget.version == PokemonGameVersion.heartGold ||
+      widget.version == PokemonGameVersion.soulSilver;
+
+  bool get _isGen5 => widget.version == PokemonGameVersion.black ||
+      widget.version == PokemonGameVersion.white ||
+      widget.version == PokemonGameVersion.black2 ||
+      widget.version == PokemonGameVersion.white2;
 
   Future<void> _claimReward(Gen2RedReward reward) async {
     if (!await _confirm('premio ${reward.name} variocolor') || !mounted) return;
@@ -244,6 +270,21 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     }
   }
 
+  Future<void> _activateGen5(Gen5MysteryGift gift, String title) async {
+    if (!await _confirm(title) || !mounted) return;
+    setState(() => _workingGen5 = gift);
+    try {
+      final result = await widget.activateGen5Gift(gift);
+      if (!mounted) return;
+      setState(() => _gen5Statuses[gift] = result.status);
+      _showResult(result.succeeded, _gen5Message(result.status));
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _workingGen5 = null);
+    }
+  }
+
   void _showResult(bool succeeded, String fallback) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -276,7 +317,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
                 : _buildLockedRedChallengeCard(),
           ]
         : _isGen4
-        ? Gen4MysteryGift.values.map(_buildGen4Card).toList()
+        ? _gen4Service.eventsFor(widget.version).map(_buildGen4Card).toList()
+        : _isGen5
+        ? _gen5Service.eventsFor(widget.version).map(_buildGen5Card).toList()
         : _presentations(widget.version)
               .map((presentation) => _buildGen3Card(presentation))
               .toList();
@@ -450,10 +493,48 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
           ? 'Carta de Oak · Shaymin'
           : 'Shaymin de película',
       Gen4MysteryGift.arceus => 'Arceus de película',
+      Gen4MysteryGift.enigmaStone => 'Piedra Enigma · Latias/Latios',
+      Gen4MysteryGift.pikachuColoredPichu =>
+        'Pichu color Pikachu · Pichu Picoreja',
+      Gen4MysteryGift.celebi => 'Celebi · encuentro con Giovanni',
+      Gen4MysteryGift.mew => 'Mew del décimo aniversario',
+      Gen4MysteryGift.shinyRaikou => 'Raikou variocolor de invierno',
+      Gen4MysteryGift.shinyEntei => 'Entei variocolor de invierno',
+      Gen4MysteryGift.shinySuicune => 'Suicune variocolor de invierno',
+      Gen4MysteryGift.jirachi => 'Jirachi · Confín del Cielo Nocturno',
+      Gen4MysteryGift.rangerDarkrai => 'Darkrai de Pokémon Ranger',
+      Gen4MysteryGift.deoxys => 'Deoxys de Oblivia',
+      Gen4MysteryGift.rangerShaymin => 'Shaymin de Oblivia',
+      Gen4MysteryGift.heatran => 'Heatran de Oblivia',
     };
     final direct = !platinum && gift != Gen4MysteryGift.manaphyEgg ||
         gift == Gen4MysteryGift.arceus;
-    final instructions = <String>[
+    final hgssInstructions = switch (gift) {
+      Gen4MysteryGift.enigmaStone => const [
+          'Reinicia el juego y recibe la Piedra Enigma del repartidor.',
+          'Llévasela a Máximo en el Museo de Ciudad Plateada.',
+          'Al salir aparecerá Latios en HeartGold o Latias en SoulSilver.',
+        ],
+      Gen4MysteryGift.pikachuColoredPichu => const [
+          'Reinicia el juego y recibe al Pichu color Pikachu.',
+          'Ponlo primero en el equipo y visita el santuario del Encinar.',
+          'Allí se unirá el Pichu Picoreja.',
+        ],
+      Gen4MysteryGift.celebi => const [
+          'Reinicia el juego y recibe a Celebi.',
+          'Ponlo primero en el equipo y visita el santuario del Encinar.',
+          'Celebi iniciará el viaje temporal y el encuentro con Giovanni.',
+        ],
+      Gen4MysteryGift.arceus => const [
+          'Reinicia el juego y recibe a Arceus.',
+          'Ponlo primero en el equipo y entra a las Ruinas Alfa.',
+          'Continúa hacia las Ruinas Sinjoh para elegir un huevo legendario.',
+        ],
+      _ => const <String>[],
+    };
+    final instructions = hgssInstructions.isNotEmpty
+        ? hgssInstructions
+        : <String>[
       'Reinicia el juego y entra en cualquier Tienda Pokémon.',
       'Habla con el repartidor vestido de verde junto al mostrador.',
       if (gift == Gen4MysteryGift.manaphyEgg)
@@ -475,6 +556,53 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         canActivate: status == Gen4MysteryGiftStatus.available,
         working: _workingGen4 == gift,
         onActivate: () => _activateGen4(gift, title),
+        instructions: instructions,
+        requirement: 'Haber guardado la partida dentro del juego.',
+      ),
+    );
+  }
+
+  Widget _buildGen5Card(Gen5MysteryGift gift) {
+    final status = _gen5Statuses[gift];
+    final title = switch (gift) {
+      Gen5MysteryGift.libertyPass => 'Pase Libertad · Victini',
+      Gen5MysteryGift.victini => 'Victini de película',
+      Gen5MysteryGift.keldeo => 'Keldeo de evento',
+      Gen5MysteryGift.meloetta => 'Meloetta de primavera',
+      Gen5MysteryGift.genesect => 'Genesect del Equipo Plasma',
+      Gen5MysteryGift.shinyDialga => 'Dialga variocolor',
+      Gen5MysteryGift.shinyPalkia => 'Palkia variocolor',
+      Gen5MysteryGift.shinyGiratina => 'Giratina variocolor',
+      Gen5MysteryGift.darkrai => 'Darkrai de invierno',
+      Gen5MysteryGift.zoroark => 'Zoroark de verano',
+      Gen5MysteryGift.versionLegend =>
+        widget.version == PokemonGameVersion.black
+            ? 'Zekrom de primavera'
+            : 'Reshiram de primavera',
+      Gen5MysteryGift.mewtwo => 'Mewtwo de primavera',
+      Gen5MysteryGift.deoxys => 'Deoxys del Equipo Plasma',
+    };
+    final instructions = gift == Gen5MysteryGift.libertyPass
+        ? const [
+            'Reinicia el juego y recibe el Pase Libertad del repartidor en un Centro Pokémon.',
+            'Ve al muelle de Ciudad Porcelana y viaja a Isla Libertad.',
+            'Entra al faro para encontrar a Victini.',
+          ]
+        : [
+            'Reinicia el juego y entra en cualquier Centro Pokémon.',
+            'Habla con el repartidor vestido de azul junto a la entrada.',
+            'Deja un espacio libre en el equipo y recibe a ${title.split(' ').first}.',
+          ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _EventCard(
+        title: title,
+        game: _gameName(widget.version),
+        statusLabel: _gen5StatusLabel(status),
+        statusMessage: status == null ? null : _gen5Message(status),
+        canActivate: status == Gen5MysteryGiftStatus.available,
+        working: _workingGen5 == gift,
+        onActivate: () => _activateGen5(gift, title),
         instructions: instructions,
         requirement: 'Haber guardado la partida dentro del juego.',
       ),
@@ -550,6 +678,12 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         PokemonGameVersion.diamond => 'Pokémon Diamante',
         PokemonGameVersion.pearl => 'Pokémon Perla',
         PokemonGameVersion.platinum => 'Pokémon Platino',
+        PokemonGameVersion.heartGold => 'Pokémon HeartGold',
+        PokemonGameVersion.soulSilver => 'Pokémon SoulSilver',
+        PokemonGameVersion.black => 'Pokémon Negro',
+        PokemonGameVersion.white => 'Pokémon Blanco',
+        PokemonGameVersion.black2 => 'Pokémon Negro 2',
+        PokemonGameVersion.white2 => 'Pokémon Blanco 2',
         _ => 'Pokémon',
       };
 
@@ -615,6 +749,25 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         Gen4MysteryGiftStatus.slotsFull => 'Tarjetas llenas',
         Gen4MysteryGiftStatus.available => 'Disponible',
         Gen4MysteryGiftStatus.activated => 'Activado',
+      };
+
+  String _gen5Message(Gen5MysteryGiftStatus status) => switch (status) {
+        Gen5MysteryGiftStatus.noSave => 'Guarda dentro del juego antes de continuar.',
+        Gen5MysteryGiftStatus.incompatibleSave => 'El guardado de quinta generación no es compatible.',
+        Gen5MysteryGiftStatus.unsupported => 'Este regalo no está disponible en esta edición.',
+        Gen5MysteryGiftStatus.slotsFull => 'No quedan espacios libres en el álbum de tarjetas.',
+        Gen5MysteryGiftStatus.available => 'Regalo misterioso disponible.',
+        Gen5MysteryGiftStatus.activated => 'Este regalo ya fue activado.',
+      };
+
+  String _gen5StatusLabel(Gen5MysteryGiftStatus? status) => switch (status) {
+        null => 'Comprobando',
+        Gen5MysteryGiftStatus.noSave => 'Sin guardado',
+        Gen5MysteryGiftStatus.incompatibleSave => 'No compatible',
+        Gen5MysteryGiftStatus.unsupported => 'No disponible',
+        Gen5MysteryGiftStatus.slotsFull => 'Tarjetas llenas',
+        Gen5MysteryGiftStatus.available => 'Disponible',
+        Gen5MysteryGiftStatus.activated => 'Activado',
       };
 }
 

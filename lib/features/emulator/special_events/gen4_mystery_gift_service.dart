@@ -10,6 +10,18 @@ enum Gen4MysteryGift {
   darkrai,
   shaymin,
   arceus,
+  enigmaStone,
+  pikachuColoredPichu,
+  celebi,
+  mew,
+  shinyRaikou,
+  shinyEntei,
+  shinySuicune,
+  jirachi,
+  rangerDarkrai,
+  deoxys,
+  rangerShaymin,
+  heatran,
 }
 
 enum Gen4MysteryGiftStatus {
@@ -59,7 +71,28 @@ class Gen4MysteryGiftService {
   List<Gen4MysteryGift> eventsFor(PokemonGameVersion version) => switch (version) {
         PokemonGameVersion.diamond ||
         PokemonGameVersion.pearl ||
-        PokemonGameVersion.platinum => Gen4MysteryGift.values,
+        PokemonGameVersion.platinum => const [
+          Gen4MysteryGift.manaphyEgg,
+          Gen4MysteryGift.darkrai,
+          Gen4MysteryGift.shaymin,
+          Gen4MysteryGift.arceus,
+        ],
+        PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver =>
+          const [
+            Gen4MysteryGift.enigmaStone,
+            Gen4MysteryGift.pikachuColoredPichu,
+            Gen4MysteryGift.celebi,
+            Gen4MysteryGift.mew,
+            Gen4MysteryGift.arceus,
+            Gen4MysteryGift.shinyRaikou,
+            Gen4MysteryGift.shinyEntei,
+            Gen4MysteryGift.shinySuicune,
+            Gen4MysteryGift.jirachi,
+            Gen4MysteryGift.rangerDarkrai,
+            Gen4MysteryGift.deoxys,
+            Gen4MysteryGift.rangerShaymin,
+            Gen4MysteryGift.heatran,
+          ],
         _ => const <Gen4MysteryGift>[],
       };
 
@@ -186,7 +219,7 @@ class Gen4MysteryGiftService {
     final checksum = _crc16Ccitt(
       bytes,
       block,
-      block + config.generalSize - 0x14,
+      block + config.generalSize - config.footerSize,
     );
     _write16(bytes, block + config.generalSize - 2, checksum);
 
@@ -270,8 +303,49 @@ class Gen4MysteryGiftService {
   ) {
     final isDp = version == PokemonGameVersion.diamond ||
         version == PokemonGameVersion.pearl;
-    if (!isDp && version != PokemonGameVersion.platinum) return null;
+    final isHgss = version == PokemonGameVersion.heartGold ||
+        version == PokemonGameVersion.soulSilver;
+    if (!isDp && version != PokemonGameVersion.platinum && !isHgss) {
+      return null;
+    }
+    if (isHgss && (event == Gen4MysteryGift.manaphyEgg ||
+        event == Gen4MysteryGift.darkrai ||
+        event == Gen4MysteryGift.shaymin)) return null;
+    if (!isHgss && event.index > Gen4MysteryGift.arceus.index) return null;
     final asset = switch ((version, event)) {
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.enigmaStone) =>
+        'assets/events/gen4_hgss/enigma_stone_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.pikachuColoredPichu) =>
+        'assets/events/gen4_hgss/pikachu_colored_pichu_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.celebi) => 'assets/events/gen4_hgss/celebi_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.mew) => 'assets/events/gen4_hgss/mew_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.arceus) => 'assets/events/gen4_hgss/arceus_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.shinyRaikou) =>
+        'assets/events/gen4_hgss/shiny_raikou_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.shinyEntei) =>
+        'assets/events/gen4_hgss/shiny_entei_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.shinySuicune) =>
+        'assets/events/gen4_hgss/shiny_suicune_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.jirachi) => 'assets/events/gen4_hgss/jirachi_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.rangerDarkrai) =>
+        'assets/events/gen4_hgss/darkrai_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.deoxys) => 'assets/events/gen4_hgss/deoxys_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.rangerShaymin) =>
+        'assets/events/gen4_hgss/shaymin_spa.wc4',
+      (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
+       Gen4MysteryGift.heatran) => 'assets/events/gen4_hgss/heatran_spa.wc4',
       (_, Gen4MysteryGift.manaphyEgg) =>
         'assets/events/gen4/manaphy_egg.pgt',
       (PokemonGameVersion.platinum, Gen4MysteryGift.darkrai) =>
@@ -284,14 +358,16 @@ class Gen4MysteryGiftService {
         'assets/events/gen4/dp_movie_shaymin_spa.wc4',
       (_, Gen4MysteryGift.arceus) =>
         'assets/events/gen4/dppt_movie_arceus_spa.wc4',
+      _ => throw StateError('Regalo no compatible con esta edición.'),
     };
     return _Gen4GiftConfig(
-      generalSize: isDp ? 0xC100 : 0xCF2C,
-      mysteryOffset: isDp ? 0xA6D0 : 0xB4C0,
+      generalSize: isDp ? 0xC100 : isHgss ? 0xF628 : 0xCF2C,
+      mysteryOffset: isDp ? 0xA6D0 : isHgss ? 0x9D3C : 0xB4C0,
       cardStart: _flagRegionSize + (isDp ? _dpSentinelBytes : 0),
       hasSentinels: isDp,
       assetPath: asset,
       isPcd: event != Gen4MysteryGift.manaphyEgg,
+      footerSize: isHgss ? 0x10 : 0x14,
     );
   }
 
@@ -314,6 +390,7 @@ class _Gen4GiftConfig {
   final bool hasSentinels;
   final String assetPath;
   final bool isPcd;
+  final int footerSize;
 
   const _Gen4GiftConfig({
     required this.generalSize,
@@ -322,5 +399,6 @@ class _Gen4GiftConfig {
     required this.hasSentinels,
     required this.assetPath,
     required this.isPcd,
+    required this.footerSize,
   });
 }

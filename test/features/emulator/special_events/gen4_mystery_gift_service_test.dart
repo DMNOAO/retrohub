@@ -71,6 +71,25 @@ void main() {
       Gen4MysteryGiftStatus.activated,
     );
   });
+
+  test('usa el bloque Mystery Gift y footer propios de HGSS', () async {
+    final directory = await Directory.systemTemp.createTemp('retrohub-hgss-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/heartgold.srm');
+    await file.writeAsBytes(_save(generalSize: 0xF628, magic: 0x20060623));
+
+    final result = await service.activate(
+      savePath: file.path,
+      version: PokemonGameVersion.heartGold,
+      event: Gen4MysteryGift.enigmaStone,
+    );
+    expect(result.succeeded, isTrue);
+    final bytes = await file.readAsBytes();
+    const pgtStart = 0x9D3C + 0x100;
+    expect(bytes[pgtStart], 1);
+    expect(bytes[pgtStart + 2], 1);
+    expect(bytes[0x9D3C + 255] & 0x80, 0x80);
+  });
 }
 
 Uint8List _save({required int generalSize, required int magic}) {
