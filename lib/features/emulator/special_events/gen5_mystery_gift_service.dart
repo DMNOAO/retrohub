@@ -7,7 +7,6 @@ import '../../pokemon/models/pokemon_game_profile.dart';
 
 enum Gen5MysteryGift {
   libertyPass,
-  victini,
   keldeo,
   meloetta,
   genesect,
@@ -65,7 +64,6 @@ class Gen5MysteryGiftService {
       switch (version) {
         PokemonGameVersion.black || PokemonGameVersion.white => const [
           Gen5MysteryGift.libertyPass,
-          Gen5MysteryGift.victini,
           Gen5MysteryGift.keldeo,
           Gen5MysteryGift.meloetta,
           Gen5MysteryGift.shinyDialga,
@@ -223,8 +221,6 @@ class Gen5MysteryGiftService {
     return switch (event) {
       Gen5MysteryGift.libertyPass when isBw =>
         'assets/events/gen5/liberty_pass_spa.pgf',
-      Gen5MysteryGift.victini when isBw =>
-        'assets/events/gen5/victini_spa.pgf',
       Gen5MysteryGift.keldeo => isBw
           ? 'assets/events/gen5/keldeo_bw_spa.pgf'
           : 'assets/events/gen5/keldeo_b2w2_spa.pgf',

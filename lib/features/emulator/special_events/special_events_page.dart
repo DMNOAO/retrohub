@@ -37,6 +37,7 @@ class SpecialEventsPage extends StatefulWidget {
       inspectGen5Gift;
   final Future<Gen5MysteryGiftResult> Function(Gen5MysteryGift)
       activateGen5Gift;
+  final bool ndsLeagueUnlocked;
 
   const SpecialEventsPage({
     super.key,
@@ -57,6 +58,7 @@ class SpecialEventsPage extends StatefulWidget {
     required this.activateGen4Gift,
     required this.inspectGen5Gift,
     required this.activateGen5Gift,
+    this.ndsLeagueUnlocked = false,
   });
 
   @override
@@ -90,6 +92,7 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
   }
 
   Future<void> _refresh() async {
+    if ((_isGen4 || _isGen5) && !widget.ndsLeagueUnlocked) return;
     if (_isGen1) {
       final status = await widget.inspectGen1MewEvent();
       if (mounted) setState(() => _gen1MewStatus = status);
@@ -307,7 +310,11 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = _isGen1
+    final ndsEventsLocked = (_isGen4 || _isGen5) &&
+        !widget.ndsLeagueUnlocked;
+    final cards = ndsEventsLocked
+        ? <Widget>[_buildLockedNdsEventsCard()]
+        : _isGen1
         ? <Widget>[_buildGen1MewCard()]
         : _isGen2
         ? <Widget>[
@@ -329,6 +336,39 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: cards,
+      ),
+    );
+  }
+
+  Widget _buildLockedNdsEventsCard() {
+    return const Card(
+      margin: EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Icon(Icons.lock_outline, size: 32),
+            SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Eventos especiales',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Bloqueados hasta ganar la Liga Pokémon y guardar la partida.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -506,6 +546,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
       Gen4MysteryGift.deoxys => 'Deoxys de Oblivia',
       Gen4MysteryGift.rangerShaymin => 'Shaymin de Oblivia',
       Gen4MysteryGift.heatran => 'Heatran de Oblivia',
+      Gen4MysteryGift.azureFlute => 'Flauta Azur · Arceus',
+      Gen4MysteryGift.secretKey => 'Llave Secreta · Formas de Rotom',
+      Gen4MysteryGift.regigigas => 'Regigigas de película',
     };
     final direct = !platinum && gift != Gen4MysteryGift.manaphyEgg ||
         gift == Gen4MysteryGift.arceus;
@@ -529,6 +572,21 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
           'Reinicia el juego y recibe a Arceus.',
           'Ponlo primero en el equipo y entra a las Ruinas Alfa.',
           'Continúa hacia las Ruinas Sinjoh para elegir un huevo legendario.',
+        ],
+      Gen4MysteryGift.azureFlute => const [
+          'Reinicia el juego y recibe la Flauta Azur del repartidor.',
+          'Ve a la Columna Lanza y usa la flauta sobre el símbolo del suelo.',
+          'Sube la escalera hacia la Sala del Origen para encontrar a Arceus.',
+        ],
+      Gen4MysteryGift.secretKey => const [
+          'Reinicia el juego y recibe la Llave Secreta del repartidor.',
+          'Lleva a Rotom al edificio del Equipo Galaxia de Ciudad Vetusta.',
+          'Usa la llave junto a la pared para abrir la habitación de los electrodomésticos.',
+        ],
+      Gen4MysteryGift.regigigas => const [
+          'Reinicia el juego y recibe a Regigigas del repartidor.',
+          'En Pokémon Platino, llévalo en el equipo a las ruinas especiales de Sinnoh.',
+          'Regirock, Regice y Registeel despertarán en sus respectivas cámaras.',
         ],
       _ => const <String>[],
     };
@@ -557,7 +615,9 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         working: _workingGen4 == gift,
         onActivate: () => _activateGen4(gift, title),
         instructions: instructions,
-        requirement: 'Haber guardado la partida dentro del juego.',
+        requirement: gift == Gen4MysteryGift.azureFlute
+            ? 'Haber vencido a la Liga. Evento oficial nunca distribuido.'
+            : 'Haber vencido a la Liga Pokémon y guardado la partida.',
       ),
     );
   }
@@ -566,7 +626,6 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
     final status = _gen5Statuses[gift];
     final title = switch (gift) {
       Gen5MysteryGift.libertyPass => 'Pase Libertad · Victini',
-      Gen5MysteryGift.victini => 'Victini de película',
       Gen5MysteryGift.keldeo => 'Keldeo de evento',
       Gen5MysteryGift.meloetta => 'Meloetta de primavera',
       Gen5MysteryGift.genesect => 'Genesect del Equipo Plasma',
@@ -604,7 +663,7 @@ class _SpecialEventsPageState extends State<SpecialEventsPage> {
         working: _workingGen5 == gift,
         onActivate: () => _activateGen5(gift, title),
         instructions: instructions,
-        requirement: 'Haber guardado la partida dentro del juego.',
+        requirement: 'Haber vencido a la Liga Pokémon y guardado la partida.',
       ),
     );
   }
