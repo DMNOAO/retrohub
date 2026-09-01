@@ -22,6 +22,9 @@ enum Gen4MysteryGift {
   deoxys,
   rangerShaymin,
   heatran,
+  azureFlute,
+  secretKey,
+  regigigas,
 }
 
 enum Gen4MysteryGiftStatus {
@@ -70,12 +73,20 @@ class Gen4MysteryGiftService {
 
   List<Gen4MysteryGift> eventsFor(PokemonGameVersion version) => switch (version) {
         PokemonGameVersion.diamond ||
-        PokemonGameVersion.pearl ||
-        PokemonGameVersion.platinum => const [
+        PokemonGameVersion.pearl => const [
           Gen4MysteryGift.manaphyEgg,
           Gen4MysteryGift.darkrai,
           Gen4MysteryGift.shaymin,
           Gen4MysteryGift.arceus,
+          Gen4MysteryGift.regigigas,
+        ],
+        PokemonGameVersion.platinum => const [
+          Gen4MysteryGift.manaphyEgg,
+          Gen4MysteryGift.darkrai,
+          Gen4MysteryGift.shaymin,
+          Gen4MysteryGift.azureFlute,
+          Gen4MysteryGift.secretKey,
+          Gen4MysteryGift.regigigas,
         ],
         PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver =>
           const [
@@ -311,7 +322,8 @@ class Gen4MysteryGiftService {
     if (isHgss && (event == Gen4MysteryGift.manaphyEgg ||
         event == Gen4MysteryGift.darkrai ||
         event == Gen4MysteryGift.shaymin)) return null;
-    if (!isHgss && event.index > Gen4MysteryGift.arceus.index) return null;
+    final supported = eventsFor(version).contains(event);
+    if (!supported) return null;
     final asset = switch ((version, event)) {
       (PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver,
        Gen4MysteryGift.enigmaStone) =>
@@ -358,6 +370,12 @@ class Gen4MysteryGiftService {
         'assets/events/gen4/dp_movie_shaymin_spa.wc4',
       (_, Gen4MysteryGift.arceus) =>
         'assets/events/gen4/dppt_movie_arceus_spa.wc4',
+      (PokemonGameVersion.platinum, Gen4MysteryGift.azureFlute) =>
+        'assets/events/gen4/pt_azure_flute_unreleased.pcd',
+      (PokemonGameVersion.platinum, Gen4MysteryGift.secretKey) =>
+        'assets/events/gen4/pt_secret_key_spa.wc4',
+      (_, Gen4MysteryGift.regigigas) =>
+        'assets/events/gen4/dppt_movie_regigigas_spa.wc4',
       _ => throw StateError('Regalo no compatible con esta edición.'),
     };
     return _Gen4GiftConfig(

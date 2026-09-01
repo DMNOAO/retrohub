@@ -90,6 +90,29 @@ void main() {
     expect(bytes[pgtStart + 2], 1);
     expect(bytes[0x9D3C + 255] & 0x80, 0x80);
   });
+
+  test('separa Arceus de película y Flauta Azur por edición', () {
+    expect(
+      service.eventsFor(PokemonGameVersion.diamond),
+      contains(Gen4MysteryGift.arceus),
+    );
+    expect(
+      service.eventsFor(PokemonGameVersion.diamond),
+      isNot(contains(Gen4MysteryGift.azureFlute)),
+    );
+    expect(
+      service.eventsFor(PokemonGameVersion.platinum),
+      isNot(contains(Gen4MysteryGift.arceus)),
+    );
+    expect(
+      service.eventsFor(PokemonGameVersion.platinum),
+      containsAll(<Gen4MysteryGift>[
+        Gen4MysteryGift.azureFlute,
+        Gen4MysteryGift.secretKey,
+        Gen4MysteryGift.regigigas,
+      ]),
+    );
+  });
 }
 
 Uint8List _save({required int generalSize, required int magic}) {

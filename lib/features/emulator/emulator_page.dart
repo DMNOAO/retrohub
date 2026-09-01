@@ -386,6 +386,21 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
           gameTitle: game.title,
           romPath: game.romPath,
         );
+    final isNdsPokemon = switch (pokemonProfile.version) {
+      PokemonGameVersion.diamond ||
+      PokemonGameVersion.pearl ||
+      PokemonGameVersion.platinum ||
+      PokemonGameVersion.heartGold ||
+      PokemonGameVersion.soulSilver ||
+      PokemonGameVersion.black ||
+      PokemonGameVersion.white ||
+      PokemonGameVersion.black2 ||
+      PokemonGameVersion.white2 => true,
+      _ => false,
+    };
+    final ndsLeagueUnlocked =
+        !isNdsPokemon || await _isNdsLeagueUnlocked();
+    if (!context.mounted) return;
 
     final preferences = await Navigator.of(context).push<EmulatorPreferences>(
       MaterialPageRoute(
@@ -403,7 +418,9 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             gameId: game.id,
             romPath: game.romPath,
           ),
-          specialEventsSubtitle: switch (pokemonProfile.version) {
+          specialEventsSubtitle: isNdsPokemon && !ndsLeagueUnlocked
+              ? 'Se desbloquea después de ganar la Liga Pokémon'
+              : switch (pokemonProfile.version) {
             PokemonGameVersion.gold || PokemonGameVersion.silver =>
               'Desafío de Rojo · 10 Pokémon variocolor',
             PokemonGameVersion.redBlue || PokemonGameVersion.yellow =>
@@ -417,13 +434,13 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
             PokemonGameVersion.fireRed || PokemonGameVersion.leafGreen =>
               'Deoxys, Lugia y Ho-Oh',
             PokemonGameVersion.diamond || PokemonGameVersion.pearl =>
-              'Manaphy, Darkrai, Shaymin y Arceus',
+              'Manaphy, Darkrai, Shaymin, Arceus y Regigigas',
             PokemonGameVersion.platinum =>
-              'Manaphy, Tarjeta Socio, Carta de Oak y Arceus',
+              'Manaphy, Darkrai, Shaymin, Flauta Azur, Rotom y Regigigas',
             PokemonGameVersion.heartGold || PokemonGameVersion.soulSilver =>
               'Piedra Enigma, Pichu, Celebi, Mew, Arceus y variocolor',
             PokemonGameVersion.black || PokemonGameVersion.white =>
-              'Victini, Keldeo, Meloetta y legendarios variocolor',
+              'Pase Libertad, Keldeo, Meloetta y legendarios variocolor',
             PokemonGameVersion.black2 || PokemonGameVersion.white2 =>
               'Keldeo, Meloetta, Genesect y legendarios variocolor',
             _ => 'Eventos oficiales',
@@ -446,6 +463,7 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
                         activateGen4Gift: _gameController.activateGen4Gift,
                         inspectGen5Gift: _gameController.inspectGen5Gift,
                         activateGen5Gift: _gameController.activateGen5Gift,
+                        ndsLeagueUnlocked: ndsLeagueUnlocked,
                         leagueWinsAfterRed: redState.$1,
                         claimedRedRewards: redState.$2,
                         redChallengeUnlocked: redState.$3 && redState.$4,
@@ -520,6 +538,11 @@ class _EmulatorPageState extends ConsumerState<EmulatorPage>
   Future<bool> _isGen1MewClaimed() async {
     final events = await _database.getProgressEventsByGame(game.id);
     return events.any((event) => event.eventType == 'gen1_mew_received');
+  }
+
+  Future<bool> _isNdsLeagueUnlocked() async {
+    final snapshot = await _database.getLatestProgressSnapshot(game.id);
+    return (snapshot?.leagueWins ?? 0) > 0;
   }
 
   Future<Gen1MewEventResult> _claimGen1MewEvent() async {
