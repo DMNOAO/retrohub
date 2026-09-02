@@ -72,7 +72,10 @@ class BluetoothConnection {
     'com.retrohub.beta/bluetooth_link/events',
   );
 
-  static const String _handshakeMagic = 'RETROHUB_LINK_V1';
+  // V2 identifica el protocolo transaccional request/reply. No debe enlazar
+  // con una instalación V1, que enviaba bloques seriales crudos y volvería a
+  // saturar el inbox de SameBoy.
+  static const String _handshakeMagic = 'RETROHUB_LINK_V2';
   static final Uint8List _handshakeBytes = Uint8List.fromList(
     _handshakeMagic.codeUnits,
   );
