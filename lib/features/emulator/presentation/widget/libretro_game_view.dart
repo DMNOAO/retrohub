@@ -24,6 +24,7 @@ import '../../../pokemon/decoder/pokemon_decoder.dart';
 import '../../../pokemon/engine/pokemon_engine.dart';
 import '../../../pokemon/models/pokemon_game_profile.dart';
 import '../../../pokemon/models/pokemon_memory_snapshot.dart';
+import '../../link/link_flow_control.dart';
 import '../../link/link_manager.dart';
 import '../../link/link_state.dart';
 import '../../link/link_transport_factory.dart';
@@ -407,7 +408,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
   bool _linkBridgeEnabled = false;
   late final StreamSubscription<LinkState> _linkStateSubscription;
   late final StreamSubscription<Uint8List> _linkPacketSubscription;
-  final List<Uint8List> _pendingLinkPackets = <Uint8List>[];
+  final LinkFlowController _linkFlow = LinkFlowController();
+  int _linkFramesSent = 0;
+  int _linkFramesReceived = 0;
 
   final CrystalGsBallService _crystalGsBallService =
       const CrystalGsBallService();
@@ -740,8 +743,9 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     final int runs = _linkBridgeEnabled ? 1 : _speedMultiplierNotifier.value;
 
     for (int index = 0; index < runs; index++) {
+      _pumpLinkCableInput(bridge);
       if (!bridge.runOnce()) return;
-      _pumpLinkCable(bridge);
+      _pumpLinkCableOutput(bridge);
     }
 
     _audioPlayer?.pump(bridge);
@@ -770,43 +774,85 @@ class _LibretroGameViewState extends State<LibretroGameView> {
     if (active && !_linkBridgeEnabled) {
       _linkBridgeEnabled = bridge.enableLink();
       if (_linkBridgeEnabled) {
+        final isHost = _linkManager.session?.isHost ?? false;
+        _linkFlow.reset(
+          isTransportHost: isHost,
+        );
+        _linkFramesSent = 0;
+        _linkFramesReceived = 0;
         _speedMultiplierNotifier.value = 1;
         _audioPlayer?.setPaused(false);
+        debugPrint(
+          '[RetroHub Link] flow=v2 role=${isHost ? 'host' : 'client'}',
+        );
       }
       debugPrint('[RetroHub Link] enableLink() -> $_linkBridgeEnabled');
     } else if (!active && _linkBridgeEnabled) {
       bridge.disableLink();
       _linkBridgeEnabled = false;
-      _pendingLinkPackets.clear();
+      _linkFlow.reset(isTransportHost: false);
     } else if (!active) {
-      _pendingLinkPackets.clear();
+      _linkFlow.reset(isTransportHost: false);
     }
   }
 
   void _handleLinkPacketFromBluetooth(Uint8List bytes) {
     if (!_linkBridgeEnabled || bytes.isEmpty) return;
-    _pendingLinkPackets.add(Uint8List.fromList(bytes));
-    debugPrint(
-      '[RetroHub Link] BT -> CORE queued: ${bytes.length} bytes (pending=${_pendingLinkPackets.length})',
-    );
+    final result = _linkFlow.receive(bytes);
+    if (result == LinkFlowReceiveResult.accepted) {
+      _linkFramesReceived++;
+      if (_linkFramesReceived % 128 == 0) {
+        debugPrint(
+          '[RetroHub Link] flow RX=$_linkFramesReceived TX=$_linkFramesSent',
+        );
+      }
+    }
+    if (result != LinkFlowReceiveResult.accepted &&
+        result != LinkFlowReceiveResult.ignoredDuplicate &&
+        result != LinkFlowReceiveResult.ignoredCollision) {
+      debugPrint('[RetroHub Link] trama descartada: $result');
+    }
   }
 
-  void _pumpLinkCable(LibretroBridge bridge) {
+  /// Inyecta el byte remoto antes de ejecutar el siguiente frame. Hacerlo
+  /// después de `runOnce` dejaba que SameBoy avanzara otro frame usando la
+  /// línea en reposo antes de ver la respuesta del otro Game Boy.
+  void _pumpLinkCableInput(LibretroBridge bridge) {
     if (!_linkBridgeEnabled) return;
 
-    while (_pendingLinkPackets.isNotEmpty) {
-      final incoming = _pendingLinkPackets.first;
-      if (!bridge.linkSend(incoming)) break;
-      _pendingLinkPackets.removeAt(0);
+    final incomingByte = _linkFlow.byteWaitingForCore;
+    if (incomingByte != null &&
+        bridge.linkSend(Uint8List.fromList(<int>[incomingByte]))) {
+      final immediateReply = _linkFlow.confirmByteDeliveredToCore();
+      if (immediateReply != null) {
+        _sendLinkFlowFrame(immediateReply);
+      }
+    }
+  }
+
+  /// Extrae como máximo un byte local después de ejecutar el core. El
+  /// siguiente no se leerá hasta completar esta transacción con el remoto.
+  void _pumpLinkCableOutput(LibretroBridge bridge) {
+    if (!_linkBridgeEnabled) return;
+    if (!_linkFlow.canReadCoreByte) return;
+
+    // Una transferencia serial de Game Boy siempre contiene exactamente
+    // ocho bits. Leer solo un byte evita vaciar el outbox de SameBoy por
+    // frame y obliga a completar el intercambio remoto antes del siguiente.
+    final outgoing = bridge.linkReceive(maxLength: 1);
+    if (outgoing.isEmpty) return;
+    final frame = _linkFlow.acceptCoreByte(outgoing.single);
+    _sendLinkFlowFrame(frame);
+  }
+
+  void _sendLinkFlowFrame(Uint8List frame) {
+    _linkFramesSent++;
+    if (_linkFramesSent % 128 == 0) {
       debugPrint(
-        '[RetroHub Link] BT -> CORE: ${incoming.length} bytes (pending=${_pendingLinkPackets.length})',
+        '[RetroHub Link] flow TX=$_linkFramesSent RX=$_linkFramesReceived',
       );
     }
-
-    final outgoing = bridge.linkReceive();
-    if (outgoing.isEmpty) return;
-    debugPrint('[RetroHub Link] CORE -> BT: ${outgoing.length} bytes');
-    _linkManager.sendPacket(outgoing);
+    unawaited(_linkManager.sendPacket(frame));
   }
 
   void _cycleSpeed() {
