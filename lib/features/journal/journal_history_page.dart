@@ -460,7 +460,19 @@ class _TimelineCard extends StatelessWidget {
         final spritePath = item.metadata['spritePath']?.toString();
         return _Visual(spritePath, Icons.shield_outlined);
       case 'rival_defeated':
-        return _Visual(CharacterAssetResolver.rival(profile), Icons.sports_martial_arts);
+        // El evento guarda el sprite del rival real (Brendan/May/Wally en
+        // Gen III, etc.) en metadata['spritePath'] — ver
+        // pokemon_journal_tracker.dart#_recordGen3TrainerVictory. Antes esto
+        // se ignoraba y siempre se mostraba el rival "por defecto" del
+        // perfil del juego (profile.rivalAsset), que en Emerald/Ruby/
+        // Sapphire es fijo (May) sin importar contra quién se combatió.
+        // profile.rivalAsset queda como respaldo solo para eventos antiguos
+        // o de otras generaciones que no guardaron spritePath explícito.
+        final explicitRivalPath = item.metadata['spritePath']?.toString();
+        return _Visual(
+          explicitRivalPath ?? CharacterAssetResolver.rival(profile),
+          Icons.sports_martial_arts,
+        );
       case 'champion_defeated':
         return _Visual(CharacterAssetResolver.champion(profile), Icons.emoji_events_outlined);
       case 'elite_four_defeated':
